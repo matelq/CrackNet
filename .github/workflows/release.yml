@@ -49,6 +49,12 @@ jobs:
           (cd Netfox.Core && find . -name '*.cs' -not -path './obj/*' -not -path './bin/*' -exec cp --parents {} ../stage/addons/netfox.cs/Core/ \;)
           cp LICENSE stage/addons/netfox.cs/ 2>/dev/null || true
 
+          # The property generator is a compiler plugin, so it ships built. It is optional: without it the declaring
+          # interfaces can still be implemented by hand, only the attributes go away.
+          dotnet build Netfox.SourceGenerators/Netfox.SourceGenerators.csproj -c Release
+          mkdir -p stage/addons/netfox.cs/analyzers
+          cp Netfox.SourceGenerators/bin/Release/netstandard2.0/Netfox.SourceGenerators.dll stage/addons/netfox.cs/analyzers/
+
       # Proves the packaged layout is usable on its own: same folder, no project reference, nothing else from the repo
       - name: Check the package compiles by itself
         run: |
@@ -64,6 +70,9 @@ jobs:
               <RootNamespace>Netfox</RootNamespace>
               <LangVersion>latest</LangVersion>
             </PropertyGroup>
+            <ItemGroup>
+              <Analyzer Include="addons/netfox.cs/analyzers/Netfox.SourceGenerators.dll" />
+            </ItemGroup>
           </Project>
           EOF
           dotnet build smoke/Smoke.csproj

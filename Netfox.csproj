@@ -8,10 +8,13 @@
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Remove="Netfox.Core/**;Netfox.Core.Tests/**;Netfox.Core.Benchmarks/**;netfox/**;.tools/**;.godot/**" />
-    <None Remove="Netfox.Core/**;Netfox.Core.Tests/**;Netfox.Core.Benchmarks/**;netfox/**;.tools/**;.godot/**" />
+    <Compile Remove="Netfox.Core/**;Netfox.Core.Tests/**;Netfox.Core.Benchmarks/**;Netfox.SourceGenerators/**;netfox/**;.tools/**;.godot/**" />
+    <None Remove="Netfox.Core/**;Netfox.Core.Tests/**;Netfox.Core.Benchmarks/**;Netfox.SourceGenerators/**;netfox/**;.tools/**;.godot/**" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="Netfox.Core/Netfox.Core.csproj" />
+    <!-- The generator runs in the compiler, so it is referenced as an analyzer and its assembly is not linked -->
+    <ProjectReference Include="Netfox.SourceGenerators/Netfox.SourceGenerators.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 </Project>

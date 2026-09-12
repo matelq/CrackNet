@@ -25,6 +25,14 @@ dotnet build Netfox.csproj                                                # addo
 <godot> --headless --path . res://examples/e2e/E2E.tscn -- --join --seconds=10  # add --latency=40 --loss=3 on both for the proxy run
 ```
 
+## Property attributes
+
+`Netfox.SourceGenerators` turns `[RollbackState]` / `[RollbackInput]` / `[SynchronizedState]` / `[Interpolated]` on a
+property into the declaring interface the synchronizers gather from, so the paths come from the symbols and cannot go
+stale on a rename. The type has to be `partial` (NFX001 otherwise), and properties only: Godot exposes a partial
+class's properties to `Get`/`Set`, not its plain fields. It is referenced as an analyzer, ships built in the release
+zip under `addons/netfox.cs/analyzers/`, and is optional - the interfaces can still be implemented by hand.
+
 ## Physics drivers
 
 `examples/physics/RapierCheck.tscn` runs the Rapier driver against a real install; it skips and exits 0 without one.

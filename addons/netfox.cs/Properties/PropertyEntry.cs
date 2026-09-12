@@ -41,7 +41,11 @@ public sealed class PropertyEntry
         var name = Property.ToString();
         foreach (var info in Node.GetPropertyList())
             if (info["name"].AsString() == name) return true;
-        return false;
+
+        // GetPropertyList only lists what the editor shows, which for a C# node means its exported members. Get and
+        // Set reach every public property of one, so a plain property is valid even though it is not in that list.
+        return Property.GetNameCount() == 1 && Property.GetSubNameCount() == 0
+            && Node.GetType().GetProperty(name) is not null;
     }
 
     public override string ToString() => Path;

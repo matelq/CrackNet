@@ -2,6 +2,7 @@
   <Project Path="Netfox.Core.Benchmarks/Netfox.Core.Benchmarks.csproj" />
   <Project Path="Netfox.Core.Tests/Netfox.Core.Tests.csproj" />
   <Project Path="Netfox.Core/Netfox.Core.csproj" />
+  <Project Path="Netfox.SourceGenerators/Netfox.SourceGenerators.csproj" />
   <Project Path="Netfox.csproj">
     <BuildType Project="Debug" />
   </Project>
