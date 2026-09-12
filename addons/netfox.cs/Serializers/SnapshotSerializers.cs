@@ -78,8 +78,10 @@ public abstract class BaseSnapshotSerializer
         stop = false;
         if (identifier is null)
         {
-            // TODO(#563): Handle unknown IDs gracefully
-            Logger.Warning("Received unknown identity reference {0} from #{1}, skipping data", reference, peer);
+            // A name we do not know is a node that has not spawned here yet, and it resolves itself: until the peer
+            // has acked an id for a subject, the sender sends that subject in full rather than as a diff, so the
+            // first frame we can read is a complete one. An id we do not know is a node deregistered since.
+            Logger.Debug("Received unknown identity reference {0} from #{1}, skipping its frame", reference, peer);
             return null;
         }
         return identifier.Subject;
@@ -202,7 +204,9 @@ public sealed class SparseSnapshotSerializer : BaseSnapshotSerializer
             var nodeDataSize = VarUint.DecodeInt(buffer);
             var changedBits = VarBits.Decode(buffer);
             var nodeBuffer = new ByteReader(buffer.GetPartialData(nodeDataSize));
-            if (node is null) break;
+            // The frame is already consumed, so the ones after it are still readable. Upstream gives up on the whole
+            // packet here (sparse-snapshot-serializer.gd:24), which loses every node behind the unknown one.
+            if (node is null) continue;
 
             var nodeProps = properties.GetPropertiesOf(node);
             foreach (var idx in changedBits.GetSetIndices())

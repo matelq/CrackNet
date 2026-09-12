@@ -213,6 +213,32 @@ public partial class NetworkSynchronizationServer : Node
         GetPeerSentHistory(peer).SetAt(snapshot.Tick, remembered);
     }
 
+    /// <summary>
+    /// The diff baseline minus the subjects <paramref name="peer"/> cannot resolve yet, so those go out in full.
+    /// <para>
+    /// A peer acks a subject by sending back an id for it, which it can only do once it has resolved that subject's
+    /// name - that is, once the node exists on its side. Until then it drops our frames, and diffing against a
+    /// baseline it never received would leave it with a node missing every property that happens not to change, until
+    /// the next full state. Upstream has no such guard (foxssake/netfox#563).
+    /// </para>
+    /// </summary>
+    internal Snapshot WithoutUnacknowledgedSubjects(Snapshot reference, int peer)
+    {
+        var identityServer = _identityServer ?? Context.NetworkIdentityServer;
+        if (identityServer is null) return reference;
+
+        Snapshot? trimmed = null;
+        foreach (var subject in reference.Subjects)
+        {
+            if (identityServer.GetIdentifierOf(subject)?.HasIdFor(peer) == true) continue;
+
+            trimmed ??= reference.Duplicate();
+            trimmed.EraseSubject(subject);
+        }
+
+        return trimmed ?? reference;
+    }
+
     /// <summary>Snapshot to send to <paramref name="peer"/>: only visible subjects and their auth properties.</summary>
     internal Snapshot MakePeerSnapshot(Snapshot snapshot, int peer, PropertyPool properties)
     {
@@ -316,7 +342,7 @@ public partial class NetworkSynchronizationServer : Node
             }
             else
             {
-                var diff = Snapshot.MakePatch(reference!, peerSnapshot);
+                var diff = Snapshot.MakePatch(WithoutUnacknowledgedSubjects(reference!, peer), peerSnapshot);
                 if (diff.IsEmpty) continue;
 
                 foreach (var packet in _sparseSerializer.WriteFor(peer, diff, _rbOwnedStateProperties))

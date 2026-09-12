@@ -117,6 +117,37 @@ public partial class SnapshotSerializerTests : TestSuite
         Expect.False(read.HasProperty(subject, Position));
     }
 
+    /// <summary>
+    /// #15: a reference the reader cannot resolve costs that one node's frame, not the rest of the packet. Upstream
+    /// stops parsing here, so every node written behind the unknown one is lost too.
+    /// </summary>
+    [Test]
+    public async Task Sparse_ShouldSkipUnknownIdentifiersAndKeepReading()
+    {
+        var schema = new NetworkSchema(NetworkSchemas.Variant());
+        var writerIdentity = await Mount(new NetworkIdentityServer(await Mount(new TestingCommandServer())));
+        var readerIdentity = await Mount(new NetworkIdentityServer(await Mount(new TestingCommandServer())));
+        var writer = new SparseSnapshotSerializer(schema, writerIdentity);
+        var reader = new SparseSnapshotSerializer(schema, readerIdentity);
+
+        var unknown = await Mount(new Node3D());
+        var known = await Mount(new Node3D());
+
+        // Unknown first, so giving up on it would take the known node with it
+        var writerProps = PropertyPool.Of([(unknown, Position), (known, Position)]);
+        var readerProps = PropertyPool.Of([(known, Position)]);
+
+        writerIdentity.RegisterNode(unknown);
+        writerIdentity.RegisterNode(known);
+        readerIdentity.RegisterNode(known);
+
+        var snapshot = Snapshot.Of(4, [(unknown, Position, Vector3.Up), (known, Position, Vector3.Right)], [unknown, known]);
+        var expected = Snapshot.Of(4, [(known, Position, Vector3.Right)], [known]);
+
+        var packets = writer.WriteFor(1, snapshot, writerProps);
+        Expect.Equal(expected, reader.ReadFrom(1, readerProps, new ByteReader(packets[0])));
+    }
+
     [Test]
     public async Task Redundant_ShouldDeserializeToSame()
     {

@@ -389,6 +389,46 @@ public partial class NetworkSynchronizationServerTests : TestSuite
         remote.Free();
     }
 
+    /// <summary>
+    /// #15: a peer acks a subject by sending back an id for it, which it can only do once that node exists on its
+    /// side. Diffing against a baseline such a peer never received leaves it missing every property that does not
+    /// happen to change, so those subjects have to drop out of the baseline and go in full.
+    /// </summary>
+    [Test]
+    public async Task WithoutUnacknowledgedSubjects_ShouldDropWhatThePeerCannotResolve()
+    {
+        var identity = NetworkIdentityServer.Instance;
+        var acked = await Mount(new Node3D { Name = "acked" });
+        var fresh = await Mount(new Node3D { Name = "fresh" });
+
+        identity.RegisterNode(acked);
+        identity.RegisterNode(fresh);
+
+        // Peer 2 has told us an id for one of them, which it could only do having resolved its name
+        identity.GetIdentifierOf(acked)!.SetIdFor(2, 7);
+
+        var reference = Snapshot.Of(9, [
+            (acked, "position", Vector3.One),
+            (fresh, "position", Vector3.Up),
+        ], [acked, fresh]);
+
+        var baseline = _sync.WithoutUnacknowledgedSubjects(reference, 2);
+        Expect.True(baseline.HasProperty(acked, "position"), "an acked subject stays in the baseline");
+        Expect.False(baseline.HasProperty(fresh, "position"), "an unacked subject has to leave the baseline");
+
+        // The full diff then carries everything the peer cannot have, which is what makes its first readable frame complete
+        var current = Snapshot.Of(9, [
+            (acked, "position", Vector3.One),
+            (fresh, "position", Vector3.Up),
+        ], [acked, fresh]);
+        var diff = Snapshot.MakePatch(baseline, current);
+        Expect.False(diff.HasProperty(acked, "position"), "an unchanged acked property does not need resending");
+        Expect.True(diff.HasProperty(fresh, "position"), "the unacked subject goes out in full");
+
+        identity.DeregisterNode(acked);
+        identity.DeregisterNode(fresh);
+    }
+
     [Test]
     public async Task MakePeerSnapshot_ShouldIncludeOnlyVisibleOwnedAuthState()
     {
