@@ -143,7 +143,9 @@ def main():
                     lines.append(f"| {KIND_LABEL.get(kind, kind)} | `{member}` | {summary} |")
                 lines.append("")
 
-    OUT.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    # newline="" so the file gets LF on every platform, like the rest of the repo
+    with OUT.open("w", encoding="utf-8", newline="") as file:
+        file.write("\n".join(lines) + "\n")
     print(f"{OUT}: {len(types)} types across {len(by_namespace)} namespaces")
     return 0
 
