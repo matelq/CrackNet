@@ -82,6 +82,23 @@ public partial class NetworkSimulator : Node
         _proxyThread.Join();
     }
 
+    /// <summary>
+    /// Starts only the latency and loss proxy, without the autoconnect flow that is limited to the editor, and returns
+    /// the port clients should connect to. Upstream has no such entry point: its proxy is reachable only through
+    /// autoconnect, which is why it was never covered by a headless run.
+    /// </summary>
+    public int StartProxy(int serverPort, int latencyMs, double packetLossPercent, string hostname = "127.0.0.1")
+    {
+        Hostname = hostname;
+        ServerPort = serverPort;
+        LatencyMs = latencyMs;
+        PacketLossPercent = packetLossPercent;
+        _udpProxyPort = serverPort + 1;
+
+        StartUdpProxy();
+        return _udpProxyPort;
+    }
+
     private bool IsProxyRequired() => LatencyMs > 0 || PacketLossPercent > 0.0;
 
     private Error TryAndHost()

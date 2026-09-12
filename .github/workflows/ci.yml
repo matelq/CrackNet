@@ -47,11 +47,21 @@ jobs:
         run: $GODOT --headless --path . res://test/TestRunner.tscn
       - name: Run e2e over ENet
         run: |
-          "$GODOT" --headless --path . res://examples/e2e/E2E.tscn -- --host --seconds=12 > host.log 2>&1 &
+          "$GODOT" --headless --path . res://examples/e2e/E2E.tscn -- --host --seconds=14 > host.log 2>&1 &
           host=$!
           sleep 2
-          "$GODOT" --headless --path . res://examples/e2e/E2E.tscn -- --join --seconds=6 > client.log 2>&1 || true
+          "$GODOT" --headless --path . res://examples/e2e/E2E.tscn -- --join --seconds=10 > client.log 2>&1 || true
           wait $host || true
           echo "--- host"; cat host.log
           echo "--- client"; cat client.log
           grep -q "ok=True" host.log && grep -q "ok=True" client.log
+      - name: Run e2e through the latency and loss proxy
+        run: |
+          "$GODOT" --headless --path . res://examples/e2e/E2E.tscn -- --host --seconds=14 --latency=40 --loss=3 > host-lossy.log 2>&1 &
+          host=$!
+          sleep 2
+          "$GODOT" --headless --path . res://examples/e2e/E2E.tscn -- --join --seconds=10 --latency=40 --loss=3 > client-lossy.log 2>&1 || true
+          wait $host || true
+          echo "--- host"; cat host-lossy.log
+          echo "--- client"; cat client-lossy.log
+          grep -q "ok=True" host-lossy.log && grep -q "ok=True" client-lossy.log

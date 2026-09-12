@@ -20,8 +20,8 @@ Branches: `reworked` is the default and where work happens; `master` keeps parit
 dotnet test Netfox.slnx                                                   # core tests
 dotnet build Netfox.csproj                                                # addon + tests
 <godot> --headless --path . res://test/TestRunner.tscn                    # Godot tests, exit 0 = ok
-<godot> --headless --path . res://examples/e2e/E2E.tscn -- --host --seconds=12
-<godot> --headless --path . res://examples/e2e/E2E.tscn -- --join --seconds=6
+<godot> --headless --path . res://examples/e2e/E2E.tscn -- --host --seconds=14   # host must outlive the client
+<godot> --headless --path . res://examples/e2e/E2E.tscn -- --join --seconds=10  # add --latency=40 --loss=3 on both for the proxy run
 ```
 
 ## Conventions

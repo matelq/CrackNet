@@ -54,11 +54,13 @@ godot --headless --path . res://test/TestRunner.tscn     # 90 Godot-side tests, 
 End to end over ENet, two processes:
 
 ```
-godot --headless --path . res://examples/e2e/E2E.tscn -- --host --seconds=12
-godot --headless --path . res://examples/e2e/E2E.tscn -- --join --seconds=6
+godot --headless --path . res://examples/e2e/E2E.tscn -- --host --seconds=14
+godot --headless --path . res://examples/e2e/E2E.tscn -- --join --seconds=10
 ```
 
-Each prints an `E2E RESULT ... ok=True` line: identical ticks on both sides, states flowing host to client, inputs client to host.
+Each prints an `E2E RESULT ... ok=True` line. The host keeps a trace of the position it simulated for every tick, and the
+client checks the state it received against it (`compared_ticks`, `max_error=0`), so a run proves replication is exact, not
+only that packets arrived. Add `--latency=40 --loss=3` to both to route the run through the NetworkSimulator proxy.
 
 ## Steam
 
