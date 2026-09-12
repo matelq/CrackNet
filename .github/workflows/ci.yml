@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [ "master", "reworked" ]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  GODOT_VERSION: 4.7.2-stable
+
+jobs:
+  core:
+    name: Core tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Check formatting
+        run: dotnet format Netfox.slnx --verify-no-changes
+      - name: Run tests
+        run: dotnet test Netfox.slnx
+
+  godot:
+    name: Godot tests and e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Install Godot
+        run: |
+          curl -sSLo godot.zip "https://github.com/godotengine/godot-builds/releases/download/$GODOT_VERSION/Godot_v${GODOT_VERSION}_mono_linux_x86_64.zip"
+          unzip -q godot.zip
+          echo "GODOT=$PWD/Godot_v${GODOT_VERSION}_mono_linux_x86_64/Godot_v${GODOT_VERSION}_mono_linux.x86_64" >> "$GITHUB_ENV"
+      - name: Import resources
+        # --import exits with a segfault after a successful import on 4.7.2, so its exit code says nothing
+        run: $GODOT --headless --path . --import || true
+      - name: Build
+        run: dotnet build Netfox.csproj
+      - name: Run Godot tests
+        run: $GODOT --headless --path . res://test/TestRunner.tscn
+      - name: Run e2e over ENet
+        run: |
+          "$GODOT" --headless --path . res://examples/e2e/E2E.tscn -- --host --seconds=12 > host.log 2>&1 &
+          host=$!
+          sleep 2
+          "$GODOT" --headless --path . res://examples/e2e/E2E.tscn -- --join --seconds=6 > client.log 2>&1 || true
+          wait $host || true
+          echo "--- host"; cat host.log
+          echo "--- client"; cat client.log
+          grep -q "ok=True" host.log && grep -q "ok=True" client.log

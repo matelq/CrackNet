@@ -1,8 +1,8 @@
 using Godot;
-using FileAccess = Godot.FileAccess;
 using Netfox.Core.Logging;
 using Netfox.Core.Time;
 using Netfox.Internal;
+using FileAccess = Godot.FileAccess;
 
 namespace Netfox.Extras;
 
