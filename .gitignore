@@ -35,6 +35,10 @@ Thumbs.db
 /netfox/
 /.parity/
 
+# Physics GDExtensions, installed by hand for examples/physics/RapierCheck.tscn
+/addons/godot-rapier2d/
+/addons/godot-rapier3d/
+
 # Claude Code local instructions
 CLAUDE.local.md
 .claude/settings.local.json

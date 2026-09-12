@@ -25,6 +25,13 @@ dotnet build Netfox.csproj                                                # addo
 <godot> --headless --path . res://examples/e2e/E2E.tscn -- --join --seconds=10  # add --latency=40 --loss=3 on both for the proxy run
 ```
 
+## Physics drivers
+
+`examples/physics/RapierCheck.tscn` runs the Rapier driver against a real install; it skips and exits 0 without one.
+To set one up: unzip the `godot-rapier-3d-single` asset from appsinacup/godot-rapier-physics into `addons/`
+(gitignored) and set `physics/3d/physics_engine="Rapier3D"` in project.godot. Stock Godot has no `space_step`, so
+`GodotPhysicsDriver2D/3D` report themselves unavailable and only work on a build carrying godotengine/godot PR 76462.
+
 ## Parity against the original
 
 `sh parity/run-parity.sh` runs the same scene against the GDScript original in `netfox/` and against this port, and
