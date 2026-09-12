@@ -14,6 +14,16 @@
     <Compile Remove="Netfox.Core/**;Netfox.Core.Tests/**;Netfox.Core.Benchmarks/**;Netfox.SourceGenerators/**;netfox/**;.tools/**;.godot/**" />
     <None Remove="Netfox.Core/**;Netfox.Core.Tests/**;Netfox.Core.Benchmarks/**;Netfox.SourceGenerators/**;netfox/**;.tools/**;.godot/**" />
   </ItemGroup>
+  <!-- Opt in with -p:NetfoxSteam=true. Off by default: the Facepunch package is Windows-only, and the peer's own
+       logic compiles and is covered without it. See addons/netfox.cs.steam/README.md. -->
+  <PropertyGroup Condition="'$(NetfoxSteam)' == 'true'">
+    <DefineConstants>$(DefineConstants);NETFOX_STEAM</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(NetfoxSteam)' == 'true'">
+    <PackageReference Include="Facepunch.Steamworks" Version="2.3.3" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="Netfox.Core/Netfox.Core.csproj" />
     <!-- The generator runs in the compiler, so it is referenced as an analyzer and its assembly is not linked -->
