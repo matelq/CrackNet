@@ -12,6 +12,8 @@ namespace Netfox;
 [Icon("res://addons/netfox.cs/icons/predictive-synchronizer.svg")]
 public partial class PredictiveSynchronizer : Node
 {
+    /// <summary>The netfox stack this node uses; resolved when it enters the tree.</summary>
+    public NetfoxContext Context { get; private set; } = NetfoxContext.Default;
     private static readonly Dictionary<Node, PredictiveSynchronizer> ManagedRoots = new(ReferenceEqualityComparer.Instance);
 
     /// <summary>Node the property paths are relative to; defaults to the parent.</summary>
@@ -36,9 +38,9 @@ public partial class PredictiveSynchronizer : Node
     public void ProcessSettings()
     {
         var root = Root ??= GetParent();
-        var history = NetworkHistoryServer.Instance;
-        var simulation = RollbackSimulationServer.Instance;
-        var liveness = RollbackLivenessServer.Instance;
+        var history = Context.NetworkHistoryServer;
+        var simulation = Context.RollbackSimulationServer;
+        var liveness = Context.RollbackLivenessServer;
 
         foreach (var subject in _stateProperties.Subjects.ToList())
             history.Deregister(subject);
@@ -79,10 +81,10 @@ public partial class PredictiveSynchronizer : Node
 
     public void Spawn(int? tick = null)
     {
-        var at = tick ?? NetworkRollback.Instance.Tick;
+        var at = tick ?? Context.NetworkRollback.Tick;
         SpawnTick = at;
 
-        var liveness = RollbackLivenessServer.Instance;
+        var liveness = Context.RollbackLivenessServer;
         foreach (var node in _livenessNodes)
         {
             liveness.ClearDespawn(node);
@@ -90,20 +92,20 @@ public partial class PredictiveSynchronizer : Node
         }
 
         foreach (var subject in _stateProperties.Subjects)
-            NetworkHistoryServer.Instance.PushRollbackState(subject, at);
+            Context.NetworkHistoryServer.PushRollbackState(subject, at);
     }
 
     public void Despawn(int? tick = null)
     {
-        var at = tick ?? NetworkRollback.Instance.Tick;
+        var at = tick ?? Context.NetworkRollback.Tick;
         foreach (var node in _livenessNodes)
-            RollbackLivenessServer.Instance.Despawn(node, at);
+            Context.RollbackLivenessServer.Despawn(node, at);
     }
 
     public bool IsAlive(int? tick = null)
     {
         if (_livenessNodes.Count == 0) return true;
-        return RollbackLivenessServer.Instance.IsAlive(_livenessNodes[0], tick ?? NetworkRollback.Instance.Tick);
+        return Context.RollbackLivenessServer.IsAlive(_livenessNodes[0], tick ?? Context.NetworkRollback.Tick);
     }
 
     /// <summary>Add a state property at runtime. Node may be a string, NodePath or Node relative to Root.</summary>
@@ -124,7 +126,7 @@ public partial class PredictiveSynchronizer : Node
         Callable.From(ProcessSettings).CallDeferred();
 
         // Reprocess on connect: pre-placed nodes start owned by us (offline peer 1), then change owner
-        if (NetworkEvents.Instance is { Enabled: true } events)
+        if (Context.NetworkEvents is { Enabled: true } events)
         {
             _clientStartHandler = _ => ProcessSettings();
             events.OnClientStart += _clientStartHandler;
@@ -138,14 +140,15 @@ public partial class PredictiveSynchronizer : Node
 
     public override void _EnterTree()
     {
+        Context = NetfoxContext.For(this);
         if (Engine.IsEditorHint()) return;
 
         Root ??= GetParent();
         ManagedRoots[Root] = this;
 
-        if (SpawnTick < 0) SpawnTick = NetworkRollback.Instance.Tick + 1;
+        if (SpawnTick < 0) SpawnTick = Context.NetworkRollback.Tick + 1;
 
-        var rollback = NetworkRollback.Instance;
+        var rollback = Context.NetworkRollback;
         _spawnResimHandler = () =>
         {
             rollback.BeforeLoop -= _spawnResimHandler;
@@ -161,18 +164,18 @@ public partial class PredictiveSynchronizer : Node
 
         if (Root is not null) ManagedRoots.Remove(Root);
 
-        if (_spawnResimHandler is not null && NetworkRollback.Instance is { } rollback)
+        if (_spawnResimHandler is not null && Context.NetworkRollback is { } rollback)
             rollback.BeforeLoop -= _spawnResimHandler;
-        if (_clientStartHandler is not null && NetworkEvents.Instance is { } events)
+        if (_clientStartHandler is not null && Context.NetworkEvents is { } events)
             events.OnClientStart -= _clientStartHandler;
         if (_listensToMultiplayer && GodotObject.IsInstanceValid(Multiplayer)) Multiplayer.ConnectedToServer -= ProcessSettings;
 
         foreach (var node in _simNodes)
-            RollbackSimulationServer.Instance?.DeregisterNode(node);
+            Context.RollbackSimulationServer?.DeregisterNode(node);
         foreach (var node in _livenessNodes)
-            RollbackLivenessServer.Instance?.Deregister(node);
+            Context.RollbackLivenessServer?.Deregister(node);
         foreach (var subject in _stateProperties.Subjects.ToList())
-            NetworkHistoryServer.Instance?.Deregister(subject);
+            Context.NetworkHistoryServer?.Deregister(subject);
     }
 
     public override void _Notification(int what)

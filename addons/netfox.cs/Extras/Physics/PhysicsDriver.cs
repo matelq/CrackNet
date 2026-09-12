@@ -9,6 +9,8 @@ namespace Netfox.Extras;
 /// </summary>
 public partial class PhysicsDriver : Node
 {
+    /// <summary>The netfox stack this node uses; resolved when it enters the tree.</summary>
+    public NetfoxContext Context { get; private set; } = NetfoxContext.Default;
     public const string NetworkRigidBodyGroup = "network_rigid_body";
 
     protected static readonly NetfoxLogger Logger = NetfoxLogger.ForExtras("PhysicsDriver");
@@ -24,23 +26,24 @@ public partial class PhysicsDriver : Node
 
     public override void _EnterTree()
     {
-        var time = NetworkTime.Instance;
+        Context = NetfoxContext.For(this);
+        var time = Context.NetworkTime;
         time.BeforeTick += BeforeTick;
         time.AfterTickLoop += AfterTickLoop;
 
-        var rollback = NetworkRollback.Instance;
+        var rollback = Context.NetworkRollback;
         if (RollbackPhysicsSpace) rollback.OnPrepareTick += OnPrepareTick;
         rollback.OnProcessTick += OnProcessTick;
     }
 
     public override void _ExitTree()
     {
-        if (NetworkTime.Instance is { } time)
+        if (Context.NetworkTime is { } time)
         {
             time.BeforeTick -= BeforeTick;
             time.AfterTickLoop -= AfterTickLoop;
         }
-        if (NetworkRollback.Instance is { } rollback)
+        if (Context.NetworkRollback is { } rollback)
         {
             rollback.OnPrepareTick -= OnPrepareTick;
             rollback.OnProcessTick -= OnProcessTick;
@@ -57,17 +60,17 @@ public partial class PhysicsDriver : Node
 
     private void OnPrepareTick(int tick)
     {
-        if (NetworkRollback.Instance.RollbackFrom == tick)
+        if (Context.NetworkRollback.RollbackFrom == tick)
             RollbackSpace(tick); // First tick of the rollback loop, rewind
         else
             SnapshotSpace(tick); // Subsequent ticks rewrite history
     }
 
-    private void OnProcessTick(int tick) => StepPhysics(NetworkTime.Instance.Ticktime, tick);
+    private void OnProcessTick(int tick) => StepPhysics(Context.NetworkTime.Ticktime, tick);
 
     private void AfterTickLoop()
     {
-        var historyStart = NetworkRollback.Instance.HistoryStart;
+        var historyStart = Context.NetworkRollback.HistoryStart;
         foreach (var tick in Snapshots.Keys.Where(t => t < historyStart).ToList())
             Snapshots.Remove(tick);
     }

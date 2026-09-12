@@ -46,7 +46,7 @@ public partial class RapierPhysicsDriver3D : PhysicsDriver
     protected override void RollbackSpace(int tick)
     {
         if (_stateManager is null) return;
-        RapierStateManager.Rollback(_stateManager, PhysicsSpace, tick, ref _storedStates);
+        RapierStateManager.Rollback(_stateManager, PhysicsSpace, Context.NetworkTime.Tick - tick, ref _storedStates);
     }
 }
 
@@ -89,7 +89,7 @@ public partial class RapierPhysicsDriver2D : PhysicsDriver
     protected override void RollbackSpace(int tick)
     {
         if (_stateManager is null) return;
-        RapierStateManager.Rollback(_stateManager, PhysicsSpace, tick, ref _storedStates);
+        RapierStateManager.Rollback(_stateManager, PhysicsSpace, Context.NetworkTime.Tick - tick, ref _storedStates);
     }
 }
 
@@ -105,9 +105,8 @@ internal static class RapierStateManager
     }
 
     /// <summary>With a rolling cache, states are ordered by age with the newest at offset 0.</summary>
-    public static void Rollback(Node manager, Rid space, int tick, ref int storedStates)
+    public static void Rollback(Node manager, Rid space, int offset, ref int storedStates)
     {
-        var offset = NetworkTime.Instance.Tick - tick;
         if (offset >= storedStates) return;
 
         var maxCacheLength = manager.Get("max_cache_length").AsInt32();

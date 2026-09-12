@@ -19,6 +19,14 @@ public enum TickrateMismatchAction
 /// <summary>Exchanges the configured tickrate with the host when peers join. Port of time/network-tickrate-handshake.gd.</summary>
 public partial class NetworkTickrateHandshake : Node
 {
+    /// <summary>The netfox stack this node uses; resolved when it enters the tree.</summary>
+    public NetfoxContext Context { get; private set; } = NetfoxContext.Default;
+
+    public override void _EnterTree()
+    {
+        Context = NetfoxContext.For(this);
+    }
+
     private static readonly NetfoxLogger Logger = NetfoxLogger.ForNetfox("NetworkTickrateHandshake");
 
     public TickrateMismatchAction MismatchAction { get; set; }
@@ -39,7 +47,7 @@ public partial class NetworkTickrateHandshake : Node
     {
         if (IsAuthority())
         {
-            Rpc(MethodName.SubmitTickrate, NetworkTime.Instance.Tickrate);
+            Rpc(MethodName.SubmitTickrate, Context.NetworkTime.Tickrate);
             if (!_listening)
             {
                 Multiplayer.PeerConnected += HandleNewPeer;
@@ -48,7 +56,7 @@ public partial class NetworkTickrateHandshake : Node
         }
         else
         {
-            RpcId(1, MethodName.SubmitTickrate, NetworkTime.Instance.Tickrate);
+            RpcId(1, MethodName.SubmitTickrate, Context.NetworkTime.Tickrate);
         }
     }
 
@@ -62,12 +70,12 @@ public partial class NetworkTickrateHandshake : Node
     private void HandleNewPeer(long peer)
     {
         if (IsAuthority())
-            RpcId(peer, MethodName.SubmitTickrate, NetworkTime.Instance.Tickrate);
+            RpcId(peer, MethodName.SubmitTickrate, Context.NetworkTime.Tickrate);
     }
 
     private void HandleTickrateMismatch(int peer, int tickrate)
     {
-        var networkTime = NetworkTime.Instance;
+        var networkTime = Context.NetworkTime;
         switch (MismatchAction)
         {
             case TickrateMismatchAction.Warn:
@@ -104,14 +112,14 @@ public partial class NetworkTickrateHandshake : Node
     {
         var sender = Multiplayer.GetRemoteSenderId();
         Logger.Debug("Received tickrate {0} from peer {1}", tickrate, sender);
-        if (tickrate != NetworkTime.Instance.Tickrate)
+        if (tickrate != Context.NetworkTime.Tickrate)
             HandleTickrateMismatch(sender, tickrate);
     }
 
     /// <summary>Test hook: feed a tickrate as if received from <paramref name="sender"/>.</summary>
     internal void ReceiveTickrate(int sender, int tickrate)
     {
-        if (tickrate != NetworkTime.Instance.Tickrate)
+        if (tickrate != Context.NetworkTime.Tickrate)
             HandleTickrateMismatch(sender, tickrate);
     }
 }

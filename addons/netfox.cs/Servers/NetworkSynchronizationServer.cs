@@ -14,6 +14,9 @@ public partial class NetworkSynchronizationServer : Node
 {
     public static NetworkSynchronizationServer Instance { get; private set; } = null!;
 
+    /// <summary>The stack this server belongs to; resolved when it enters the tree.</summary>
+    public NetfoxContext Context { get; private set; } = NetfoxContext.Default;
+
     private static readonly NetfoxLogger Logger = NetfoxLogger.ForNetfox("NetworkSynchronizationServer");
 
     private NetworkCommandServer? _commandServer;
@@ -77,15 +80,17 @@ public partial class NetworkSynchronizationServer : Node
     public override void _EnterTree()
     {
         NetfoxRuntime.EnsureInitialized();
-        Instance ??= this;
+        Context = NetfoxContext.For(this);
+        Context.NetworkSynchronizationServer ??= this;
+        if (Context.IsDefault) Instance ??= this;
     }
 
     public override void _Ready()
     {
-        _commandServer ??= NetworkCommandServer.Instance;
-        _historyServer ??= NetworkHistoryServer.Instance;
-        _identityServer ??= NetworkIdentityServer.Instance;
-        _simulationServer ??= RollbackSimulationServer.Instance;
+        _commandServer ??= Context.NetworkCommandServer;
+        _historyServer ??= Context.NetworkHistoryServer;
+        _identityServer ??= Context.NetworkIdentityServer;
+        _simulationServer ??= Context.RollbackSimulationServer;
 
         _denseSerializer = new DenseSnapshotSerializer(_schemas, _identityServer) { MaxPacketSize = _maxPacketSize };
         _sparseSerializer = new SparseSnapshotSerializer(_schemas, _identityServer) { MaxPacketSize = _maxPacketSize };
@@ -97,7 +102,7 @@ public partial class NetworkSynchronizationServer : Node
         _cmdFullSync = _commandServer.RegisterCommandAt(CommandIds.FullSyncState, HandleFullSync, MultiplayerPeer.TransferModeEnum.UnreliableOrdered);
         _cmdDiffSync = _commandServer.RegisterCommandAt(CommandIds.DiffSyncState, HandleDiffSync, MultiplayerPeer.TransferModeEnum.UnreliableOrdered);
 
-        if (NetworkEvents.Instance is { Enabled: true } events)
+        if (Context.NetworkEvents is { Enabled: true } events)
             events.OnPeerLeave += ErasePeer;
         else if (GodotObject.IsInstanceValid(Multiplayer))
             Multiplayer.PeerDisconnected += peer => ErasePeer((int)peer);
@@ -105,6 +110,7 @@ public partial class NetworkSynchronizationServer : Node
 
     public override void _ExitTree()
     {
+        if (ReferenceEquals(Context.NetworkSynchronizationServer, this)) Context.NetworkSynchronizationServer = null!;
         if (Instance == this) Instance = null!;
     }
 
@@ -229,8 +235,8 @@ public partial class NetworkSynchronizationServer : Node
     {
         if (_rbOwnedInputProperties.IsEmpty) return;
 
-        var history = _historyServer ?? NetworkHistoryServer.Instance;
-        var simulation = _simulationServer ?? RollbackSimulationServer.Instance;
+        var history = _historyServer ?? Context.NetworkHistoryServer;
+        var simulation = _simulationServer ?? Context.RollbackSimulationServer;
         var notifiedPeers = new HashSet<int>();
 
         if (!EnableInputBroadcast)
@@ -269,12 +275,12 @@ public partial class NetworkSynchronizationServer : Node
     {
         if (_rbOwnedStateProperties.IsEmpty) return;
 
-        var history = _historyServer ?? NetworkHistoryServer.Instance;
+        var history = _historyServer ?? Context.NetworkHistoryServer;
         var snapshot = history.GetRollbackStateSnapshot(tick);
         if (snapshot is null || snapshot.IsEmpty) return;
 
         var isFull = _rbFullScheduler.IsNow() || !_rbEnableDiffs;
-        var performance = NetworkPerformance.Instance;
+        var performance = Context.NetworkPerformance;
 
         foreach (var peer in Multiplayer.GetPeers())
         {
@@ -312,12 +318,12 @@ public partial class NetworkSynchronizationServer : Node
     {
         if (_syncOwnedStateProperties.IsEmpty) return;
 
-        var history = _historyServer ?? NetworkHistoryServer.Instance;
+        var history = _historyServer ?? Context.NetworkHistoryServer;
         var snapshot = history.GetSynchronizerStateSnapshot(tick);
         if (snapshot is null) return;
 
         var isFull = _syncFullScheduler.IsNow() || !_syncEnableDiffs;
-        var performance = NetworkPerformance.Instance;
+        var performance = Context.NetworkPerformance;
 
         if (isFull)
         {
@@ -349,7 +355,7 @@ public partial class NetworkSynchronizationServer : Node
 
     private void HandleInput(int sender, byte[] data)
     {
-        var history = _historyServer ?? NetworkHistoryServer.Instance;
+        var history = _historyServer ?? Context.NetworkHistoryServer;
         foreach (var snapshot in _redundantSerializer.ReadFrom(sender, _rbInputProperties, new ByteReader(data), isAuth: true))
         {
             snapshot.Sanitize(sender);
@@ -373,7 +379,7 @@ public partial class NetworkSynchronizationServer : Node
     {
         var snapshot = _denseSerializer.ReadFrom(sender, _syncStateProperties, new ByteReader(data), isAuth: true);
         snapshot.Sanitize(sender);
-        (_historyServer ?? NetworkHistoryServer.Instance).MergeSynchronizerState(snapshot);
+        (_historyServer ?? Context.NetworkHistoryServer).MergeSynchronizerState(snapshot);
         Logger.Trace("Ingested sync state: {0}", snapshot);
     }
 
@@ -381,14 +387,14 @@ public partial class NetworkSynchronizationServer : Node
     {
         var snapshot = _sparseSerializer.ReadFrom(sender, _syncStateProperties, new ByteReader(data));
         snapshot.Sanitize(sender);
-        (_historyServer ?? NetworkHistoryServer.Instance).MergeSynchronizerState(snapshot);
+        (_historyServer ?? Context.NetworkHistoryServer).MergeSynchronizerState(snapshot);
         Logger.Trace("Ingested sync diff: {0}", snapshot);
     }
 
     private void IngestState(int sender, Snapshot snapshot)
     {
         snapshot.Sanitize(sender);
-        (_historyServer ?? NetworkHistoryServer.Instance).MergeRollbackState(snapshot);
+        (_historyServer ?? Context.NetworkHistoryServer).MergeRollbackState(snapshot);
         Logger.Trace("Ingested state: {0}", snapshot);
         OnState?.Invoke(snapshot);
     }

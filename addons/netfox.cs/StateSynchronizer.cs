@@ -10,6 +10,8 @@ namespace Netfox;
 [Icon("res://addons/netfox.cs/icons/state-synchronizer.svg")]
 public partial class StateSynchronizer : Node
 {
+    /// <summary>The netfox stack this node uses; resolved when it enters the tree.</summary>
+    public NetfoxContext Context { get; private set; } = NetfoxContext.Default;
     private static readonly NetfoxLogger Logger = NetfoxLogger.ForNetfox("StateSynchronizer");
 
     /// <summary>Node the property paths are relative to; defaults to the parent.</summary>
@@ -33,8 +35,8 @@ public partial class StateSynchronizer : Node
     public void ProcessSettings()
     {
         var root = Root ??= GetParent();
-        var history = NetworkHistoryServer.Instance;
-        var synchronization = NetworkSynchronizationServer.Instance;
+        var history = Context.NetworkHistoryServer;
+        var synchronization = Context.NetworkSynchronizationServer;
 
         foreach (var node in _properties.Subjects)
             foreach (var property in _properties.GetPropertiesOf(node))
@@ -47,7 +49,7 @@ public partial class StateSynchronizer : Node
         foreach (var node in _properties.Subjects)
         {
             synchronization.RegisterVisibilityFilter(node, VisibilityFilter);
-            NetworkIdentityServer.Instance.RegisterNode(node);
+            Context.NetworkIdentityServer.RegisterNode(node);
 
             foreach (var property in _properties.GetPropertiesOf(node))
             {
@@ -82,7 +84,7 @@ public partial class StateSynchronizer : Node
         foreach (var (path, serializer) in schema)
         {
             var entry = PropertyEntry.Parse(root, path);
-            NetworkSynchronizationServer.Instance.RegisterSchema(entry.Node, entry.Property, serializer);
+            Context.NetworkSynchronizationServer.RegisterSchema(entry.Node, entry.Property, serializer);
             _schemaNodes.Add(entry.Node);
         }
     }
@@ -90,7 +92,7 @@ public partial class StateSynchronizer : Node
     public void ClearSchema()
     {
         foreach (var node in _schemaNodes)
-            NetworkSynchronizationServer.Instance.DeregisterSchemaFor(node);
+            Context.NetworkSynchronizationServer.DeregisterSchemaFor(node);
         _schemaNodes.Clear();
     }
 
@@ -109,6 +111,7 @@ public partial class StateSynchronizer : Node
 
     public override void _EnterTree()
     {
+        Context = NetfoxContext.For(this);
         if (Engine.IsEditorHint()) return;
 
         VisibilityFilter ??= new PeerVisibilityFilter();
@@ -120,15 +123,15 @@ public partial class StateSynchronizer : Node
     {
         if (Engine.IsEditorHint()) return;
 
-        if (_clientStartHandler is not null && NetworkEvents.Instance is { } events)
+        if (_clientStartHandler is not null && Context.NetworkEvents is { } events)
             events.OnClientStart -= _clientStartHandler;
         if (_listensToMultiplayer && GodotObject.IsInstanceValid(Multiplayer)) Multiplayer.ConnectedToServer -= ProcessSettings;
 
         foreach (var node in _properties.Subjects.ToList())
         {
-            NetworkSynchronizationServer.Instance?.Deregister(node);
-            NetworkHistoryServer.Instance?.Deregister(node);
-            NetworkIdentityServer.Instance?.DeregisterNode(node);
+            Context.NetworkSynchronizationServer?.Deregister(node);
+            Context.NetworkHistoryServer?.Deregister(node);
+            Context.NetworkIdentityServer?.DeregisterNode(node);
         }
     }
 
@@ -139,7 +142,7 @@ public partial class StateSynchronizer : Node
         Callable.From(ProcessSettings).CallDeferred();
 
         // Reprocess on connect: pre-placed nodes start owned by us (offline peer 1), then change owner
-        if (NetworkEvents.Instance is { Enabled: true } events)
+        if (Context.NetworkEvents is { Enabled: true } events)
         {
             _clientStartHandler = _ => ProcessSettings();
             events.OnClientStart += _clientStartHandler;

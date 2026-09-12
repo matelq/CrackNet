@@ -13,6 +13,8 @@ namespace Netfox;
 [Icon("res://addons/netfox.cs/icons/rollback-synchronizer.svg")]
 public partial class RollbackSynchronizer : Node
 {
+    /// <summary>The netfox stack this node uses; resolved when it enters the tree.</summary>
+    public NetfoxContext Context { get; private set; } = NetfoxContext.Default;
     private static readonly Dictionary<Node, RollbackSynchronizer> ManagedRoots = new(ReferenceEqualityComparer.Instance);
 
     /// <summary>Node the property paths are relative to; defaults to the parent.</summary>
@@ -63,8 +65,8 @@ public partial class RollbackSynchronizer : Node
     public void ProcessSettings()
     {
         var root = Root ??= GetParent();
-        var simulation = RollbackSimulationServer.Instance;
-        var liveness = RollbackLivenessServer.Instance;
+        var simulation = Context.RollbackSimulationServer;
+        var liveness = Context.RollbackLivenessServer;
 
         foreach (var node in _simNodes.Concat(_stateProperties.Subjects).Concat(_inputProperties.Subjects).ToList())
             simulation.DeregisterNode(node);
@@ -102,18 +104,18 @@ public partial class RollbackSynchronizer : Node
                 simulation.RegisterRollbackInputFor(node, inputNode);
 
         foreach (var node in _stateProperties.Subjects.Concat(_inputProperties.Subjects))
-            NetworkIdentityServer.Instance.RegisterNode(node);
+            Context.NetworkIdentityServer.RegisterNode(node);
 
         foreach (var node in _stateProperties.Subjects)
-            NetworkSynchronizationServer.Instance.RegisterVisibilityFilter(node, VisibilityFilter);
+            Context.NetworkSynchronizationServer.RegisterVisibilityFilter(node, VisibilityFilter);
     }
 
     /// <summary>Re-registers properties, picking up authority changes. Called on connect.</summary>
     public void ProcessAuthority()
     {
         var root = Root ??= GetParent();
-        var history = NetworkHistoryServer.Instance;
-        var synchronization = NetworkSynchronizationServer.Instance;
+        var history = Context.NetworkHistoryServer;
+        var synchronization = Context.NetworkSynchronizationServer;
 
         foreach (var node in _stateProperties.Subjects)
             foreach (var property in _stateProperties.GetPropertiesOf(node))
@@ -185,7 +187,7 @@ public partial class RollbackSynchronizer : Node
         foreach (var (path, serializer) in schema)
         {
             var entry = PropertyEntry.Parse(root, path);
-            NetworkSynchronizationServer.Instance.RegisterSchema(entry.Node, entry.Property, serializer);
+            Context.NetworkSynchronizationServer.RegisterSchema(entry.Node, entry.Property, serializer);
             _schemaNodes.Add(entry.Node);
         }
     }
@@ -193,7 +195,7 @@ public partial class RollbackSynchronizer : Node
     public void ClearSchema()
     {
         foreach (var node in _schemaNodes)
-            NetworkSynchronizationServer.Instance.DeregisterSchemaFor(node);
+            Context.NetworkSynchronizationServer.DeregisterSchemaFor(node);
         _schemaNodes.Clear();
     }
 
@@ -202,35 +204,35 @@ public partial class RollbackSynchronizer : Node
 
     /// <summary>Age of the latest known input in ticks, or -1 if none.</summary>
     public int GetInputAge()
-        => NetworkHistoryServer.Instance.GetInputAgeFor(_inputProperties.Subjects, NetworkRollback.Instance.Tick);
+        => Context.NetworkHistoryServer.GetInputAgeFor(_inputProperties.Subjects, Context.NetworkRollback.Tick);
 
     /// <summary>True when the simulated node runs on guessed input, or, outside simulation, when current input is missing.</summary>
     public bool IsPredicting()
     {
-        var simulation = RollbackSimulationServer.Instance;
+        var simulation = Context.RollbackSimulationServer;
         if (simulation.GetSimulatedObject() is not null)
             return simulation.IsPredictingCurrent();
         return GetInputAge() != 0;
     }
 
     /// <summary>Do not record the state of <paramref name="node"/> during this rollback tick.</summary>
-    public void IgnorePrediction(Node node) => NetworkHistoryServer.Instance.Ignore(node);
+    public void IgnorePrediction(Node node) => Context.NetworkHistoryServer.Ignore(node);
 
     /// <summary>Latest tick with input for this synchronizer, or -1.</summary>
     public int GetLastKnownInput()
-        => NetworkHistoryServer.Instance.GetLatestInputFor(_inputProperties.Subjects, NetworkTime.Instance.Tick);
+        => Context.NetworkHistoryServer.GetLatestInputFor(_inputProperties.Subjects, Context.NetworkTime.Tick);
 
     /// <summary>Age of the latest known state in ticks, or -1.</summary>
     public int GetLastKnownState()
-        => NetworkHistoryServer.Instance.GetStateAgeFor(_stateProperties.Subjects, NetworkTime.Instance.Tick);
+        => Context.NetworkHistoryServer.GetStateAgeFor(_stateProperties.Subjects, Context.NetworkTime.Tick);
 
     /// <summary>Mark the managed nodes as spawned at <paramref name="tick"/> and seed their state.</summary>
     public void Spawn(int? tick = null)
     {
-        var at = tick ?? NetworkRollback.Instance.Tick;
+        var at = tick ?? Context.NetworkRollback.Tick;
         SpawnTick = at;
 
-        var liveness = RollbackLivenessServer.Instance;
+        var liveness = Context.RollbackLivenessServer;
         foreach (var node in _livenessNodes)
         {
             liveness.ClearDespawn(node);
@@ -238,20 +240,20 @@ public partial class RollbackSynchronizer : Node
         }
 
         foreach (var subject in _stateProperties.Subjects)
-            NetworkHistoryServer.Instance.PushRollbackState(subject, at);
+            Context.NetworkHistoryServer.PushRollbackState(subject, at);
     }
 
     public void Despawn(int? tick = null)
     {
-        var at = tick ?? NetworkRollback.Instance.Tick;
+        var at = tick ?? Context.NetworkRollback.Tick;
         foreach (var node in _livenessNodes)
-            RollbackLivenessServer.Instance.Despawn(node, at);
+            Context.RollbackLivenessServer.Despawn(node, at);
     }
 
     public bool IsAlive(int? tick = null)
     {
         if (_livenessNodes.Count == 0) return true;
-        return RollbackLivenessServer.Instance.IsAlive(_livenessNodes[0], tick ?? NetworkRollback.Instance.Tick);
+        return Context.RollbackLivenessServer.IsAlive(_livenessNodes[0], tick ?? Context.NetworkRollback.Tick);
     }
 
     public override void _Ready()
@@ -261,11 +263,11 @@ public partial class RollbackSynchronizer : Node
         Root ??= GetParent();
         _logger = NetfoxLogger.ForNetfox("RollbackSynchronizer:" + Root.Name);
 
-        if (SpawnTick < 0) SpawnTick = NetworkRollback.Instance.Tick + 1;
+        if (SpawnTick < 0) SpawnTick = Context.NetworkRollback.Tick + 1;
         Callable.From(ProcessSettings).CallDeferred();
 
         // Reprocess authority on connect
-        if (NetworkEvents.Instance is { Enabled: true } events)
+        if (Context.NetworkEvents is { Enabled: true } events)
         {
             _clientStartHandler = _ => ProcessSettings();
             events.OnClientStart += _clientStartHandler;
@@ -284,13 +286,14 @@ public partial class RollbackSynchronizer : Node
 
     public override void _EnterTree()
     {
+        Context = NetfoxContext.For(this);
         if (Engine.IsEditorHint()) return;
 
         Root ??= GetParent();
         ManagedRoots[Root] = this;
 
         // Resimulate from spawn tick, only on the next loop
-        var rollback = NetworkRollback.Instance;
+        var rollback = Context.NetworkRollback;
         _spawnResimHandler = () =>
         {
             rollback.BeforeLoop -= _spawnResimHandler;
@@ -311,23 +314,23 @@ public partial class RollbackSynchronizer : Node
         if (Root is not null) ManagedRoots.Remove(Root);
 
         // Godot auto-disconnects signals of freed nodes; C# events need explicit cleanup
-        if (_spawnResimHandler is not null && NetworkRollback.Instance is { } rollback)
+        if (_spawnResimHandler is not null && Context.NetworkRollback is { } rollback)
             rollback.BeforeLoop -= _spawnResimHandler;
-        if (_clientStartHandler is not null && NetworkEvents.Instance is { } events)
+        if (_clientStartHandler is not null && Context.NetworkEvents is { } events)
             events.OnClientStart -= _clientStartHandler;
         if (_listensToMultiplayer && GodotObject.IsInstanceValid(Multiplayer)) Multiplayer.ConnectedToServer -= ProcessSettings;
 
         // Consider the synchronizer and its nodes freed, deregister everything
         foreach (var node in _simNodes.Concat(_stateProperties.Subjects).Concat(_inputProperties.Subjects).ToList())
         {
-            RollbackSimulationServer.Instance?.DeregisterNode(node);
-            NetworkSynchronizationServer.Instance?.Deregister(node);
-            NetworkIdentityServer.Instance?.DeregisterNode(node);
-            NetworkHistoryServer.Instance?.Deregister(node);
+            Context.RollbackSimulationServer?.DeregisterNode(node);
+            Context.NetworkSynchronizationServer?.Deregister(node);
+            Context.NetworkIdentityServer?.DeregisterNode(node);
+            Context.NetworkHistoryServer?.Deregister(node);
         }
 
         foreach (var node in _livenessNodes)
-            RollbackLivenessServer.Instance?.Deregister(node);
+            Context.RollbackLivenessServer?.Deregister(node);
     }
 
     public override string[] _GetConfigurationWarnings()
@@ -350,7 +353,7 @@ public partial class RollbackSynchronizer : Node
 
     private void SetPredictionEnabled(bool enabled)
     {
-        var simulation = RollbackSimulationServer.Instance;
+        var simulation = Context.RollbackSimulationServer;
         if (simulation is null) return;
         foreach (var node in _simNodes)
             simulation.SetPredictionEnabledFor(node, enabled);

@@ -12,6 +12,8 @@ namespace Netfox;
 [Icon("res://addons/netfox.cs/icons/rewindable-action.svg")]
 public partial class RewindableAction : Node
 {
+    /// <summary>The netfox stack this node uses; resolved when it enters the tree.</summary>
+    public NetfoxContext Context { get; private set; } = NetfoxContext.Default;
     public enum Status
     {
         Inactive,
@@ -41,7 +43,7 @@ public partial class RewindableAction : Node
     /// <summary>Toggle the action for <paramref name="tick"/>, defaulting to the current rollback tick.</summary>
     public void SetActive(bool active, int? tick = null)
     {
-        var at = tick ?? NetworkRollback.Instance.Tick;
+        var at = tick ?? Context.NetworkRollback.Tick;
         _lastSetTick = at;
 
         if (IsActive(at) == active) return;
@@ -52,11 +54,11 @@ public partial class RewindableAction : Node
         _stateChanges[at] = active;
     }
 
-    public bool IsActive(int? tick = null) => _activeTicks.Contains(tick ?? NetworkRollback.Instance.Tick);
+    public bool IsActive(int? tick = null) => _activeTicks.Contains(tick ?? Context.NetworkRollback.Tick);
 
     public Status GetStatus(int? tick = null)
     {
-        var at = tick ?? NetworkRollback.Instance.Tick;
+        var at = tick ?? Context.NetworkRollback.Tick;
         var currentlyActive = IsActive(at);
 
         if (_queuedChanges.TryGetValue(at, out var queued))
@@ -74,16 +76,16 @@ public partial class RewindableAction : Node
 
     public string GetStatusString(int? tick = null) => StatusString(GetStatus(tick));
 
-    public bool HasContext(int? tick = null) => _context.ContainsKey(tick ?? NetworkRollback.Instance.Tick);
+    public bool HasContext(int? tick = null) => _context.ContainsKey(tick ?? Context.NetworkRollback.Tick);
 
     /// <summary>Arbitrary data remembered per tick, e.g. the projectile spawned by this action.</summary>
-    public object? GetContext(int? tick = null) => _context.GetValueOrDefault(tick ?? NetworkRollback.Instance.Tick);
+    public object? GetContext(int? tick = null) => _context.GetValueOrDefault(tick ?? Context.NetworkRollback.Tick);
 
     public T? GetContext<T>(int? tick = null) => GetContext(tick) is T value ? value : default;
 
-    public void SetContext(object? value, int? tick = null) => _context[tick ?? NetworkRollback.Instance.Tick] = value;
+    public void SetContext(object? value, int? tick = null) => _context[tick ?? Context.NetworkRollback.Tick] = value;
 
-    public void EraseContext(int? tick = null) => _context.Remove(tick ?? NetworkRollback.Instance.Tick);
+    public void EraseContext(int? tick = null) => _context.Remove(tick ?? Context.NetworkRollback.Tick);
 
     /// <summary>Resimulate <paramref name="target"/> whenever this action changes.</summary>
     public void Mutate(GodotObject target) => _mutatedObjects.Add(target);
@@ -92,15 +94,16 @@ public partial class RewindableAction : Node
 
     public override void _EnterTree()
     {
+        Context = NetfoxContext.For(this);
         _logger = NetfoxLogger.ForNetfox("RewindableAction:" + Name);
-        var rollback = NetworkRollback.Instance;
+        var rollback = Context.NetworkRollback;
         rollback.BeforeLoop += BeforeRollbackLoop;
         rollback.AfterLoop += AfterLoop;
     }
 
     public override void _ExitTree()
     {
-        var rollback = NetworkRollback.Instance;
+        var rollback = Context.NetworkRollback;
         if (rollback is null) return;
         rollback.BeforeLoop -= BeforeRollbackLoop;
         rollback.AfterLoop -= AfterLoop;
@@ -114,7 +117,7 @@ public partial class RewindableAction : Node
 
     private void BeforeRollbackLoop()
     {
-        var rollback = NetworkRollback.Instance;
+        var rollback = Context.NetworkRollback;
         _lastSetTick = -1;
 
         if (_queuedChanges.Count > 0)
@@ -141,7 +144,7 @@ public partial class RewindableAction : Node
 
     private void AfterLoop()
     {
-        var historyStart = NetworkRollback.Instance.HistoryStart;
+        var historyStart = Context.NetworkRollback.HistoryStart;
 
         _activeTicks.RemoveWhere(tick => tick < historyStart);
         foreach (var tick in _context.Keys.Where(tick => tick < historyStart).ToList())
@@ -172,14 +175,14 @@ public partial class RewindableAction : Node
     internal void ReceiveState(byte[] bytes)
     {
         var (historyStart, lastKnownTick, activeTicks) = TicksetSerializer.Deserialize(bytes);
-        var rollbackHistoryStart = NetworkRollback.Instance.HistoryStart;
+        var rollbackHistoryStart = Context.NetworkRollback.HistoryStart;
 
         var earliestTick = Math.Max(historyStart, rollbackHistoryStart);
         // Do not compare past the last event, so events the host does not know about yet are not cancelled
         var latestTick = Math.Max(lastKnownTick, rollbackHistoryStart);
 
         // Tolerate a few ticks in the future; the server may be slightly ahead under tiny latencies
-        var currentTick = NetworkTime.Instance.Tick;
+        var currentTick = Context.NetworkTime.Tick;
         if (earliestTick > currentTick + 4 || latestTick > currentTick + 4)
             _logger.Debug("Received tickset for range @{0}>{1}, which has ticks in the future!", earliestTick, latestTick);
 

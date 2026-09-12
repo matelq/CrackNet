@@ -13,6 +13,9 @@ public partial class RollbackSimulationServer : Node
 {
     public static RollbackSimulationServer Instance { get; private set; } = null!;
 
+    /// <summary>The stack this server belongs to; resolved when it enters the tree.</summary>
+    public NetfoxContext Context { get; private set; } = NetfoxContext.Default;
+
     private static readonly NetfoxLogger Logger = NetfoxLogger.ForNetfox("RollbackSimulationServer");
 
     private NetworkHistoryServer? _historyServer;
@@ -37,18 +40,21 @@ public partial class RollbackSimulationServer : Node
     public override void _EnterTree()
     {
         NetfoxRuntime.EnsureInitialized();
-        Instance ??= this;
+        Context = NetfoxContext.For(this);
+        Context.RollbackSimulationServer ??= this;
+        if (Context.IsDefault) Instance ??= this;
         _group = new StringName("__nf_rollback_sim" + GetInstanceId());
     }
 
     public override void _Ready()
     {
-        _historyServer ??= NetworkHistoryServer.Instance;
-        _livenessServer ??= RollbackLivenessServer.Instance;
+        _historyServer ??= Context.NetworkHistoryServer;
+        _livenessServer ??= Context.RollbackLivenessServer;
     }
 
     public override void _ExitTree()
     {
+        if (ReferenceEquals(Context.RollbackSimulationServer, this)) Context.RollbackSimulationServer = null!;
         if (Instance == this) Instance = null!;
     }
 
@@ -117,7 +123,7 @@ public partial class RollbackSimulationServer : Node
     {
         _currentObject = null;
 
-        var history = _historyServer ?? NetworkHistoryServer.Instance;
+        var history = _historyServer ?? Context.NetworkHistoryServer;
         var inputSnapshot = history.GetRollbackInputSnapshot(tick);
         var nodes = GetNodesToSimulate(inputSnapshot); // Sorted by tree order
         _predictedNodes.Clear();
@@ -135,7 +141,7 @@ public partial class RollbackSimulationServer : Node
             SetTickSimulatedFor(node, tick);
         }
 
-        NetworkPerformance.Instance?.PushRollbackNodesSimulated(nodes.Count);
+        Context.NetworkPerformance?.PushRollbackNodesSimulated(nodes.Count);
     }
 
     /// <summary>Nodes to simulate for the tick of <paramref name="inputSnapshot"/>, in scene tree order.</summary>
@@ -144,8 +150,8 @@ public partial class RollbackSimulationServer : Node
         var result = new List<Node>();
         if (inputSnapshot is null) return result;
 
-        var liveness = _livenessServer ?? RollbackLivenessServer.Instance;
-        var rollback = NetworkRollback.Instance;
+        var liveness = _livenessServer ?? Context.RollbackLivenessServer;
+        var rollback = Context.NetworkRollback;
         var tick = inputSnapshot.Tick;
 
         foreach (var node in GetTree().GetNodesInGroup(_group))

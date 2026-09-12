@@ -9,6 +9,9 @@ namespace Netfox;
 [Icon("res://addons/netfox.cs/icons/tick-interpolator.svg")]
 public partial class TickInterpolator : Node
 {
+    /// <summary>The netfox stack this node uses; resolved when it enters the tree.</summary>
+    public NetfoxContext Context { get; private set; } = NetfoxContext.Default;
+
     /// <summary>Node the property paths are relative to; defaults to the parent.</summary>
     [Export] public Node? Root { get; set; }
 
@@ -29,7 +32,7 @@ public partial class TickInterpolator : Node
     public void ProcessSettings()
     {
         Root ??= GetParent();
-        var server = InterpolationServer.Instance;
+        var server = Context.InterpolationServer;
 
         foreach (var subject in _properties.Subjects.ToList())
             server.Deregister(subject);
@@ -59,21 +62,21 @@ public partial class TickInterpolator : Node
     public bool CanInterpolate()
     {
         foreach (var subject in _properties.Subjects)
-            if (!InterpolationServer.Instance.CanInterpolate(subject)) return false;
+            if (!Context.InterpolationServer.CanInterpolate(subject)) return false;
         return true;
     }
 
     public void PushState()
     {
         foreach (var subject in _properties.Subjects)
-            InterpolationServer.Instance.PushState(subject);
+            Context.InterpolationServer.PushState(subject);
     }
 
     /// <summary>Skip interpolation for the next tick loop, e.g. after respawning.</summary>
     public void Teleport()
     {
         foreach (var subject in _properties.Subjects)
-            InterpolationServer.Instance.Teleport(subject);
+            Context.InterpolationServer.Teleport(subject);
     }
 
     public override void _Notification(int what)
@@ -91,6 +94,7 @@ public partial class TickInterpolator : Node
 
     public override async void _EnterTree()
     {
+        Context = NetfoxContext.For(this);
         if (Engine.IsEditorHint()) return;
 
         Callable.From(ProcessSettings).CallDeferred();
@@ -108,7 +112,7 @@ public partial class TickInterpolator : Node
         if (Engine.IsEditorHint()) return;
 
         foreach (var subject in _properties.Subjects.ToList())
-            InterpolationServer.Instance?.Deregister(subject);
+            Context.InterpolationServer?.Deregister(subject);
     }
 
     private void ReprocessSettings()

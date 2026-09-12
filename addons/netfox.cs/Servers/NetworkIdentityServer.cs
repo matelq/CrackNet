@@ -14,6 +14,9 @@ public partial class NetworkIdentityServer : Node
 {
     public static NetworkIdentityServer Instance { get; private set; } = null!;
 
+    /// <summary>The stack this server belongs to; resolved when it enters the tree.</summary>
+    public NetfoxContext Context { get; private set; } = NetfoxContext.Default;
+
     private static readonly NetfoxLogger Logger = NetfoxLogger.ForNetfox("NetworkIdentityServer");
     private const int WarnQueueSize = 128;
 
@@ -38,15 +41,17 @@ public partial class NetworkIdentityServer : Node
     public override void _EnterTree()
     {
         NetfoxRuntime.EnsureInitialized();
-        Instance ??= this;
+        Context = NetfoxContext.For(this);
+        Context.NetworkIdentityServer ??= this;
+        if (Context.IsDefault) Instance ??= this;
     }
 
     public override void _Ready()
     {
-        _commandServer ??= NetworkCommandServer.Instance;
+        _commandServer ??= Context.NetworkCommandServer;
         _cmdIds = _commandServer.RegisterCommandAt(CommandIds.Identities, HandleIds, MultiplayerPeer.TransferModeEnum.Reliable);
 
-        if (NetworkEvents.Instance is { Enabled: true } events)
+        if (Context.NetworkEvents is { Enabled: true } events)
         {
             events.OnPeerLeave += ErasePeer;
         }
@@ -65,6 +70,7 @@ public partial class NetworkIdentityServer : Node
 
     public override void _ExitTree()
     {
+        if (ReferenceEquals(Context.NetworkIdentityServer, this)) Context.NetworkIdentityServer = null!;
         if (Instance == this) Instance = null!;
     }
 

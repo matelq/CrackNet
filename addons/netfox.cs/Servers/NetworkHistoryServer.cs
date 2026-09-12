@@ -13,6 +13,9 @@ public partial class NetworkHistoryServer : Node
 {
     public static NetworkHistoryServer Instance { get; private set; } = null!;
 
+    /// <summary>The stack this server belongs to; resolved when it enters the tree.</summary>
+    public NetfoxContext Context { get; private set; } = NetfoxContext.Default;
+
     private static readonly NetfoxLogger Logger = NetfoxLogger.ForNetfox("NetworkHistoryServer");
 
     private readonly PropertyPool _rbInputProperties = new();
@@ -47,11 +50,14 @@ public partial class NetworkHistoryServer : Node
     public override void _EnterTree()
     {
         NetfoxRuntime.EnsureInitialized();
-        Instance ??= this;
+        Context = NetfoxContext.For(this);
+        Context.NetworkHistoryServer ??= this;
+        if (Context.IsDefault) Instance ??= this;
     }
 
     public override void _ExitTree()
     {
+        if (ReferenceEquals(Context.NetworkHistoryServer, this)) Context.NetworkHistoryServer = null!;
         if (Instance == this) Instance = null!;
     }
 
@@ -131,7 +137,7 @@ public partial class NetworkHistoryServer : Node
     internal void RecordRollbackState(int tick)
     {
         var inputSnapshot = GetRollbackInputSnapshot(tick - 1);
-        var simulation = RollbackSimulationServer.Instance;
+        var simulation = Context.RollbackSimulationServer;
 
         Record(tick, _rbStateHistory, _rbStateSnapshots, _rbStateProperties, onlyAuth: false, subject =>
         {
@@ -173,7 +179,7 @@ public partial class NetworkHistoryServer : Node
     private void Record(int tick, PerObjectHistory history, HistoryBuffer<Snapshot> snapshots, PropertyPool propertyPool, bool onlyAuth, Func<Node, bool> authFilter)
     {
         var snapshot = EnsureTickSnapshot(snapshots, tick);
-        var liveness = RollbackLivenessServer.Instance;
+        var liveness = Context.RollbackLivenessServer;
 
         foreach (var subject in propertyPool.Subjects.ToList())
         {
@@ -263,7 +269,7 @@ public partial class NetworkHistoryServer : Node
         var tick = snapshot.Tick;
         var hasUpdated = false;
 
-        var historyStart = NetworkRollback.Instance?.HistoryStart ?? 0;
+        var historyStart = Context.NetworkRollback?.HistoryStart ?? 0;
         if (tick < historyStart)
         {
             if (ReferenceEquals(history, _rbInputHistory)) Logger.Warning("Input being merged is too old! (@{0})", tick);

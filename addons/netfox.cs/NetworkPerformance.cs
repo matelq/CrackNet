@@ -10,6 +10,9 @@ public partial class NetworkPerformance : Node
 {
     public static NetworkPerformance Instance { get; private set; } = null!;
 
+    /// <summary>The stack this server belongs to; resolved when it enters the tree.</summary>
+    public NetfoxContext Context { get; private set; } = NetfoxContext.Default;
+
     private static readonly NetfoxLogger Logger = NetfoxLogger.ForNetfox("NetworkPerformance");
 
     public static readonly StringName NetworkLoopDurationMonitor = "netfox/Network loop duration (ms)";
@@ -66,7 +69,9 @@ public partial class NetworkPerformance : Node
     public override void _EnterTree()
     {
         NetfoxRuntime.EnsureInitialized();
-        Instance ??= this;
+        Context = NetfoxContext.For(this);
+        Context.NetworkPerformance ??= this;
+        if (Context.IsDefault) Instance ??= this;
     }
 
     public override void _Ready()
@@ -77,24 +82,28 @@ public partial class NetworkPerformance : Node
             return;
         }
 
-        Logger.Debug("Network performance enabled, registering performance monitors");
-        Performance.AddCustomMonitor(NetworkLoopDurationMonitor, Callable.From(GetNetworkLoopDurationMs));
-        Performance.AddCustomMonitor(RollbackLoopDurationMonitor, Callable.From(GetRollbackLoopDurationMs));
-        Performance.AddCustomMonitor(NetworkTicksMonitor, Callable.From(GetNetworkTicks));
-        Performance.AddCustomMonitor(RollbackTicksMonitor, Callable.From(GetRollbackTicks));
-        Performance.AddCustomMonitor(RollbackTickDurationMonitor, Callable.From(GetRollbackTickDurationMs));
-        Performance.AddCustomMonitor(RollbackNodesSimulatedMonitor, Callable.From(GetRollbackNodesSimulated));
-        Performance.AddCustomMonitor(RollbackNodesSimulatedPerTickMonitor, Callable.From(GetRollbackNodesSimulatedPerTick));
-        Performance.AddCustomMonitor(FullStatePropertiesCount, Callable.From(GetFullStatePropsCount));
-        Performance.AddCustomMonitor(SentStatePropertiesCount, Callable.From(GetSentStatePropsCount));
-        Performance.AddCustomMonitor(SentStatePropertiesRatio, Callable.From(GetSentStatePropsRatio));
+        // Custom monitors are engine-global, so only the default stack publishes them.
+        if (Context.IsDefault)
+        {
+            Logger.Debug("Network performance enabled, registering performance monitors");
+            Performance.AddCustomMonitor(NetworkLoopDurationMonitor, Callable.From(GetNetworkLoopDurationMs));
+            Performance.AddCustomMonitor(RollbackLoopDurationMonitor, Callable.From(GetRollbackLoopDurationMs));
+            Performance.AddCustomMonitor(NetworkTicksMonitor, Callable.From(GetNetworkTicks));
+            Performance.AddCustomMonitor(RollbackTicksMonitor, Callable.From(GetRollbackTicks));
+            Performance.AddCustomMonitor(RollbackTickDurationMonitor, Callable.From(GetRollbackTickDurationMs));
+            Performance.AddCustomMonitor(RollbackNodesSimulatedMonitor, Callable.From(GetRollbackNodesSimulated));
+            Performance.AddCustomMonitor(RollbackNodesSimulatedPerTickMonitor, Callable.From(GetRollbackNodesSimulatedPerTick));
+            Performance.AddCustomMonitor(FullStatePropertiesCount, Callable.From(GetFullStatePropsCount));
+            Performance.AddCustomMonitor(SentStatePropertiesCount, Callable.From(GetSentStatePropsCount));
+            Performance.AddCustomMonitor(SentStatePropertiesRatio, Callable.From(GetSentStatePropsRatio));
+        }
 
-        var networkTime = NetworkTime.Instance;
+        var networkTime = Context.NetworkTime;
         networkTime.BeforeTickLoop += BeforeTickLoop;
         networkTime.OnTick += OnNetworkTick;
         networkTime.AfterTickLoop += AfterTickLoop;
 
-        var rollback = NetworkRollback.Instance;
+        var rollback = Context.NetworkRollback;
         rollback.BeforeLoop += BeforeRollbackLoop;
         rollback.OnProcessTick += OnRollbackTick;
         rollback.AfterLoop += AfterRollbackLoop;
@@ -102,6 +111,7 @@ public partial class NetworkPerformance : Node
 
     public override void _ExitTree()
     {
+        if (ReferenceEquals(Context.NetworkPerformance, this)) Context.NetworkPerformance = null!;
         if (Instance == this) Instance = null!;
     }
 

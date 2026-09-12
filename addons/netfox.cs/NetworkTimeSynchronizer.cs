@@ -14,6 +14,9 @@ public partial class NetworkTimeSynchronizer : Node
 {
     public static NetworkTimeSynchronizer Instance { get; private set; } = null!;
 
+    /// <summary>The stack this server belongs to; resolved when it enters the tree.</summary>
+    public NetfoxContext Context { get; private set; } = NetfoxContext.Default;
+
     public const double MinSyncInterval = ClockSynchronizer.MinSyncInterval;
 
     private static readonly NetfoxLogger Logger = NetfoxLogger.ForNetfox("NetworkTimeSynchronizer");
@@ -62,12 +65,14 @@ public partial class NetworkTimeSynchronizer : Node
     public override void _EnterTree()
     {
         NetfoxRuntime.EnsureInitialized();
-        Instance ??= this;
+        Context = NetfoxContext.For(this);
+        Context.NetworkTimeSynchronizer ??= this;
+        if (Context.IsDefault) Instance ??= this;
     }
 
     public override void _Ready()
     {
-        _commandServer ??= NetworkCommandServer.Instance;
+        _commandServer ??= Context.NetworkCommandServer;
         _cmdPing = _commandServer.RegisterCommandAt(CommandIds.Ping, HandlePing, MultiplayerPeer.TransferModeEnum.Unreliable);
         _cmdPong = _commandServer.RegisterCommandAt(CommandIds.Pong, HandlePong, MultiplayerPeer.TransferModeEnum.Unreliable);
         _cmdRequestTime = _commandServer.RegisterCommandAt(CommandIds.RequestTime, HandleRequestTimestamp, MultiplayerPeer.TransferModeEnum.Reliable);
@@ -76,6 +81,7 @@ public partial class NetworkTimeSynchronizer : Node
 
     public override void _ExitTree()
     {
+        if (ReferenceEquals(Context.NetworkTimeSynchronizer, this)) Context.NetworkTimeSynchronizer = null!;
         if (Instance == this) Instance = null!;
     }
 

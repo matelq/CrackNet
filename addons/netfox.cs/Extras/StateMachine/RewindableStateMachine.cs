@@ -12,6 +12,14 @@ namespace Netfox.Extras;
 [Icon("res://addons/netfox.cs/icons/rewindable-state-machine.svg")]
 public partial class RewindableStateMachine : Node, IRollbackTick
 {
+    /// <summary>The netfox stack this node uses; resolved when it enters the tree.</summary>
+    public NetfoxContext Context { get; private set; } = NetfoxContext.Default;
+
+    public override void _EnterTree()
+    {
+        Context = NetfoxContext.For(this);
+    }
+
     private static readonly NetfoxLogger Logger = NetfoxLogger.ForExtras("RewindableStateMachine");
 
     /// <summary>Name of the current state. Set it to jump without running transition callbacks; use Transition() otherwise.</summary>
@@ -45,7 +53,7 @@ public partial class RewindableStateMachine : Node, IRollbackTick
         }
 
         var fromState = _stateObject;
-        var tick = NetworkRollback.Instance.Tick;
+        var tick = Context.NetworkRollback.Tick;
         _preventTransition = false;
         Action prevent = () => _preventTransition = true;
 
@@ -95,11 +103,11 @@ public partial class RewindableStateMachine : Node, IRollbackTick
                 UpdateStates();
                 break;
             case NotificationEnterTree:
-                NetworkTime.Instance.AfterTickLoop += AfterTickLoop;
+                Context.NetworkTime.AfterTickLoop += AfterTickLoop;
                 UpdateStates();
                 break;
             case NotificationExitTree:
-                if (NetworkTime.Instance is not null) NetworkTime.Instance.AfterTickLoop -= AfterTickLoop;
+                if (Context.NetworkTime is not null) Context.NetworkTime.AfterTickLoop -= AfterTickLoop;
                 break;
         }
     }
@@ -131,7 +139,7 @@ public partial class RewindableStateMachine : Node, IRollbackTick
     {
         if (_stateObject == _previousStateObject || _stateObject is null) return;
 
-        var tick = NetworkTime.Instance.Tick;
+        var tick = Context.NetworkTime.Tick;
         OnDisplayStateChanged?.Invoke(_previousStateObject, _stateObject);
 
         if (_previousStateObject is not null)

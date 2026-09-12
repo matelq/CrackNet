@@ -9,6 +9,9 @@ public partial class InterpolationServer : Node
 {
     public static InterpolationServer Instance { get; private set; } = null!;
 
+    /// <summary>The stack this server belongs to; resolved when it enters the tree.</summary>
+    public NetfoxContext Context { get; private set; } = NetfoxContext.Default;
+
     private static readonly NetfoxLogger Logger = NetfoxLogger.ForNetfox("InterpolationServer");
 
     private bool _enabled = true;
@@ -26,7 +29,9 @@ public partial class InterpolationServer : Node
     public override void _EnterTree()
     {
         NetfoxRuntime.EnsureInitialized();
-        Instance ??= this;
+        Context = NetfoxContext.For(this);
+        Context.InterpolationServer ??= this;
+        if (Context.IsDefault) Instance ??= this;
     }
 
     public override void _Ready()
@@ -37,6 +42,7 @@ public partial class InterpolationServer : Node
 
     public override void _ExitTree()
     {
+        if (ReferenceEquals(Context.InterpolationServer, this)) Context.InterpolationServer = null!;
         if (Instance == this) Instance = null!;
     }
 

@@ -6,6 +6,8 @@ namespace Netfox;
 [GlobalClass]
 public partial class PeerVisibilityFilter : Node
 {
+    /// <summary>The netfox stack this node uses; resolved when it enters the tree.</summary>
+    public NetfoxContext Context { get; private set; } = NetfoxContext.Default;
     public enum UpdateModeEnum
     {
         /// <summary>Only update visibility when manually triggered.</summary>
@@ -110,6 +112,7 @@ public partial class PeerVisibilityFilter : Node
 
     public override void _EnterTree()
     {
+        Context = NetfoxContext.For(this);
         ConnectUpdateHandlers(_updateMode);
         _handlersConnected = true;
         if (Multiplayer is not null) UpdateVisibility();
@@ -130,13 +133,13 @@ public partial class PeerVisibilityFilter : Node
                 Multiplayer.PeerDisconnected += HandlePeer;
                 break;
             case UpdateModeEnum.PerTickLoop:
-                NetworkTime.Instance.BeforeTickLoop += HandleTickLoop;
+                Context.NetworkTime.BeforeTickLoop += HandleTickLoop;
                 break;
             case UpdateModeEnum.PerTick:
-                NetworkTime.Instance.BeforeTick += HandleTick;
+                Context.NetworkTime.BeforeTick += HandleTick;
                 break;
             case UpdateModeEnum.PerRollbackTick:
-                NetworkRollback.Instance.AfterProcessTick += HandleRollbackTick;
+                Context.NetworkRollback.AfterProcessTick += HandleRollbackTick;
                 break;
         }
     }
@@ -153,13 +156,13 @@ public partial class PeerVisibilityFilter : Node
                 }
                 break;
             case UpdateModeEnum.PerTickLoop:
-                if (NetworkTime.Instance is not null) NetworkTime.Instance.BeforeTickLoop -= HandleTickLoop;
+                if (Context.NetworkTime is not null) Context.NetworkTime.BeforeTickLoop -= HandleTickLoop;
                 break;
             case UpdateModeEnum.PerTick:
-                if (NetworkTime.Instance is not null) NetworkTime.Instance.BeforeTick -= HandleTick;
+                if (Context.NetworkTime is not null) Context.NetworkTime.BeforeTick -= HandleTick;
                 break;
             case UpdateModeEnum.PerRollbackTick:
-                if (NetworkRollback.Instance is not null) NetworkRollback.Instance.AfterProcessTick -= HandleRollbackTick;
+                if (Context.NetworkRollback is not null) Context.NetworkRollback.AfterProcessTick -= HandleRollbackTick;
                 break;
         }
     }

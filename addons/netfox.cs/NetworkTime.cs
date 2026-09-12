@@ -10,6 +10,9 @@ public partial class NetworkTime : Node
 {
     public static NetworkTime Instance { get; private set; } = null!;
 
+    /// <summary>The stack this server belongs to; resolved when it enters the tree.</summary>
+    public NetfoxContext Context { get; private set; } = NetfoxContext.Default;
+
     private static readonly NetfoxLogger Logger = NetfoxLogger.ForNetfox("NetworkTime");
 
     private enum State { Inactive, Syncing, Active }
@@ -83,7 +86,7 @@ public partial class NetworkTime : Node
     [Obsolete("Returns the same as Time")] public double LocalTime => Time;
 
     /// <summary>Estimated roundtrip time to the server. Always 0 on the server.</summary>
-    public double RemoteRtt => NetworkTimeSynchronizer.Instance.Rtt;
+    public double RemoteRtt => Context.NetworkTimeSynchronizer.Rtt;
 
     /// <summary>Duration of a single tick, in seconds.</summary>
     public double Ticktime => 1.0 / Tickrate;
@@ -103,10 +106,10 @@ public partial class NetworkTime : Node
     public double ClockStretchFactor => _clock.StretchFactor;
 
     /// <summary>Reference clock minus simulation clock.</summary>
-    public double ClockOffset => _clock.ClockOffset(NetworkTimeSynchronizer.Instance.GetTime());
+    public double ClockOffset => _clock.ClockOffset(Context.NetworkTimeSynchronizer.GetTime());
 
     /// <summary>Same as NetworkTimeSynchronizer.RemoteOffset.</summary>
-    public double RemoteClockOffset => NetworkTimeSynchronizer.Instance.RemoteOffset;
+    public double RemoteClockOffset => Context.NetworkTimeSynchronizer.RemoteOffset;
 
     /// <summary>
     /// Start NetworkTime: synchronize with the host, then emit ticks. On clients, ticks start after the initial sync.
@@ -137,7 +140,7 @@ public partial class NetworkTime : Node
         _initialSyncDone = false;
         _syncedPeers.Add(1); // Host is always synced, their time is ground truth
 
-        var synchronizer = NetworkTimeSynchronizer.Instance;
+        var synchronizer = Context.NetworkTimeSynchronizer;
         synchronizer.Start();
         _state = State.Syncing;
 
@@ -169,7 +172,7 @@ public partial class NetworkTime : Node
 
         Multiplayer.PeerDisconnected += HandlePeerDisconnect;
 
-        _clock.Reset(NetworkTimeSynchronizer.Instance.GetTime());
+        _clock.Reset(Context.NetworkTimeSynchronizer.GetTime());
         AfterSync?.Invoke();
 
         _tickrateHandshake.Run();
@@ -178,7 +181,7 @@ public partial class NetworkTime : Node
     /// <summary>Stop NetworkTime and the background sync. No ticks until the next Start.</summary>
     public void Stop()
     {
-        NetworkTimeSynchronizer.Instance.Stop();
+        Context.NetworkTimeSynchronizer.Stop();
         _tickrateHandshake.Stop();
 
         _state = State.Inactive;
@@ -203,7 +206,9 @@ public partial class NetworkTime : Node
     public override void _EnterTree()
     {
         NetfoxRuntime.EnsureInitialized();
-        Instance ??= this;
+        Context = NetfoxContext.For(this);
+        Context.NetworkTime ??= this;
+        if (Context.IsDefault) Instance ??= this;
     }
 
     public override void _Ready()
@@ -218,6 +223,7 @@ public partial class NetworkTime : Node
     public override void _ExitTree()
     {
         NetfoxLogger.FreeTag(_tickTag);
+        if (ReferenceEquals(Context.NetworkTime, this)) Context.NetworkTime = null!;
         if (Instance == this) Instance = null!;
     }
 
@@ -227,7 +233,7 @@ public partial class NetworkTime : Node
         if (_state != State.Active) return;
 
         if (!SyncToPhysics) Loop();
-        InterpolationServer.Instance?.Interpolate(TickFactor);
+        Context.InterpolationServer?.Interpolate(TickFactor);
     }
 
     public override void _PhysicsProcess(double delta)
@@ -242,7 +248,7 @@ public partial class NetworkTime : Node
 
     private void Loop()
     {
-        var ticksInLoop = _clock.Advance(NetworkTimeSynchronizer.Instance.GetTime());
+        var ticksInLoop = _clock.Advance(Context.NetworkTimeSynchronizer.GetTime());
 
         if (ticksInLoop > 0)
         {
@@ -256,9 +262,9 @@ public partial class NetworkTime : Node
                 OnTick?.Invoke(delta, tick);
                 AfterTick?.Invoke(delta, tick);
 
-                NetworkRollback.Instance?.AfterTick(tick);
-                NetworkHistoryServer.Instance?.RecordSyncState(tick + 1);
-                NetworkSynchronizationServer.Instance?.SynchronizeSyncState(tick + 1);
+                Context.NetworkRollback?.AfterTick(tick);
+                Context.NetworkHistoryServer?.RecordSyncState(tick + 1);
+                Context.NetworkSynchronizationServer?.SynchronizeSyncState(tick + 1);
 
                 _clock.CompleteTick();
             }
@@ -266,24 +272,24 @@ public partial class NetworkTime : Node
             RunAfterTickLoop();
         }
 
-        NetworkIdentityServer.Instance?.FlushQueue();
+        Context.NetworkIdentityServer?.FlushQueue();
     }
 
     /// <summary>Test hook: runs the pre-loop stage and emits BeforeTickLoop.</summary>
     internal void RunBeforeTickLoop()
     {
-        InterpolationServer.Instance?.ClearTeleports();
-        InterpolationServer.Instance?.ApplyTargetState();
+        Context.InterpolationServer?.ClearTeleports();
+        Context.InterpolationServer?.ApplyTargetState();
         BeforeTickLoop?.Invoke();
     }
 
     /// <summary>Test hook: runs the rollback loop and post-loop stage, emits AfterTickLoop.</summary>
     internal void RunAfterTickLoop()
     {
-        NetworkRollback.Instance?.Rollback();
+        Context.NetworkRollback?.Rollback();
         AfterTickLoop?.Invoke();
-        NetworkHistoryServer.Instance?.RestoreSynchronizerState(Tick);
-        InterpolationServer.Instance?.RecordNextState();
+        Context.NetworkHistoryServer?.RestoreSynchronizerState(Tick);
+        Context.InterpolationServer?.RecordNextState();
     }
 
     /// <summary>Test hook: emits the per-tick events for the current tick and advances it.</summary>

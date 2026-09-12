@@ -12,6 +12,9 @@ public partial class RollbackLivenessServer : Node
 {
     public static RollbackLivenessServer Instance { get; private set; } = null!;
 
+    /// <summary>The stack this server belongs to; resolved when it enters the tree.</summary>
+    public NetfoxContext Context { get; private set; } = NetfoxContext.Default;
+
     private static readonly NetfoxLogger Logger = NetfoxLogger.ForNetfox("RollbackLivenessServer");
 
     private readonly Dictionary<Node, Action> _respawnCallback = new(ReferenceEqualityComparer.Instance);
@@ -25,11 +28,14 @@ public partial class RollbackLivenessServer : Node
     public override void _EnterTree()
     {
         NetfoxRuntime.EnsureInitialized();
-        Instance ??= this;
+        Context = NetfoxContext.For(this);
+        Context.RollbackLivenessServer ??= this;
+        if (Context.IsDefault) Instance ??= this;
     }
 
     public override void _ExitTree()
     {
+        if (ReferenceEquals(Context.RollbackLivenessServer, this)) Context.RollbackLivenessServer = null!;
         if (Instance == this) Instance = null!;
     }
 
@@ -112,7 +118,7 @@ public partial class RollbackLivenessServer : Node
     /// <summary>Destroys subjects despawned before <paramref name="thresholdTick"/>, which defaults to the rollback history start.</summary>
     public void DestroyOldSubjects(int? thresholdTick = null)
     {
-        var threshold = thresholdTick ?? NetworkRollback.Instance?.HistoryStart ?? 0;
+        var threshold = thresholdTick ?? Context.NetworkRollback?.HistoryStart ?? 0;
 
         var old = new List<Node>();
         foreach (var subject in _respawnCallback.Keys)
@@ -127,5 +133,5 @@ public partial class RollbackLivenessServer : Node
         }
     }
 
-    private static int CurrentTick() => NetworkRollback.Instance?.Tick ?? 0;
+    private int CurrentTick() => Context.NetworkRollback?.Tick ?? 0;
 }

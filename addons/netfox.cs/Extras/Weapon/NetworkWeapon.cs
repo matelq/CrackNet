@@ -10,6 +10,14 @@ namespace Netfox.Extras;
 /// </summary>
 public partial class NetworkWeapon : Node
 {
+    /// <summary>The netfox stack this node uses; resolved when it enters the tree.</summary>
+    public NetfoxContext Context { get; private set; } = NetfoxContext.Default;
+
+    public override void _EnterTree()
+    {
+        Context = NetfoxContext.For(this);
+    }
+
     private static readonly NetfoxLogger Logger = NetfoxLogger.ForExtras("NetworkWeapon");
 
     private readonly System.Collections.Generic.Dictionary<string, Node> _projectiles = new();
@@ -21,12 +29,12 @@ public partial class NetworkWeapon : Node
     public override void _Ready()
     {
         _rng.Randomize();
-        NetworkTime.Instance.BeforeTickLoop += BeforeTickLoop;
+        Context.NetworkTime.BeforeTickLoop += BeforeTickLoop;
     }
 
     public override void _ExitTree()
     {
-        if (NetworkTime.Instance is not null) NetworkTime.Instance.BeforeTickLoop -= BeforeTickLoop;
+        if (Context.NetworkTime is not null) Context.NetworkTime.BeforeTickLoop -= BeforeTickLoop;
     }
 
     public bool CanFire() => CanFireImpl();
@@ -43,12 +51,12 @@ public partial class NetworkWeapon : Node
         var data = _projectileData[id];
 
         if (!IsMultiplayerAuthority())
-            RpcId(GetMultiplayerAuthority(), MethodName.RequestProjectile, id, NetworkTime.Instance.Tick, data);
+            RpcId(GetMultiplayerAuthority(), MethodName.RequestProjectile, id, Context.NetworkTime.Tick, data);
         else
-            Rpc(MethodName.AcceptProjectile, id, NetworkTime.Instance.Tick, data);
+            Rpc(MethodName.AcceptProjectile, id, Context.NetworkTime.Tick, data);
 
         Logger.Debug("Calling after fire hook for {0}", projectile.Name);
-        _firedTick = NetworkTime.Instance.Tick;
+        _firedTick = Context.NetworkTime.Tick;
         AfterFire(projectile);
 
         return projectile;

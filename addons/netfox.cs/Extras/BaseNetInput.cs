@@ -6,15 +6,23 @@ namespace Netfox.Extras;
 [GlobalClass]
 public partial class BaseNetInput : Node
 {
+    /// <summary>The netfox stack this node uses; resolved when it enters the tree.</summary>
+    public NetfoxContext Context { get; private set; } = NetfoxContext.Default;
+
+    public override void _EnterTree()
+    {
+        Context = NetfoxContext.For(this);
+    }
+
     public override void _Ready()
     {
-        NetworkTime.Instance.BeforeTickLoop += HandleBeforeTickLoop;
+        Context.NetworkTime.BeforeTickLoop += HandleBeforeTickLoop;
     }
 
     public override void _ExitTree()
     {
-        if (NetworkTime.Instance is not null)
-            NetworkTime.Instance.BeforeTickLoop -= HandleBeforeTickLoop;
+        if (Context.NetworkTime is not null)
+            Context.NetworkTime.BeforeTickLoop -= HandleBeforeTickLoop;
     }
 
     private void HandleBeforeTickLoop()

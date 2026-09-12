@@ -12,6 +12,9 @@ public partial class NetworkEvents : Node
 {
     public static NetworkEvents Instance { get; private set; } = null!;
 
+    /// <summary>The stack this server belongs to; resolved when it enters the tree.</summary>
+    public NetfoxContext Context { get; private set; } = NetfoxContext.Default;
+
     /// <summary>(old, new)</summary>
     public event Action<MultiplayerApi?, MultiplayerApi?>? OnMultiplayerChange;
     public event Action? OnServerStart;
@@ -52,7 +55,9 @@ public partial class NetworkEvents : Node
     public override void _EnterTree()
     {
         NetfoxRuntime.EnsureInitialized();
-        Instance ??= this;
+        Context = NetfoxContext.For(this);
+        Context.NetworkEvents ??= this;
+        if (Context.IsDefault) Instance ??= this;
     }
 
     public override void _Ready()
@@ -62,15 +67,16 @@ public partial class NetworkEvents : Node
         Enabled = NetfoxSettings.Instance.EventsEnabled;
 
         // Automatically start ticking when entering multiplayer and stop when leaving
-        OnServerStart += () => NetworkTime.Instance.Start();
-        OnServerStop += () => NetworkTime.Instance.Stop();
-        OnClientStart += _ => NetworkTime.Instance.Start();
-        OnClientStop += () => NetworkTime.Instance.Stop();
+        OnServerStart += () => Context.NetworkTime.Start();
+        OnServerStop += () => Context.NetworkTime.Stop();
+        OnClientStart += _ => Context.NetworkTime.Start();
+        OnClientStop += () => Context.NetworkTime.Stop();
     }
 
     public override void _ExitTree()
     {
         NetfoxLogger.FreeTag(_peerIdTag);
+        if (ReferenceEquals(Context.NetworkEvents, this)) Context.NetworkEvents = null!;
         if (Instance == this) Instance = null!;
     }
 

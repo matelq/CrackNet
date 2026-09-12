@@ -9,6 +9,9 @@ public partial class NetworkRollback : Node
 {
     public static NetworkRollback Instance { get; private set; } = null!;
 
+    /// <summary>The stack this server belongs to; resolved when it enters the tree.</summary>
+    public NetfoxContext Context { get; private set; } = NetfoxContext.Default;
+
     private static readonly NetfoxLogger Logger = NetfoxLogger.ForNetfox("NetworkRollback");
 
     private const string StageBefore = "B";
@@ -38,10 +41,10 @@ public partial class NetworkRollback : Node
     public int InputRedundancy => Math.Max(1, _inputRedundancy);
 
     /// <summary>First tick that can still be rolled back to.</summary>
-    public int HistoryStart => Math.Max(0, NetworkTime.Instance.Tick - HistoryLimit);
+    public int HistoryStart => Math.Max(0, Context.NetworkTime.Tick - HistoryLimit);
 
     /// <summary>The tick shown on screen after the rollback loop.</summary>
-    public int DisplayTick => Enabled ? Math.Max(0, NetworkTime.Instance.Tick - DisplayOffset) : NetworkTime.Instance.Tick;
+    public int DisplayTick => Enabled ? Math.Max(0, Context.NetworkTime.Tick - DisplayOffset) : Context.NetworkTime.Tick;
 
     /// <summary>First tick of the current rollback loop, -1 outside of it.</summary>
     public int RollbackFrom => _rollbackFrom;
@@ -124,8 +127,8 @@ public partial class NetworkRollback : Node
     /// <summary>Latest tick with input available for <paramref name="node"/>, or -1.</summary>
     public int GetLatestInputTick(Node node)
     {
-        var inputNodes = RollbackSimulationServer.Instance.GetInputsOf(node);
-        return NetworkHistoryServer.Instance.GetLatestInputFor(inputNodes, NetworkTime.Instance.Tick);
+        var inputNodes = Context.RollbackSimulationServer.GetInputsOf(node);
+        return Context.NetworkHistoryServer.GetLatestInputFor(inputNodes, Context.NetworkTime.Tick);
     }
 
     public bool HasInputForTick(Node node, int tick)
@@ -150,14 +153,16 @@ public partial class NetworkRollback : Node
     public override void _EnterTree()
     {
         NetfoxRuntime.EnsureInitialized();
-        Instance ??= this;
+        Context = NetfoxContext.For(this);
+        Context.NetworkRollback ??= this;
+        if (Context.IsDefault) Instance ??= this;
     }
 
     public override void _Ready()
     {
         NetfoxLogger.RegisterTag(_rollbackTag);
 
-        if (NetworkSynchronizationServer.Instance is { } sync)
+        if (Context.NetworkSynchronizationServer is { } sync)
         {
             sync.OnInput += HandleInput;
             sync.OnState += HandleState;
@@ -167,6 +172,7 @@ public partial class NetworkRollback : Node
     public override void _ExitTree()
     {
         NetfoxLogger.FreeTag(_rollbackTag);
+        if (ReferenceEquals(Context.NetworkRollback, this)) Context.NetworkRollback = null!;
         if (Instance == this) Instance = null!;
     }
 
@@ -175,11 +181,11 @@ public partial class NetworkRollback : Node
     {
         if (!Enabled) return;
 
-        var networkTime = NetworkTime.Instance;
-        var history = NetworkHistoryServer.Instance;
-        var liveness = RollbackLivenessServer.Instance;
-        var simulation = RollbackSimulationServer.Instance;
-        var synchronization = NetworkSynchronizationServer.Instance;
+        var networkTime = Context.NetworkTime;
+        var history = Context.NetworkHistoryServer;
+        var liveness = Context.RollbackLivenessServer;
+        var simulation = Context.RollbackSimulationServer;
+        var synchronization = Context.NetworkSynchronizationServer;
 
         // Ask all rewindables to submit their earliest inputs
         _resimFrom = networkTime.Tick;
@@ -259,8 +265,8 @@ public partial class NetworkRollback : Node
     /// <summary>Records and sends input for the tick. Called by NetworkTime after every tick.</summary>
     internal void AfterTick(int tick)
     {
-        NetworkHistoryServer.Instance.RecordRollbackInput(tick + InputDelay);
-        NetworkSynchronizationServer.Instance.SynchronizeInput(tick + InputDelay);
+        Context.NetworkHistoryServer.RecordRollbackInput(tick + InputDelay);
+        Context.NetworkSynchronizationServer.SynchronizeInput(tick + InputDelay);
     }
 
     private void HandleInput(Snapshot snapshot)
