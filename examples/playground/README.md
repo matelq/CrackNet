@@ -46,6 +46,27 @@ sends an RPC, and a rollback tick runs again for every resimulated tick - which 
 than from an accumulator, so a resimulated tick puts it exactly where the first pass did. Change it to accumulate
 `delta` instead and ride it: a correction will drag the player off.
 
+## Tiers
+
+The base tier needs nothing installed and is what CI runs. The rest light up at runtime when their dependency is
+there, and the status line at the top says which ones did.
+
+### Rapier: rolling back real physics
+
+Install [godot-rapier-physics](https://github.com/appsinacup/godot-rapier-physics) into `addons/godot-rapier3d` and
+set `physics/3d/physics_engine="Rapier3D"`, and the playground adds a `RapierPhysicsDriver3D` and a row of crates you
+can push around.
+
+This is the one thing stock Godot cannot do at all. Rollback advances the game several times inside one frame, and
+Godot's physics server only steps in `_PhysicsProcess` - there is no way to step it by hand
+([PR 76462](https://github.com/godotengine/godot/pull/76462) is not in a release). Rapier exposes manual stepping and
+whole-space snapshots, so crates get rewound and resimulated like anything else.
+
+Two things worth knowing. Rapier's single build per dimension is already cross platform deterministic - there is no
+determinism option to hunt for. And a rewind steps the whole space again for every tick of the range, so it is much
+more expensive than kinematic rollback: the tier uses one physics step per tick rather than the driver's default two,
+and a long resimulation with many bodies will make itself felt.
+
 ## Latency and loss
 
 Turn on **Project Settings > Netfox > Autoconnect** and the `NetworkSimulator` in the scene connects the editor's

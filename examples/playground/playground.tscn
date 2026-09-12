@@ -1,74 +1,83 @@
 [gd_scene format=3]
 
-[ext_resource type="Script" path="res://examples/playground/Playground.cs" id="1_mf1vj"]
-[ext_resource type="PackedScene" path="res://examples/playground/player.tscn" id="2_iqxcq"]
-[ext_resource type="Script" path="res://examples/playground/MovingPlatform.cs" id="3_7tofo"]
-[ext_resource type="Script" path="res://addons/netfox.cs/Rollback/RollbackSynchronizer.cs" id="4_nf6v4"]
-[ext_resource type="Script" path="res://examples/playground/PlaygroundCamera.cs" id="5_5edy7"]
-[ext_resource type="Script" path="res://addons/netfox.cs/Extras/NetworkSimulator.cs" id="6_v1cmp"]
+[ext_resource type="Script" path="res://examples/playground/Playground.cs" id="1_7tofo"]
+[ext_resource type="PackedScene" path="res://examples/playground/player.tscn" id="2_nf6v4"]
+[ext_resource type="Script" path="res://examples/playground/MovingPlatform.cs" id="3_5edy7"]
+[ext_resource type="Script" path="res://addons/netfox.cs/Rollback/RollbackSynchronizer.cs" id="4_v1cmp"]
+[ext_resource type="Script" path="res://examples/playground/PhysicsTier.cs" id="5_sbxnr"]
+[ext_resource type="PackedScene" path="res://examples/playground/crate.tscn" id="6_o1lki"]
+[ext_resource type="Script" path="res://examples/playground/PlaygroundCamera.cs" id="7_m2yo0"]
+[ext_resource type="Script" path="res://addons/netfox.cs/Extras/NetworkSimulator.cs" id="8_0x2dt"]
 
-[sub_resource type="BoxShape3D" id="BoxShape3D_sbxnr"]
+[sub_resource type="BoxShape3D" id="BoxShape3D_k1m7m"]
 size = Vector3(40, 1, 40)
 
-[sub_resource type="BoxMesh" id="BoxMesh_o1lki"]
+[sub_resource type="BoxMesh" id="BoxMesh_wbw74"]
 size = Vector3(40, 1, 40)
 
-[sub_resource type="BoxShape3D" id="BoxShape3D_m2yo0"]
+[sub_resource type="BoxShape3D" id="BoxShape3D_a8fih"]
 size = Vector3(4, 0.4, 4)
 
-[sub_resource type="BoxMesh" id="BoxMesh_0x2dt"]
+[sub_resource type="BoxMesh" id="BoxMesh_kx0p6"]
 size = Vector3(4, 0.4, 4)
 
-[node name="Playground" type="Node3D" unique_id=264386726 node_paths=PackedStringArray("SpawnRoot", "ProjectileRoot")]
-script = ExtResource("1_mf1vj")
-PlayerScene = ExtResource("2_iqxcq")
+[node name="Playground" type="Node3D" unique_id=223231428 node_paths=PackedStringArray("SpawnRoot", "ProjectileRoot")]
+script = ExtResource("1_7tofo")
+PlayerScene = ExtResource("2_nf6v4")
 SpawnRoot = NodePath("World/Players")
 ProjectileRoot = NodePath("World/Projectiles")
 
-[node name="World" type="Node3D" parent="." unique_id=469846316]
+[node name="World" type="Node3D" parent="." unique_id=429242688]
 
-[node name="Ground" type="StaticBody3D" parent="World" unique_id=975264343]
+[node name="Ground" type="StaticBody3D" parent="World" unique_id=1288256709]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="World/Ground" unique_id=1781084187]
-shape = SubResource("BoxShape3D_sbxnr")
+[node name="CollisionShape3D" type="CollisionShape3D" parent="World/Ground" unique_id=1770032590]
+shape = SubResource("BoxShape3D_k1m7m")
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="World/Ground" unique_id=103246169]
-mesh = SubResource("BoxMesh_o1lki")
+[node name="MeshInstance3D" type="MeshInstance3D" parent="World/Ground" unique_id=1840966598]
+mesh = SubResource("BoxMesh_wbw74")
 
-[node name="Platform" type="AnimatableBody3D" parent="World" unique_id=617339852]
+[node name="Platform" type="AnimatableBody3D" parent="World" unique_id=2018337755]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -6)
-script = ExtResource("3_7tofo")
+script = ExtResource("3_5edy7")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="World/Platform" unique_id=1929297603]
-shape = SubResource("BoxShape3D_m2yo0")
+[node name="CollisionShape3D" type="CollisionShape3D" parent="World/Platform" unique_id=1008342830]
+shape = SubResource("BoxShape3D_a8fih")
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="World/Platform" unique_id=380226037]
-mesh = SubResource("BoxMesh_0x2dt")
+[node name="MeshInstance3D" type="MeshInstance3D" parent="World/Platform" unique_id=895093989]
+mesh = SubResource("BoxMesh_kx0p6")
 
-[node name="RollbackSynchronizer" type="Node" parent="World/Platform" unique_id=1408177344 node_paths=PackedStringArray("Root")]
-script = ExtResource("4_nf6v4")
+[node name="RollbackSynchronizer" type="Node" parent="World/Platform" unique_id=1158452004 node_paths=PackedStringArray("Root")]
+script = ExtResource("4_v1cmp")
 Root = NodePath("..")
 StateProperties = PackedStringArray(":position")
 
-[node name="Players" type="Node3D" parent="World" unique_id=134898536]
+[node name="Players" type="Node3D" parent="World" unique_id=1271994802]
 
-[node name="Projectiles" type="Node3D" parent="World" unique_id=227407447]
+[node name="Projectiles" type="Node3D" parent="World" unique_id=1369722248]
 
-[node name="Camera3D" type="Camera3D" parent="." unique_id=2141157817]
+[node name="Crates" type="Node3D" parent="World" unique_id=2009674748]
+
+[node name="PhysicsTier" type="Node" parent="." unique_id=1068627213 node_paths=PackedStringArray("CrateRoot")]
+script = ExtResource("5_sbxnr")
+CrateScene = ExtResource("6_o1lki")
+CrateRoot = NodePath("../World/Crates")
+
+[node name="Camera3D" type="Camera3D" parent="." unique_id=169437317]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 8, 12)
-script = ExtResource("5_5edy7")
+script = ExtResource("7_m2yo0")
 
-[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=694426060]
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1545288119]
 transform = Transform3D(0.809017, 0.4156269, -0.4156269, 0, 0.70710677, 0.70710677, 0.58778524, -0.5720614, 0.5720614, 0, 0, 0)
 shadow_enabled = true
 
-[node name="NetworkSimulator" type="Node" parent="." unique_id=1640404508]
-script = ExtResource("6_v1cmp")
+[node name="NetworkSimulator" type="Node" parent="." unique_id=647194718]
+script = ExtResource("8_0x2dt")
 
-[node name="UI" type="CanvasLayer" parent="." unique_id=1663428531]
+[node name="UI" type="CanvasLayer" parent="." unique_id=1004346132]
 
-[node name="Status" type="Label" parent="UI" unique_id=746421394]
+[node name="Status" type="Label" parent="UI" unique_id=1587779923]
 anchors_preset = 10
 anchor_right = 1.0
 offset_left = 12.0
@@ -76,13 +85,13 @@ offset_top = 8.0
 offset_right = -12.0
 text = "Not connected"
 
-[node name="Lobby" type="Control" parent="UI" unique_id=1535290620]
+[node name="Lobby" type="Control" parent="UI" unique_id=244486425]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 
-[node name="Panel" type="PanelContainer" parent="UI/Lobby" unique_id=555255986]
+[node name="Panel" type="PanelContainer" parent="UI/Lobby" unique_id=1204030363]
 custom_minimum_size = Vector2(300, 0)
 layout_mode = 0
 anchor_left = 0.5
@@ -90,30 +99,30 @@ anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
 
-[node name="Rows" type="VBoxContainer" parent="UI/Lobby/Panel" unique_id=875182978]
+[node name="Rows" type="VBoxContainer" parent="UI/Lobby/Panel" unique_id=249612188]
 layout_mode = 2
 
-[node name="Title" type="Label" parent="UI/Lobby/Panel/Rows" unique_id=1856997470]
+[node name="Title" type="Label" parent="UI/Lobby/Panel/Rows" unique_id=344280055]
 layout_mode = 2
 text = "netfox.cs playground"
 
-[node name="Address" type="LineEdit" parent="UI/Lobby/Panel/Rows" unique_id=1888989772]
+[node name="Address" type="LineEdit" parent="UI/Lobby/Panel/Rows" unique_id=351341589]
 layout_mode = 2
 text = "127.0.0.1"
 placeholder_text = "address to join"
 
-[node name="Buttons" type="HBoxContainer" parent="UI/Lobby/Panel/Rows" unique_id=1845148539]
+[node name="Buttons" type="HBoxContainer" parent="UI/Lobby/Panel/Rows" unique_id=678683152]
 layout_mode = 2
 
-[node name="Host" type="Button" parent="UI/Lobby/Panel/Rows/Buttons" unique_id=654194894]
+[node name="Host" type="Button" parent="UI/Lobby/Panel/Rows/Buttons" unique_id=1960362258]
 layout_mode = 2
 text = "Host"
 
-[node name="Join" type="Button" parent="UI/Lobby/Panel/Rows/Buttons" unique_id=513249420]
+[node name="Join" type="Button" parent="UI/Lobby/Panel/Rows/Buttons" unique_id=906842400]
 layout_mode = 2
 text = "Join"
 
-[node name="Hint" type="Label" parent="UI/Lobby/Panel/Rows" unique_id=1028727788]
+[node name="Hint" type="Label" parent="UI/Lobby/Panel/Rows" unique_id=445227227]
 layout_mode = 2
 text = "Arrows or WASD to move, Space to jump twice, Enter to shoot.
 Ride the platform to see prediction at work."

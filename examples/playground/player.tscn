@@ -19,44 +19,44 @@ height = 1.8
 radius = 0.4
 height = 1.8
 
-[node name="Player" type="CharacterBody3D" unique_id=602733471]
+[node name="Player" type="CharacterBody3D" unique_id=387612101]
 script = ExtResource("1_1hkaj")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1786181801]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1426059535]
 shape = SubResource("CapsuleShape3D_da2md")
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=775854317]
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1027031874]
 mesh = SubResource("CapsuleMesh_labvm")
 
-[node name="Input" type="Node" parent="." unique_id=1299753041]
+[node name="Input" type="Node" parent="." unique_id=490864058]
 script = ExtResource("2_gf4vq")
 
-[node name="RollbackSynchronizer" type="Node" parent="." unique_id=482174039 node_paths=PackedStringArray("Root")]
+[node name="RollbackSynchronizer" type="Node" parent="." unique_id=1006224183 node_paths=PackedStringArray("Root")]
 script = ExtResource("3_5l22w")
 Root = NodePath("..")
 EnablePrediction = true
 StateProperties = PackedStringArray(":position", ":velocity", "RewindableStateMachine:State", ":JumpHeld", ":JumpsLeft")
 InputProperties = PackedStringArray("Input:Jump", "Input:Movement")
 
-[node name="PeerVisibilityFilter" type="Node" parent="RollbackSynchronizer" unique_id=121955175]
+[node name="PeerVisibilityFilter" type="Node" parent="RollbackSynchronizer" unique_id=794482195]
 script = ExtResource("4_732g0")
 
-[node name="RewindableStateMachine" type="Node" parent="." unique_id=199250079]
+[node name="RewindableStateMachine" type="Node" parent="." unique_id=22821120]
 script = ExtResource("5_3tmk0")
-State = &"Airborne"
+State = &""
 
-[node name="Grounded" type="Node" parent="RewindableStateMachine" unique_id=2029887302]
+[node name="Grounded" type="Node" parent="RewindableStateMachine" unique_id=859179222]
 script = ExtResource("6_val7w")
 
-[node name="Airborne" type="Node" parent="RewindableStateMachine" unique_id=1599920003]
+[node name="Airborne" type="Node" parent="RewindableStateMachine" unique_id=1414789054]
 script = ExtResource("7_a4vbl")
 
-[node name="Weapon" type="Node3D" parent="." unique_id=2129960069]
+[node name="Weapon" type="Node3D" parent="." unique_id=225526650]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, -0.6)
 script = ExtResource("8_edy5l")
 ProjectileScene = ExtResource("9_iq4s0")
 
-[node name="TickInterpolator" type="Node" parent="." unique_id=443148536 node_paths=PackedStringArray("Root")]
+[node name="TickInterpolator" type="Node" parent="." unique_id=428990280 node_paths=PackedStringArray("Root")]
 script = ExtResource("10_244ed")
 Root = NodePath("..")
 Properties = PackedStringArray(":position")

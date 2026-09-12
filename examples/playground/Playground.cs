@@ -18,6 +18,7 @@ public partial class Playground : Node3D
     [Export] public Node3D ProjectileRoot { get; set; } = null!;
     [Export] public int Port { get; set; } = 9999;
 
+    private PhysicsTier _physics = null!;
     private LineEdit _address = null!;
     private Control _lobby = null!;
     private Label _status = null!;
@@ -25,6 +26,7 @@ public partial class Playground : Node3D
 
     public override void _Ready()
     {
+        _physics = GetNode<PhysicsTier>("PhysicsTier");
         _lobby = GetNode<Control>("UI/Lobby");
         _address = GetNode<LineEdit>("UI/Lobby/Panel/Rows/Address");
         _status = GetNode<Label>("UI/Status");
@@ -62,8 +64,9 @@ public partial class Playground : Node3D
         if (!NetworkTime.Instance.IsInitialSyncDone()) return;
 
         var rollback = NetworkRollback.Instance;
+        var physics = _physics.Active ? "rapier" : $"kinematic ({_physics.Reason})";
         _status.Text = $"peer #{Multiplayer.GetUniqueId()}  tick {NetworkTime.Instance.Tick}  " +
-                       $"players {_players.Count}  rollback {rollback.RollbackFrom}>{rollback.Tick}";
+                       $"players {_players.Count}  rollback {rollback.RollbackFrom}>{rollback.Tick}  physics {physics}";
     }
 
     private void Host()

@@ -80,11 +80,13 @@ public partial class PlaygroundSmoke : Node
                  // The platform is simulated from the tick, so it is somewhere other than where it started
                  && Mathf.Abs(platform.Position.X) > 0.1f;
 
+        var crates = _playground.GetNode("World/Crates").GetChildren().OfType<Node3D>().ToList();
+        var physics = _playground.GetNode<PhysicsTier>("PhysicsTier");
         var names = string.Join(",", players.Select(player => player.Name));
         var head = $"PLAYGROUND role={(_isHost ? "host" : "client")} ok={ok} peer=#{Multiplayer.GetUniqueId()} " +
                    $"tick={NetworkTime.Instance.Tick} synced={NetworkTime.Instance.IsInitialSyncDone()}";
         var tail = FormattableString.Invariant(
-            $"players=[{names}] peak={_maxPlayers} state={self?.StateMachine.State} shots={string.Join("/", players.Select(p => p.Weapon.Shots))} platform_x={platform.Position.X:F2} own_pos={self?.Position} jumps={self?.JumpsLeft}");
+            $"players=[{names}] peak={_maxPlayers} physics={(physics.Active ? "rapier" : physics.Reason)} crates={crates.Count} state={self?.StateMachine.State} shots={string.Join("/", players.Select(p => p.Weapon.Shots))} platform_x={platform.Position.X:F2} own_pos={self?.Position} jumps={self?.JumpsLeft}");
         GD.Print($"{head} {tail}");
 
         GetTree().Quit(ok ? 0 : 1);

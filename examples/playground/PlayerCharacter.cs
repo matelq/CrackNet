@@ -56,8 +56,14 @@ public partial class PlayerCharacter : CharacterBody3D
         JumpsLeft = MaxJumps;
 
         // Set here rather than in the scene: the machine collects its states as children are added, which happens
-        // after a scene sets the node's own properties, so a State written into the .tscn would find nothing
-        StateMachine.State = "Airborne";
+        // after a scene sets the node's own properties, so a State written into the .tscn would find nothing.
+        // Deferred, because whether the machine has collected its children yet depends on notification order, and
+        // getting it wrong is quiet: the machine warns and stays in no state at all, so nothing ever simulates.
+        Callable.From(() =>
+        {
+            StateMachine.UpdateStates();
+            StateMachine.State = "Airborne";
+        }).CallDeferred();
     }
 
     /// <summary>
