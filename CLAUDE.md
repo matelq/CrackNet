@@ -1,0 +1,38 @@
+# netfox-net
+
+Native C# port of netfox (GDScript rollback netcode for Godot). Reference GDScript lives in `netfox/` (read-only, `.gdignore`,
+excluded from git via `.git/info/exclude`; clone foxssake/netfox there if missing). Roadmap: `TODO.md`.
+Rule: 1:1 semantics and public API with the original, idiomatic C# inside. When in doubt, read the matching `.gd` file first.
+
+## Layout
+
+- `Netfox.Core/` — engine-agnostic core, no Godot reference. Generic over `TSubject, TProperty, TValue`; Godot aliases in `addons/netfox.cs/Internal/GlobalUsings.cs`.
+- `addons/netfox.cs/` — the addon (namespace `Netfox`, extras in `Netfox.Extras`). Autoloads expose `Instance`; order is fixed in `Editor/NetfoxPlugin.cs` and `project.godot` (dependencies first).
+- `test/` — Godot-side tests (`TestSuite` + `[Test]`), `Netfox.Core.Tests/` — xUnit.
+- `examples/e2e/` — two-process ENet check; `examples/steam/` — GodotSteam bootstrap under `#if GODOTSTEAM`.
+- Repo root is the Godot project. Godot 4.7 mono binary: `.tools/godot/...console.exe` (gitignored).
+
+## Commands
+
+```
+dotnet test Netfox.slnx                                                   # core tests
+dotnet build Netfox.csproj                                                # addon + tests
+<godot> --headless --path . res://test/TestRunner.tscn                    # Godot tests, exit 0 = ok
+<godot> --headless --path . res://examples/e2e/E2E.tscn -- --host --seconds=12
+<godot> --headless --path . res://examples/e2e/E2E.tscn -- --join --seconds=6
+```
+
+## Conventions
+
+- Signals → C# `event`. Events are NOT auto-disconnected when a node is freed: store the delegate and unsubscribe in `_ExitTree`.
+- Duck-typing (`has_method("_rollback_tick")`) → interfaces in `Rollback/RollbackInterfaces.cs`.
+- Command ids are explicit (`CommandIds`), never auto-incremented.
+- Read settings via `Internal/Settings.cs`; log via `NetfoxLogger` with `{0}` placeholders.
+- `Variant` has no value equality: use `VariantComparer` / `Snapshot.ValueComparer`. `NodePath` is a valid dictionary key.
+- Every ported class states its source in the summary (`Port of servers/x.gd`). Keep that.
+- Not ported on purpose: noray/nohub/trimsock, `.off` driver file toggles. Do not add lag compensation, typed struct snapshots or a Facepunch peer without asking; they are listed as TODO in the plan.
+
+## Environment quirks
+
+- Create C# files with the Write tool; the Bash heredoc wrapper here fails intermittently. Use Bash for builds and sed.
+- `grep` output gets summarized after ~200 lines; read long files with `cat`/`sed`. `cd` in Bash persists.

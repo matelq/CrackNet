@@ -1,0 +1,41 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+
+config_version=5
+
+[application]
+
+config/name="netfox.cs"
+config/description="Native C# port of netfox: rollback netcode for Godot"
+config/features=PackedStringArray("4.7", "C#", "Forward Plus")
+
+[autoload]
+
+NetworkCommandServer="*res://addons/netfox.cs/Servers/NetworkCommandServer.cs"
+NetworkTime="*res://addons/netfox.cs/NetworkTime.cs"
+NetworkTimeSynchronizer="*res://addons/netfox.cs/NetworkTimeSynchronizer.cs"
+NetworkEvents="*res://addons/netfox.cs/NetworkEvents.cs"
+NetworkIdentityServer="*res://addons/netfox.cs/Servers/NetworkIdentityServer.cs"
+RollbackLivenessServer="*res://addons/netfox.cs/Servers/RollbackLivenessServer.cs"
+NetworkHistoryServer="*res://addons/netfox.cs/Servers/NetworkHistoryServer.cs"
+RollbackSimulationServer="*res://addons/netfox.cs/Servers/RollbackSimulationServer.cs"
+NetworkSynchronizationServer="*res://addons/netfox.cs/Servers/NetworkSynchronizationServer.cs"
+NetworkRollback="*res://addons/netfox.cs/Rollback/NetworkRollback.cs"
+NetworkPerformance="*res://addons/netfox.cs/NetworkPerformance.cs"
+InterpolationServer="*res://addons/netfox.cs/Servers/InterpolationServer.cs"
+WindowTiler="*res://addons/netfox.cs/Extras/WindowTiler.cs"
+NetworkSimulator="*res://addons/netfox.cs/Extras/NetworkSimulator.cs"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/netfox.cs/plugin.cfg")
+
+[dotnet]
+
+project/assembly_name="Netfox"
+
+[netfox]
+
+general/clear_settings=false
+events/enabled=true

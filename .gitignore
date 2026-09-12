@@ -1,0 +1,39 @@
+# Godot
+.godot/
+/android/
+*.tmp
+export_presets.cfg.bak
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.nupkg
+*.snupkg
+TestResults/
+.vs/
+*.DotSettings.user
+
+# IDEs
+.idea/
+*.swp
+.vscode/*
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/tasks.json
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Local tooling (Godot binary, scratch)
+.tools/
+/tmp/
+
+# Claude Code local instructions
+CLAUDE.local.md
+.claude/settings.local.json
+
+# Godot csproj upgrade backups
+*.csproj.old

@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="Netfox.Core.Tests/Netfox.Core.Tests.csproj" />
+  <Project Path="Netfox.Core/Netfox.Core.csproj" />
+  <Project Path="Netfox.csproj">
+    <BuildType Project="Debug" />
+  </Project>
+</Solution>

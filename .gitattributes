@@ -1,0 +1,45 @@
+# Normalize line endings to LF in the repository; checkout as LF too, Godot and Roslyn are fine with it
+* text=auto eol=lf
+
+# Source
+*.cs text diff=csharp
+*.csproj text
+*.slnx text
+*.props text
+*.targets text
+*.json text
+*.md text
+*.yml text
+*.yaml text
+
+# Godot text formats
+*.godot text
+*.tscn text
+*.tres text
+*.cfg text
+*.import text
+*.gd text
+*.gdshader text
+*.svg text
+
+# Binaries
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ogg binary
+*.wav binary
+*.mp3 binary
+*.ttf binary
+*.otf binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.exe binary
+*.zip binary
+*.uid binary
+
+# Keep generated Godot files readable in diffs but do not count them as project language
+*.import linguist-generated
+*.uid linguist-generated
