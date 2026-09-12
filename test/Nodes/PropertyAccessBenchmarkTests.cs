@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Godot;
+using Netfox.Internal;
 
 namespace Netfox.Tests;
 
@@ -47,23 +48,32 @@ public partial class PropertyAccessBenchmarkTests : TestSuite
             node.Position = value;
         });
 
-        // What a shared cache costs: the call sites that only have a NodePath have to look the StringName up
-        var cache = new Dictionary<NodePath, StringName> { [path] = name };
-        var cached = Measure(() =>
+        // What netfox actually uses: PropertyEntry resolves the name once, PropertyAccess keeps a shared cache
+        var entry = PropertyEntry.Parse(node, ":position");
+        var throughEntry = Measure(() =>
         {
-            var resolved = cache[path];
-            var value = node.Get(resolved);
-            node.Set(resolved, value);
+            var value = entry.GetValue();
+            entry.SetValue(value);
+        });
+
+        var throughCache = Measure(() =>
+        {
+            var value = node.GetValue(path);
+            node.SetValue(path, value);
         });
 
         var line = FormattableString.Invariant(
             $"PROPERTY ACCESS over {Iterations} get+set pairs: GetIndexed/SetIndexed {indexed:F1}ms, Get/Set {direct:F1}ms");
-        var line2 = FormattableString.Invariant($"cached lookup + Get/Set {cached:F1}ms, C# property {typed:F1}ms");
+        var line2 = FormattableString.Invariant(
+            $"PropertyEntry {throughEntry:F1}ms, PropertyAccess cache {throughCache:F1}ms, C# property {typed:F1}ms");
         GD.Print($"{line}, {line2}");
 
-        // What PropertyAccess does: resolve the name once, keep it in a dictionary, then Get and Set through it
-        Expect.True(cached < indexed * 0.6,
-            $"the cached name path ({cached:F1}ms) should stay well under the indexed one ({indexed:F1}ms)");
+        // Guards the optimization itself: both netfox paths have to stay clear of the indexed one. The margin is
+        // generous because this runs on shared CI hardware, where the ratio is nearer 0.6 than the 0.3 seen locally.
+        Expect.True(throughEntry < indexed * 0.8,
+            $"PropertyEntry ({throughEntry:F1}ms) should stay clear of GetIndexed/SetIndexed ({indexed:F1}ms)");
+        Expect.True(throughCache < indexed * 0.8,
+            $"the PropertyAccess cache ({throughCache:F1}ms) should stay clear of GetIndexed/SetIndexed ({indexed:F1}ms)");
     }
 
     private static double Measure(Action body)
