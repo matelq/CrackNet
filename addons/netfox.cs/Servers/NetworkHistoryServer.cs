@@ -19,8 +19,8 @@ public partial class NetworkHistoryServer : Node
     private readonly PropertyPool _rbStateProperties = new();
     private readonly PropertyPool _syncStateProperties = new();
 
-    private readonly int _rbHistorySize = Settings.GetInt("netfox/rollback/history_limit", 64);
-    private readonly int _syncHistorySize = Settings.GetInt("netfox/state_synchronizer/history_limit", 64);
+    private readonly int _rbHistorySize = NetfoxSettings.Instance.RollbackHistoryLimit;
+    private readonly int _syncHistorySize = NetfoxSettings.Instance.StateSyncHistoryLimit;
 
     private readonly HashSet<Node> _ignoredSubjects = new(ReferenceEqualityComparer.Instance);
 

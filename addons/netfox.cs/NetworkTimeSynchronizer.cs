@@ -39,10 +39,10 @@ public partial class NetworkTimeSynchronizer : Node
         _commandServer = commandServer;
         _sync = new ClockSynchronizer
         {
-            SyncInterval = Settings.GetDouble("netfox/time/sync_interval", 0.25),
-            SyncSamples = Settings.GetInt("netfox/time/sync_samples", 8),
-            AdjustSteps = Settings.GetInt("netfox/time/sync_adjust_steps", 8),
-            PanicThreshold = Settings.GetDouble("netfox/time/recalibrate_threshold", 2.0),
+            SyncInterval = NetfoxSettings.Instance.SyncInterval,
+            SyncSamples = NetfoxSettings.Instance.SyncSamples,
+            AdjustSteps = NetfoxSettings.Instance.SyncAdjustSteps,
+            PanicThreshold = NetfoxSettings.Instance.SyncPanicThreshold,
         };
         _sync.OnPanic += offset => OnPanic?.Invoke(offset);
     }

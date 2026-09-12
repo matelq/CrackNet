@@ -30,19 +30,19 @@ public partial class NetworkSynchronizationServer : Node
 
     private readonly Dictionary<Node, PeerVisibilityFilter> _visibilityFilters = new(ReferenceEqualityComparer.Instance);
 
-    private readonly bool _rbEnableDiffs = Settings.GetBool("netfox/rollback/enable_diff_states", true);
-    private readonly IntervalScheduler _rbFullScheduler = new(Settings.GetInt("netfox/rollback/full_state_interval", 24));
-    private readonly int _inputRedundancy = Math.Max(1, Settings.GetInt("netfox/rollback/input_redundancy", 3));
-    private readonly int _historyLimit = Settings.GetInt("netfox/rollback/history_limit", 64);
+    private readonly bool _rbEnableDiffs = NetfoxSettings.Instance.RollbackEnableDiffStates;
+    private readonly IntervalScheduler _rbFullScheduler = new(NetfoxSettings.Instance.RollbackFullStateInterval);
+    private readonly int _inputRedundancy = Math.Max(1, NetfoxSettings.Instance.InputRedundancy);
+    private readonly int _historyLimit = NetfoxSettings.Instance.RollbackHistoryLimit;
 
     private readonly Dictionary<int, HistoryBuffer<Snapshot>> _rbSentStateHistory = new();
 
     private Snapshot _lastSyncStateSent = new(0);
-    private readonly bool _syncEnableDiffs = Settings.GetBool("netfox/state_synchronizer/enable_diff_states", true);
-    private readonly IntervalScheduler _syncFullScheduler = new(Settings.GetInt("netfox/state_synchronizer/full_state_interval", 24));
+    private readonly bool _syncEnableDiffs = NetfoxSettings.Instance.StateSyncEnableDiffStates;
+    private readonly IntervalScheduler _syncFullScheduler = new(NetfoxSettings.Instance.StateSyncFullStateInterval);
 
     // Very conservative packet size limit, source: https://stackoverflow.com/a/35697810
-    private readonly int _maxPacketSize = Settings.GetInt("netfox/general/max_sync_packet_size", 508);
+    private readonly int _maxPacketSize = NetfoxSettings.Instance.MaxSyncPacketSize;
 
     private readonly NetworkSchema _schemas = new(NetworkSchemas.Variant());
 
@@ -57,7 +57,7 @@ public partial class NetworkSynchronizationServer : Node
     private NetworkCommandServer.Command _cmdDiffSync = null!;
 
     /// <summary>When off, inputs only go to the authorities of the nodes they control. From netfox/rollback/enable_input_broadcast.</summary>
-    public bool EnableInputBroadcast { get; set; } = Settings.GetBool("netfox/rollback/enable_input_broadcast", false);
+    public bool EnableInputBroadcast { get; set; } = NetfoxSettings.Instance.EnableInputBroadcast;
 
     /// <summary>Emitted when new input for a new subject was received.</summary>
     internal event Action<Snapshot>? OnInput;

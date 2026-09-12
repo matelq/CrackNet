@@ -11,9 +11,9 @@ public partial class WindowTiler : Node
 {
     private static readonly NetfoxLogger Logger = NetfoxLogger.ForExtras("WindowTiler");
 
-    private readonly bool _isEnabled = Settings.GetBool("netfox/extras/auto_tile_windows", false);
-    private readonly bool _isBorderless = Settings.GetBool("netfox/extras/borderless", false);
-    private readonly int _tileScreen = Settings.GetInt("netfox/extras/screen", 0);
+    private readonly bool _isEnabled = NetfoxSettings.Instance.AutoTileWindows;
+    private readonly bool _isBorderless = NetfoxSettings.Instance.Borderless;
+    private readonly int _tileScreen = NetfoxSettings.Instance.TileScreen;
 
     // Hash the game name so the lock file names are always valid
     private readonly string _prefix = $"netfox-window-tiler-{Settings.GetString("application/config/name", "godot").GetHashCode():x}";

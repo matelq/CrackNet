@@ -18,21 +18,21 @@ public partial class NetworkRollback : Node
     private const string StageAfter = "A";
 
     /// <summary>Whether the rollback loop runs at all. From netfox/rollback/enabled.</summary>
-    public bool Enabled { get; set; } = Settings.GetBool("netfox/rollback/enabled", true);
+    public bool Enabled { get; set; } = NetfoxSettings.Instance.RollbackEnabled;
 
     /// <summary>Whether to send only changed properties. From netfox/rollback/enable_diff_states.</summary>
-    public bool EnableDiffStates { get; set; } = Settings.GetBool("netfox/rollback/enable_diff_states", true);
+    public bool EnableDiffStates { get; set; } = NetfoxSettings.Instance.RollbackEnableDiffStates;
 
     /// <summary>How many ticks back history is kept and rollback can go. From netfox/rollback/history_limit.</summary>
-    public int HistoryLimit { get; } = Settings.GetInt("netfox/rollback/history_limit", 64);
+    public int HistoryLimit { get; } = NetfoxSettings.Instance.RollbackHistoryLimit;
 
     /// <summary>Show this many ticks in the past to hide corrections. From netfox/rollback/display_offset.</summary>
-    public int DisplayOffset { get; } = Settings.GetInt("netfox/rollback/display_offset", 0);
+    public int DisplayOffset { get; } = NetfoxSettings.Instance.DisplayOffset;
 
     /// <summary>Record inputs this many ticks into the future. From netfox/rollback/input_delay.</summary>
-    public int InputDelay { get; } = Settings.GetInt("netfox/rollback/input_delay", 0);
+    public int InputDelay { get; } = NetfoxSettings.Instance.InputDelay;
 
-    private readonly int _inputRedundancy = Settings.GetInt("netfox/rollback/input_redundancy", 3);
+    private readonly int _inputRedundancy = NetfoxSettings.Instance.InputRedundancy;
 
     /// <summary>How many past inputs are resent with every input packet, at least 1.</summary>
     public int InputRedundancy => Math.Max(1, _inputRedundancy);

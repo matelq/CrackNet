@@ -18,9 +18,9 @@ internal static class NetfoxRuntime
         NetfoxLogger.PushWarning = s => GD.PushWarning(s);
         NetfoxLogger.PushError = s => GD.PushError(s);
 
-        NetfoxLogger.Level = (LogLevel)Settings.GetInt("netfox/logging/log_level", (int)NetfoxLogger.DefaultLogLevel);
-        NetfoxLogger.ModuleLevels["netfox"] = (LogLevel)Settings.GetInt("netfox/logging/netfox_log_level", (int)NetfoxLogger.DefaultLogLevel);
-        NetfoxLogger.ModuleLevels["netfox.extras"] = (LogLevel)Settings.GetInt("netfox/logging/netfox_extras_log_level", (int)NetfoxLogger.DefaultLogLevel);
+        NetfoxLogger.Level = NetfoxSettings.Instance.LogLevel;
+        NetfoxLogger.ModuleLevels["netfox"] = NetfoxSettings.Instance.NetfoxLogLevel;
+        NetfoxLogger.ModuleLevels["netfox.extras"] = NetfoxSettings.Instance.NetfoxExtrasLogLevel;
 
         Snapshot.ValueComparer = VariantComparer.Instance;
     }

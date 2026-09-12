@@ -59,7 +59,7 @@ public partial class NetworkEvents : Node
     {
         NetfoxLogger.RegisterTag(_peerIdTag, -99);
 
-        Enabled = Settings.GetBool("netfox/events/enabled", true);
+        Enabled = NetfoxSettings.Instance.EventsEnabled;
 
         // Automatically start ticking when entering multiplayer and stop when leaving
         OnServerStart += () => NetworkTime.Instance.Start();

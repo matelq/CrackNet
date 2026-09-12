@@ -16,15 +16,15 @@ public partial class NetworkTime : Node
 
     private readonly TickClock _clock = new()
     {
-        Tickrate = Settings.GetInt("netfox/time/tickrate", 30),
-        SyncToPhysics = Settings.GetBool("netfox/time/sync_to_physics", false),
-        MaxTicksPerFrame = Settings.GetInt("netfox/time/max_ticks_per_frame", 8),
-        StallThreshold = Settings.GetDouble("netfox/time/stall_threshold", 1.0),
-        ClockStretchMax = Settings.GetDouble("netfox/time/max_time_stretch", 1.25),
+        Tickrate = NetfoxSettings.Instance.Tickrate,
+        SyncToPhysics = NetfoxSettings.Instance.SyncToPhysics,
+        MaxTicksPerFrame = NetfoxSettings.Instance.MaxTicksPerFrame,
+        StallThreshold = NetfoxSettings.Instance.StallThreshold,
+        ClockStretchMax = NetfoxSettings.Instance.MaxTimeStretch,
     };
 
-    private readonly double _recalibrateThreshold = Settings.GetDouble("netfox/time/recalibrate_threshold", 8.0);
-    private readonly bool _suppressOfflinePeerWarning = Settings.GetBool("netfox/time/suppress_offline_peer_warning", false);
+    private readonly double _recalibrateThreshold = NetfoxSettings.Instance.RecalibrateThreshold;
+    private readonly bool _suppressOfflinePeerWarning = NetfoxSettings.Instance.SuppressOfflinePeerWarning;
 
     private State _state = State.Inactive;
     private bool _initialSyncDone;

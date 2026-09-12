@@ -22,7 +22,7 @@ public partial class NetworkTickrateHandshake : Node
     private static readonly NetfoxLogger Logger = NetfoxLogger.ForNetfox("NetworkTickrateHandshake");
 
     public TickrateMismatchAction MismatchAction { get; set; }
-        = (TickrateMismatchAction)Settings.GetInt("netfox/time/tickrate_mismatch_action", (int)TickrateMismatchAction.Warn);
+        = NetfoxSettings.Instance.TickrateMismatchAction;
 
     /// <summary>(peer, tickrate)</summary>
     public event Action<int, int>? OnTickrateMismatch;

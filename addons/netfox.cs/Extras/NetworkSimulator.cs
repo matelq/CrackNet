@@ -149,12 +149,12 @@ public partial class NetworkSimulator : Node
 
     private void LoadProjectSettings()
     {
-        Enabled = Settings.GetBool("netfox/autoconnect/enabled", false);
-        Hostname = Settings.GetString("netfox/autoconnect/host", "127.0.0.1");
-        ServerPort = Settings.GetInt("netfox/autoconnect/port", 9999);
-        UseCompression = Settings.GetBool("netfox/autoconnect/use_compression", false);
-        LatencyMs = Settings.GetInt("netfox/autoconnect/simulated_latency_ms", 0);
-        PacketLossPercent = Settings.GetDouble("netfox/autoconnect/simulated_packet_loss_chance", 0.0);
+        Enabled = NetfoxSettings.Instance.AutoconnectEnabled;
+        Hostname = NetfoxSettings.Instance.AutoconnectHost;
+        ServerPort = NetfoxSettings.Instance.AutoconnectPort;
+        UseCompression = NetfoxSettings.Instance.UseCompression;
+        LatencyMs = NetfoxSettings.Instance.SimulatedLatencyMs;
+        PacketLossPercent = NetfoxSettings.Instance.SimulatedPacketLossChance;
     }
 
     private void ReadClientToServerPackets(ulong currentTime)

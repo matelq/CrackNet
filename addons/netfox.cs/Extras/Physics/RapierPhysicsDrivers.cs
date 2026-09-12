@@ -99,7 +99,7 @@ internal static class RapierStateManager
     {
         var manager = (Node)ClassDB.Instantiate(className).AsGodotObject();
         manager.Set("root_node", root);
-        manager.Call("set_max_cache_length", Settings.GetInt("netfox/rollback/history_limit", 64));
+        manager.Call("set_max_cache_length", NetfoxSettings.Instance.RollbackHistoryLimit);
         manager.Call("set_rolling_cache", true);
         return manager;
     }

@@ -39,7 +39,7 @@ public partial class NetworkCommandServer : Node
     private readonly RpcCommandTransport _rpcTransport = new();
     private readonly PacketCommandTransport _packetTransport = new(PacketPrefix);
     private readonly Dictionary<int, Command> _commands = new();
-    private readonly bool _useRaw = Settings.GetBool("netfox/general/use_raw_commands", false);
+    private readonly bool _useRaw = NetfoxSettings.Instance.UseRawCommands;
     private int _nextIdx = CommandIds.FirstUserCommand;
 
     public override void _EnterTree()

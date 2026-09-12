@@ -53,7 +53,7 @@ public partial class NetworkIdentityServer : Node
         else
         {
             Multiplayer.PeerDisconnected += id => ErasePeer((int)id);
-            if (!Settings.GetBool("netfox/general/supress_identity_peer_disconnected_warning", false))
+            if (!NetfoxSettings.Instance.SuppressIdentityPeerDisconnectedWarning)
                 Logger.Warning(
                     "Using `multiplayer.peer_disconnected` to detect leaving peers. " +
                     "If the `multiplayer` instance changes, this will no longer work. " +
