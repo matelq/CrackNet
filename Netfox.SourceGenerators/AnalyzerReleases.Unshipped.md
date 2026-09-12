@@ -4,5 +4,5 @@
 ### New Rules
 
 Rule ID | Category | Severity | Notes
---------|----------|----------|------
-NFX001  | Netfox   | Error    | A type declaring netfox properties has to be partial
+--------|----------|----------|--------------------
+NFX001 | Netfox | Error | A type declaring netfox properties has to be partial
