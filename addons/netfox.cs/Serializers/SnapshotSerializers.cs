@@ -221,33 +221,47 @@ public sealed class SparseSnapshotSerializer : BaseSnapshotSerializer
     }
 }
 
-/// <summary>Packs several dense snapshots into one packet, for input redundancy. Port of serializers/redundant-snapshot-serializer.gd.</summary>
+/// <summary>
+/// Packs several snapshots into one packet, for input redundancy. Port of serializers/redundant-snapshot-serializer.gd.
+/// <para>
+/// The first snapshot goes in full and the rest only as how they differ from it, which is what upstream's TODO(#560)
+/// asks for: consecutive ticks of input are mostly identical, so a redundant copy is usually a few bytes of header.
+/// Every subject the older snapshot has still gets a frame, empty when nothing changed, so the reader can tell an
+/// unchanged subject from one that was not in that tick at all.
+/// </para>
+/// </summary>
 public sealed class RedundantSnapshotSerializer : BaseSnapshotSerializer
 {
     private readonly DenseSnapshotSerializer _dense;
+    private readonly SparseSnapshotSerializer _sparse;
 
     public RedundantSnapshotSerializer(NetworkSchema schemas, NetworkIdentityServer? identityServer = null)
         : base("RedundantSnapshotSerializer", schemas, identityServer)
     {
         _dense = new DenseSnapshotSerializer(schemas, identityServer);
+        _sparse = new SparseSnapshotSerializer(schemas, identityServer);
     }
 
     public byte[] WriteFor(int peer, IReadOnlyList<Snapshot> snapshots, PropertyPool properties)
     {
         _dense.MaxPacketSize = MaxPacketSize;
+        _sparse.MaxPacketSize = MaxPacketSize;
         var buffer = new ByteWriter();
 
-        // TODO(#560): Encode the first snapshot as-is and the rest as diffs
-        foreach (var snapshot in snapshots)
+        for (var i = 0; i < snapshots.Count; i++)
         {
-            var densePackets = _dense.WriteFor(peer, snapshot, properties);
-            if (densePackets.Count == 0) continue;
-            if (densePackets.Count > 1)
+            var packets = i == 0
+                ? _dense.WriteFor(peer, snapshots[0], properties)
+                : _sparse.WriteFor(peer, Snapshot.MakePatch(snapshots[0], snapshots[i]), properties);
+
+            if (i == 0 && packets.Count == 0) break; // Nothing to be redundant about
+            if (packets.Count > 1)
                 Logger.Warning("Redundant snapshot does not fit into a single packet! Max packet size: {0} bytes", MaxPacketSize);
 
-            var densePacket = densePackets[0];
-            VarUint.Encode(densePacket.Length, buffer);
-            buffer.PutData(densePacket);
+            // A diff with no subjects at all still has to carry its tick, or the reader loses that tick entirely
+            var packet = packets.Count > 0 ? packets[0] : TickOnlyPacket(snapshots[i].Tick);
+            VarUint.Encode(packet.Length, buffer);
+            buffer.PutData(packet);
         }
 
         if (buffer.Size > MaxPacketSize)
@@ -259,12 +273,37 @@ public sealed class RedundantSnapshotSerializer : BaseSnapshotSerializer
     public List<Snapshot> ReadFrom(int peer, PropertyPool properties, ByteReader buffer, bool isAuth = true)
     {
         var snapshots = new List<Snapshot>();
+        Snapshot? newest = null;
+
         while (buffer.AvailableBytes > 0)
         {
             var snapshotSize = VarUint.DecodeInt(buffer);
             var snapshotBuffer = new ByteReader(buffer.GetPartialData(snapshotSize));
-            snapshots.Add(_dense.ReadFrom(peer, properties, snapshotBuffer, isAuth));
+
+            if (newest is null)
+            {
+                newest = _dense.ReadFrom(peer, properties, snapshotBuffer, isAuth);
+                snapshots.Add(newest);
+                continue;
+            }
+
+            // Whatever the diff does not mention, this tick shares with the newest one
+            var older = _sparse.ReadFrom(peer, properties, snapshotBuffer, isAuth);
+            foreach (var subject in older.AuthSubjects)
+                foreach (var (property, value) in newest.GetSubjectData(subject))
+                    if (!older.HasProperty(subject, property))
+                        older.SetProperty(subject, property, value);
+
+            snapshots.Add(older);
         }
+
         return snapshots;
+    }
+
+    private static byte[] TickOnlyPacket(int tick)
+    {
+        var writer = new ByteWriter();
+        writer.PutU32((uint)tick);
+        return writer.ToArray();
     }
 }

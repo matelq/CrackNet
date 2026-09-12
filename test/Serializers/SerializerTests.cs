@@ -148,6 +148,65 @@ public partial class SnapshotSerializerTests : TestSuite
         Expect.Equal(expected, reader.ReadFrom(1, readerProps, new ByteReader(packets[0])));
     }
 
+    /// <summary>
+    /// #14: the older copies say only how they differ from the newest one. Held input does not change from tick to
+    /// tick, which is the case the redundancy exists for, so those copies should cost almost nothing.
+    /// </summary>
+    [Test]
+    public async Task Redundant_ShouldEncodeUnchangedCopiesAsAlmostNothing()
+    {
+        var serializer = new RedundantSnapshotSerializer(new NetworkSchema(NetworkSchemas.Variant()));
+        var subject = await Subject();
+        var props = Props(subject);
+
+        // Once a peer has acked an id, frames refer to the subject by that id rather than by its whole path, which is
+        // what makes the header of an unchanged copy small
+        // Reading back in the same process means the id has to be the one this server resolves locally
+        var identifier = NetworkIdentityServer.Instance.GetIdentifierOf(subject)!;
+        identifier.SetIdFor(1, identifier.LocalId);
+
+        Snapshot Held(int tick) => Snapshot.Of(tick, [
+            (subject, Position, Vector3.Zero),
+            (subject, Quaternion, Godot.Quaternion.FromEuler(Vector3.One)),
+            (subject, Scale, Vector3.One),
+        ], [subject]);
+
+        var one = serializer.WriteFor(1, [Held(9)], props);
+        var three = serializer.WriteFor(1, [Held(9), Held(8), Held(7)], props);
+
+        // Two more ticks of the same input, for a header each rather than a copy each
+        Expect.True(three.Length < one.Length * 1.5,
+            $"three identical snapshots took {three.Length} bytes against {one.Length} for one");
+        GD.Print($"      Redundant held input: 1 snapshot {one.Length} bytes, 3 snapshots {three.Length} bytes");
+
+        // And they still come back whole, ticks and all
+        var read = serializer.ReadFrom(1, props, new ByteReader(three));
+        Expect.Equal(3, read.Count);
+        Expect.SequenceEqual([9, 8, 7], read.Select(snapshot => snapshot.Tick));
+        Expect.Equal(Held(8), read[1]);
+        Expect.Equal(Held(7), read[2]);
+    }
+
+    /// <summary>A subject that only appears in the newest tick must not be attributed to the older ones.</summary>
+    [Test]
+    public async Task Redundant_ShouldNotBackdateASubjectThatOnlyTheNewestTickHas()
+    {
+        var serializer = new RedundantSnapshotSerializer(new NetworkSchema(NetworkSchemas.Variant()));
+        var standing = await Subject();
+        var spawned = await Subject();
+        var props = PropertyPool.Of([(standing, Position), (spawned, Position)]);
+
+        var newest = Snapshot.Of(9, [(standing, Position, Vector3.One), (spawned, Position, Vector3.Up)], [standing, spawned]);
+        var older = Snapshot.Of(8, [(standing, Position, Vector3.One)], [standing]);
+
+        var read = serializer.ReadFrom(1, props, new ByteReader(serializer.WriteFor(1, [newest, older], props)));
+
+        Expect.Equal(2, read.Count);
+        Expect.Equal(newest, read[0]);
+        Expect.Equal(older, read[1]);
+        Expect.False(read[1].HasProperty(spawned, Position), "the older tick never had this subject");
+    }
+
     [Test]
     public async Task Redundant_ShouldDeserializeToSame()
     {
