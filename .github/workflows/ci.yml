@@ -64,6 +64,16 @@ jobs:
           echo "--- host"; cat host.log
           echo "--- client"; cat client.log
           grep -q "ok=True" host.log && grep -q "ok=True" client.log
+      - name: Clone the GDScript original for the parity trace
+        uses: actions/checkout@v5
+        with:
+          repository: foxssake/netfox
+          ref: a15e6c03be648b7d2ebc4575079008a07d1cdffb
+          path: netfox
+      - name: Import the original's resources
+        run: $GODOT --headless --path netfox --import || true
+      - name: Compare tick traces against the original
+        run: sh parity/run-parity.sh "$GODOT"
       - name: Run e2e through the latency and loss proxy
         run: |
           "$GODOT" --headless --path . res://examples/e2e/E2E.tscn -- --host --seconds=14 --latency=40 --loss=3 > host-lossy.log 2>&1 &

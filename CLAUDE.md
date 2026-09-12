@@ -1,7 +1,7 @@
 # netfox-net
 
 Native C# port of netfox (GDScript rollback netcode for Godot). Reference GDScript lives in `netfox/` (read-only, `.gdignore`,
-excluded from git via `.git/info/exclude`; clone foxssake/netfox there if missing). Roadmap lives in GitHub issues.
+gitignored; clone foxssake/netfox there if missing). Roadmap lives in GitHub issues.
 Rule: 1:1 semantics and public API with the original, idiomatic C# inside. When in doubt, read the matching `.gd` file first.
 Branches: `reworked` is the default and where work happens; `master` keeps parity with the original, so changes that deviate from its design (NetfoxContext, settings object, shared synchronizer base) never land there.
 
@@ -24,6 +24,13 @@ dotnet build Netfox.csproj                                                # addo
 <godot> --headless --path . res://examples/e2e/E2E.tscn -- --host --seconds=14   # host must outlive the client
 <godot> --headless --path . res://examples/e2e/E2E.tscn -- --join --seconds=10  # add --latency=40 --loss=3 on both for the proxy run
 ```
+
+## Parity against the original
+
+`sh parity/run-parity.sh` runs the same scene against the GDScript original in `netfox/` and against this port, and
+compares the tick traces. One offline peer on both sides, so nothing depends on packet timing and the comparison is
+exact: same ticks simulated, same state per tick, same number of simulations per tick. CI clones the original at a
+pinned commit and runs it. Keep `parity/parity.gd` and `examples/parity/Parity.cs` identical, arithmetic included.
 
 ## Before committing
 

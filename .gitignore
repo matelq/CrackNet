@@ -31,6 +31,10 @@ Thumbs.db
 .tools/
 /tmp/
 
+# Reference clone of the GDScript original, and the traces compared against it
+/netfox/
+/.parity/
+
 # Claude Code local instructions
 CLAUDE.local.md
 .claude/settings.local.json
