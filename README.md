@@ -86,6 +86,7 @@ dotnet test Netfox.slnx                                   # 77 core tests
 dotnet build Netfox.csproj
 godot --headless --path . res://test/TestRunner.tscn       # 156 Godot-side tests, exit 0 on success
 sh parity/run-parity.sh                                   # tick traces against the GDScript original
+godot --headless --path . res://examples/playground/PlatformRideCheck.tscn   # rider stays on the moving platform
 ```
 
 End to end over ENet, two processes — the host has to outlive the client:

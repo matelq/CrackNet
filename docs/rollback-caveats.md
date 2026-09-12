@@ -38,6 +38,37 @@ private void RefreshIsOnFloor()
 
 Call it before the first `IsOnFloor` of the tick. `examples/playground` does exactly this.
 
+## Moving platforms carry riders by the frame, not by the tick
+
+`CharacterBody2D`/`3D` carry a body standing on an `AnimatableBody` for you. The engine derives the platform's
+velocity from how far it moved between two *physics frames*, and adds a frame's worth of it inside every
+`MoveAndSlide` call.
+
+Neither half of that survives rollback. A tick is not a frame - a resimulation runs many ticks inside one frame, and
+a tick may call `MoveAndSlide` more than once (`RefreshIsOnFloor` above is one such call). The same frame's motion is
+then applied several times over, and the rider is thrown along the platform until it falls off the end.
+
+Switch the engine's version off and carry the rider from the tick instead:
+
+```csharp
+PlatformFloorLayers = 0;   // in _Ready: no layer counts as a moving platform any more
+```
+
+```csharp
+// In the rollback tick, before moving. MotionAt is a pure function of the tick, so a resimulated tick carries the
+// player exactly as far as the first pass did - and it does not matter whether the platform has simulated yet.
+if (IsOnFloor() && FloorUnderMe() is MovingPlatform platform)
+    Position += platform.MotionAt(tick);
+```
+
+This is only possible because the platform's position is itself a function of the tick. A platform driven by an
+`AnimationPlayer`, a `Tween` or an accumulator cannot answer `MotionAt` and cannot be ridden deterministically; make
+its path a function of the tick first.
+
+`examples/playground` does this, and `examples/playground/PlatformRideCheck.tscn` is a headless check that it still
+works: it measures the rider's offset from the platform across 150 ticks and a forced resimulation, and fails if it
+drifts.
+
 ## Physics does not step with ticks
 
 Godot's physics server steps in `_PhysicsProcess`. Rollback advances the game several times inside one frame, and

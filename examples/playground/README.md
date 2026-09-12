@@ -58,6 +58,11 @@ adds one distance check per peer, recomputed every tick loop rather than on join
 where people are, not on who is in the game. Without filtering, a client receives everything and no amount of hiding
 it on screen changes that.
 
+`Beacon._Process` runs that same distance check locally and hides the mesh when it fails, so a distant client sees
+nothing rather than a frozen sphere. The frozen sphere is what filtering actually looks like from the inside - the
+last position this peer was ever told about - and hiding it is what makes the filter legible instead of looking like
+a replication bug.
+
 **The player carries a network schema.** `PlayerCharacter.ApplySchema` tells netfox how to encode each property
 rather than leaving it on the general-purpose variant encoding, which carries a type tag per value and sizes
 everything for the worst case. Both peers have to agree, which is why it is code both run rather than a scene
@@ -70,6 +75,13 @@ changed go out.
 **The platform is what makes misprediction visible.** `MovingPlatform` computes its position from the tick rather
 than from an accumulator, so a resimulated tick puts it exactly where the first pass did. Change it to accumulate
 `delta` instead and ride it: a correction will drag the player off.
+
+**Riding it is done by hand, and has to be.** `PlayerCharacter` sets `PlatformFloorLayers = 0` to switch off Godot's
+own moving platform support, and `RideFloor` adds `MovingPlatform.MotionAt(tick)` instead. Godot's version derives
+the platform's velocity per physics frame and applies it inside every `MoveAndSlide`; a rollback runs many ticks per
+frame and calls MoveAndSlide twice per tick, so that motion lands several times over and throws the rider off the
+end. `PlatformRideCheck.tscn` is a headless check that it does not regress - it fails if the gap between player and
+platform drifts by more than 5 cm over 150 ticks and a forced resimulation.
 
 ## Tiers
 

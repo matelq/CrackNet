@@ -30,11 +30,13 @@ public partial class Beacon : Node3D
 
     private Vector3 _origin;
     private StateSynchronizer _synchronizer = null!;
+    private MeshInstance3D _mesh = null!;
 
     public override void _Ready()
     {
         _origin = Position;
         _synchronizer = GetNode<StateSynchronizer>("StateSynchronizer");
+        _mesh = GetNode<MeshInstance3D>("MeshInstance3D");
 
         _synchronizer.VisibilityFilter.DefaultVisibility = false;
         _synchronizer.VisibilityFilter.UpdateMode = PeerVisibilityFilter.UpdateModeEnum.PerTickLoop;
@@ -46,6 +48,22 @@ public partial class Beacon : Node3D
     public override void _ExitTree()
     {
         if (NetworkTime.Instance is { } time) time.AfterTick -= Advance;
+    }
+
+    /// <summary>
+    /// Hides the beacon on a peer that is not being sent its position, so the filtering can be seen rather than
+    /// merely trusted.
+    /// <para>
+    /// Without this the beacon simply stops moving on a distant client, which reads as a bug and is the opposite of
+    /// the point: the client is not being lied to about where it is, it is not being told at all, and what is drawn
+    /// is the last position it was ever sent. Walk towards it and it appears; walk away and it is gone.
+    /// </para>
+    /// </summary>
+    public override void _Process(double delta)
+    {
+        // The host runs the beacon itself, so it always sees it. Everyone else runs the same test the host applies
+        // before sending - against the stale position, which is all this peer has.
+        _mesh.Visible = IsMultiplayerAuthority() || IsNear(Multiplayer.GetUniqueId());
     }
 
     /// <summary>Circles on the tick, so the host's copy is where it says it is regardless of frame rate.</summary>

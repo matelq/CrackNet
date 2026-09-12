@@ -7,6 +7,7 @@
 [ext_resource type="Script" path="res://examples/playground/Scoreboard.cs" id="5_0x2dt"]
 [ext_resource type="Script" path="res://addons/netfox.cs/StateSynchronizer.cs" id="6_k1m7m"]
 [ext_resource type="Script" path="res://examples/playground/Beacon.cs" id="7_wbw74"]
+[ext_resource type="Script" path="res://addons/netfox.cs/TickInterpolator.cs" id="11_tickin"]
 [ext_resource type="Script" path="res://examples/playground/PhysicsTier.cs" id="8_a8fih"]
 [ext_resource type="PackedScene" path="res://examples/playground/crate.tscn" id="9_kx0p6"]
 [ext_resource type="Script" path="res://examples/playground/PlaygroundCamera.cs" id="10_cv6dk"]
@@ -58,6 +59,11 @@ script = ExtResource("4_m2yo0")
 Root = NodePath("..")
 StateProperties = PackedStringArray(":position")
 
+[node name="TickInterpolator" type="Node" parent="World/Platform" unique_id=1101546353 node_paths=PackedStringArray("Root")]
+script = ExtResource("11_tickin")
+Root = NodePath("..")
+Properties = PackedStringArray(":position")
+
 [node name="Players" type="Node3D" parent="World" unique_id=2026694638]
 
 [node name="Projectiles" type="Node3D" parent="World" unique_id=1367362503]
@@ -81,6 +87,11 @@ mesh = SubResource("SphereMesh_pvflk")
 
 [node name="StateSynchronizer" type="Node" parent="World/Beacon" unique_id=515522244 node_paths=PackedStringArray("Root")]
 script = ExtResource("6_k1m7m")
+Root = NodePath("..")
+Properties = PackedStringArray(":position")
+
+[node name="TickInterpolator" type="Node" parent="World/Beacon" unique_id=515522245 node_paths=PackedStringArray("Root")]
+script = ExtResource("11_tickin")
 Root = NodePath("..")
 Properties = PackedStringArray(":position")
 

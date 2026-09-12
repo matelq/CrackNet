@@ -74,6 +74,8 @@ jobs:
           echo "--- host"; cat pg-host.log
           echo "--- client"; cat pg-client.log
           grep -q "ok=True" pg-host.log && grep -q "ok=True" pg-client.log
+      - name: Check a player rides the moving platform
+        run: $GODOT --headless --path . res://examples/playground/PlatformRideCheck.tscn
       - name: Clone the GDScript original for the parity trace
         uses: actions/checkout@v5
         with:

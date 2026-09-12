@@ -55,6 +55,11 @@ public partial class PlayerCharacter : CharacterBody3D
         Gravity = (float)(double)ProjectSettings.GetSetting("physics/3d/default_gravity", 9.8);
         JumpsLeft = MaxJumps;
 
+        // Godot carries a body standing on a moving platform by itself, and it has to be turned off here - see
+        // RideFloor. Zero means no layer counts as a moving platform, so MoveAndSlide only ever moves this body by
+        // its own velocity.
+        PlatformFloorLayers = 0;
+
         ApplySchema();
 
         // Set here rather than in the scene: the machine collects its states as children are added, which happens
@@ -128,6 +133,34 @@ public partial class PlayerCharacter : CharacterBody3D
         Velocity = velocity * factor;
         MoveAndSlide();
         Velocity /= factor;
+    }
+
+    /// <summary>
+    /// Moves with the platform underfoot, for the one tick given.
+    /// <para>
+    /// Godot does this on its own, and its way cannot be used here. It derives the platform's velocity from how far
+    /// the platform moved between two <i>physics frames</i>, and applies it inside every <c>MoveAndSlide</c>. A tick
+    /// is not a frame: a rollback runs several ticks inside one frame and calls MoveAndSlide twice per tick, so the
+    /// same frame's worth of platform motion gets added over and over, and the rider is thrown off the platform. That
+    /// is what <c>PlatformFloorLayers = 0</c> in _Ready switches off.
+    /// </para>
+    /// <para>
+    /// What replaces it is a function of the tick, like everything else in a rollback tick has to be, so a
+    /// resimulated tick carries the player exactly as far as the first pass did.
+    /// </para>
+    /// </summary>
+    public void RideFloor(int tick)
+    {
+        if (!IsOnFloor()) return;
+
+        // A short ray rather than the last slide collision: standing still may not produce a collision at all, and
+        // the floor is still there. It costs one query per player per tick.
+        var query = PhysicsRayQueryParameters3D.Create(GlobalPosition, GlobalPosition + Vector3.Down * 1.1f);
+        query.Exclude = [GetRid()];
+        var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
+
+        if (hit.Count > 0 && hit["collider"].As<GodotObject>() is MovingPlatform platform)
+            Position += platform.MotionAt(tick);
     }
 
     /// <summary>

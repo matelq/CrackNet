@@ -10,6 +10,7 @@ public partial class GroundedState : PlayerState
     public override void Tick(double delta, int tick, bool isFresh)
     {
         Player.RefreshIsOnFloor();
+        Player.RideFloor(tick);
 
         var velocity = Player.Velocity;
         Player.JumpsLeft = Player.MaxJumps;

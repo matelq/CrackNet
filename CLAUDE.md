@@ -27,6 +27,7 @@ dotnet build Netfox.csproj                                                # addo
 <godot> --headless --path . res://examples/e2e/E2E.tscn -- --join --seconds=10  # add --latency=40 --loss=3 on both for the proxy run
 <godot> --headless --path . res://examples/playground/PlaygroundSmoke.tscn -- --host --seconds=14   # sample, host first
 <godot> --headless --path . res://examples/playground/PlaygroundSmoke.tscn -- --join --seconds=8
+<godot> --headless --path . res://examples/playground/PlatformRideCheck.tscn   # rider stays on the moving platform
 ```
 
 The playground scenes are `.tscn` files and are the source of truth. They were generated once by a throwaway script

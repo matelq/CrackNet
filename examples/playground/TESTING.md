@@ -103,9 +103,15 @@ Run two instances again and watch:
 - **The other player moves a little behind, and occasionally jumps to a corrected position.** That is reconciliation -
   the host's answer arriving and overriding the guess.
 - **`rollback a>b` in the status line now spans several ticks**, because late input keeps forcing resimulation.
-- **Stand on the moving platform.** It stays under you. That is the interesting part: the platform computes its
-  position from the tick number, so a resimulated tick puts it exactly where the first pass did. If it were driven by
-  a frame timer instead, every correction would slide you off it.
+- **Stand on the moving platform.** It carries you, and keeps carrying you at any latency. The platform computes its
+  position from the tick number and the player is carried by that same per-tick motion, so a resimulated tick puts
+  both exactly where the first pass did. Godot's own moving platform support is switched off here on purpose: it
+  works per physics frame, and a rollback runs many ticks inside one frame, which slides the rider off the end. See
+  [rollback caveats](../../docs/rollback-caveats.md).
+- **Walk towards the small sphere circling near the far edge.** On a client it is invisible until you get within 10
+  metres, then it appears and circles; walk away and it vanishes again. That is the visibility filter: beyond that
+  distance the host never sends its position, so the client does not have the data at all rather than having it and
+  hiding it. On the host it is always visible, because the host is the one simulating it.
 
 Push the latency to 300ms and the loss to 0.3 and it gets ugly in an instructive way. That is what the knobs are for.
 
@@ -135,9 +141,27 @@ PLAYGROUND role=client ok=True peer=#1876241018 tick=413 synced=True players=[Pl
 input, it ended up standing **on** the ground rather than having fallen through it, the state machine transitioned
 from `Airborne` to `Grounded`, a shot was accepted, the scoreboard reached this peer, and the platform moved.
 
-This is what CI runs on every commit, so if it fails on a clean checkout, something is genuinely broken.
+There is a second, single-process check for the one thing two windows make hard to eyeball - whether a player
+standing on the moving platform is carried by it:
+
+```
+<godot> --headless --path . res://examples/playground/PlatformRideCheck.tscn
+```
+
+It drops a player on the platform, runs 150 ticks and a forced resimulation, and fails if the gap between the two
+drifts by more than 5 cm.
+
+Both are what CI runs on every commit, so if either fails on a clean checkout, something is genuinely broken.
 
 ## 6. Optional: rolling back real physics
+
+You do not need this for anything above. The platform, the players and the projectiles are all kinematic, which stock
+Godot handles. Rapier is only for the crates - actual rigid bodies.
+
+Neither Rapier nor GodotSteam ships with this repository, and that is deliberate rather than an omission: both are
+native GDExtensions, which means a separate binary per platform, tens of megabytes, their own licences, and a build
+tied to a particular Godot version. Bundling them would make the release zip platform specific and force everyone
+onto one Godot and one Steam SDK. They are installed per project, which is how GDExtensions are normally shipped.
 
 Stock Godot cannot rewind rigid bodies at all - there is no way to step its physics by hand, so rollback cannot
 resimulate it. Rapier can.
@@ -200,6 +224,10 @@ constantly, the tolerance is too tight for how fast players move and how much la
 
 **Ticks drift apart between windows.** Clock synchronization is not keeping up. Check that both are running the same
 tickrate - the host's wins, and a mismatch warns in the console.
+
+**The sphere near the far edge never moves on a client.** It is out of range of the visibility filter, so the host
+is not sending its position. Walk within 10 metres and it appears. Since the whole point is that the client has no
+data, it is hidden rather than left frozen - if you see it frozen instead, `Beacon._Process` is not running.
 
 **Nothing replicates at all.** Check the node names match on both peers. netfox addresses nodes by their path, so a
 player the host calls `Player_2` has to be `Player_2` everywhere.

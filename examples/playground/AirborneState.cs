@@ -10,6 +10,7 @@ public partial class AirborneState : PlayerState
     public override void Tick(double delta, int tick, bool isFresh)
     {
         Player.RefreshIsOnFloor();
+        Player.RideFloor(tick);
 
         var velocity = Player.Velocity;
         velocity.Y -= Player.Gravity * (float)delta;
