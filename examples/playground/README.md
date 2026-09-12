@@ -28,6 +28,11 @@ previous input, and during a resimulation "previous" means the tick being resimu
 to be rollback state like anything else. Drop it from the state list and double jumps start misfiring after a
 correction.
 
+**The player's movement lives in a `RewindableStateMachine`.** `Grounded` and `Airborne` are children of it, and the
+machine's current state is in the synchronizer's state properties - so a rewind puts the player back in the state it
+was in for that tick and replays the transitions from there. An ordinary state machine would keep whatever state the
+mispredicted future left it in, which is the whole reason this one exists.
+
 **The platform is what makes misprediction visible.** `MovingPlatform` computes its position from the tick rather
 than from an accumulator, so a resimulated tick puts it exactly where the first pass did. Change it to accumulate
 `delta` instead and ride it: a correction will drag the player off.

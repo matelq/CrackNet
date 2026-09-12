@@ -1,42 +1,55 @@
 [gd_scene format=3]
 
-[ext_resource type="Script" path="res://examples/playground/PlayerCharacter.cs" id="1_mpbas"]
-[ext_resource type="Script" path="res://examples/playground/PlayerInput.cs" id="2_05bsl"]
-[ext_resource type="Script" path="res://addons/netfox.cs/Rollback/RollbackSynchronizer.cs" id="3_fxdfn"]
-[ext_resource type="Script" path="res://addons/netfox.cs/PeerVisibilityFilter.cs" id="4_j5iym"]
-[ext_resource type="Script" path="res://addons/netfox.cs/TickInterpolator.cs" id="5_uhyy4"]
+[ext_resource type="Script" path="res://examples/playground/PlayerCharacter.cs" id="1_j5iym"]
+[ext_resource type="Script" path="res://examples/playground/PlayerInput.cs" id="2_uhyy4"]
+[ext_resource type="Script" path="res://addons/netfox.cs/Rollback/RollbackSynchronizer.cs" id="3_1hkaj"]
+[ext_resource type="Script" path="res://addons/netfox.cs/PeerVisibilityFilter.cs" id="4_gf4vq"]
+[ext_resource type="Script" path="res://addons/netfox.cs/Extras/StateMachine/RewindableStateMachine.cs" id="5_5l22w"]
+[ext_resource type="Script" path="res://examples/playground/GroundedState.cs" id="6_732g0"]
+[ext_resource type="Script" path="res://examples/playground/AirborneState.cs" id="7_3tmk0"]
+[ext_resource type="Script" path="res://addons/netfox.cs/TickInterpolator.cs" id="8_val7w"]
 
-[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_1hkaj"]
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_a4vbl"]
 radius = 0.4
 height = 1.8
 
-[sub_resource type="CapsuleMesh" id="CapsuleMesh_gf4vq"]
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_edy5l"]
 radius = 0.4
 height = 1.8
 
-[node name="Player" type="CharacterBody3D" unique_id=965151812]
-script = ExtResource("1_mpbas")
+[node name="Player" type="CharacterBody3D" unique_id=1015033598]
+script = ExtResource("1_j5iym")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1929385538]
-shape = SubResource("CapsuleShape3D_1hkaj")
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=287797625]
+shape = SubResource("CapsuleShape3D_a4vbl")
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1069679216]
-mesh = SubResource("CapsuleMesh_gf4vq")
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=138980454]
+mesh = SubResource("CapsuleMesh_edy5l")
 
-[node name="Input" type="Node" parent="." unique_id=1260565210]
-script = ExtResource("2_05bsl")
+[node name="Input" type="Node" parent="." unique_id=1956683264]
+script = ExtResource("2_uhyy4")
 
-[node name="RollbackSynchronizer" type="Node" parent="." unique_id=1866449451 node_paths=PackedStringArray("Root")]
-script = ExtResource("3_fxdfn")
+[node name="RollbackSynchronizer" type="Node" parent="." unique_id=2130954162 node_paths=PackedStringArray("Root")]
+script = ExtResource("3_1hkaj")
 Root = NodePath("..")
 EnablePrediction = true
-StateProperties = PackedStringArray(":position", ":velocity", ":JumpHeld", ":JumpsLeft")
+StateProperties = PackedStringArray(":position", ":velocity", "RewindableStateMachine:State", ":JumpHeld", ":JumpsLeft")
 InputProperties = PackedStringArray("Input:Jump", "Input:Movement")
 
-[node name="PeerVisibilityFilter" type="Node" parent="RollbackSynchronizer" unique_id=1274826242]
-script = ExtResource("4_j5iym")
+[node name="PeerVisibilityFilter" type="Node" parent="RollbackSynchronizer" unique_id=1318801503]
+script = ExtResource("4_gf4vq")
 
-[node name="TickInterpolator" type="Node" parent="." unique_id=785272410 node_paths=PackedStringArray("Root")]
-script = ExtResource("5_uhyy4")
+[node name="RewindableStateMachine" type="Node" parent="." unique_id=1602825159]
+script = ExtResource("5_5l22w")
+State = &"Airborne"
+
+[node name="Grounded" type="Node" parent="RewindableStateMachine" unique_id=226081328]
+script = ExtResource("6_732g0")
+
+[node name="Airborne" type="Node" parent="RewindableStateMachine" unique_id=286278613]
+script = ExtResource("7_3tmk0")
+
+[node name="TickInterpolator" type="Node" parent="." unique_id=1789145305 node_paths=PackedStringArray("Root")]
+script = ExtResource("8_val7w")
 Root = NodePath("..")
 Properties = PackedStringArray(":position")

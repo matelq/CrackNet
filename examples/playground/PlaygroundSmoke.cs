@@ -67,6 +67,8 @@ public partial class PlaygroundSmoke : Node
                  && self.Position.X > 2
                  && self.Position.Y is > 0.5f and < 3
                  && self.JumpsLeft == self.MaxJumps
+                 // Started Airborne and fell: reaching Grounded means the rewindable state machine transitioned
+                 && self.StateMachine.State == "Grounded"
                  // The platform is simulated from the tick, so it is somewhere other than where it started
                  && Mathf.Abs(platform.Position.X) > 0.1f;
 
@@ -74,7 +76,7 @@ public partial class PlaygroundSmoke : Node
         var head = $"PLAYGROUND role={(_isHost ? "host" : "client")} ok={ok} peer=#{Multiplayer.GetUniqueId()} " +
                    $"tick={NetworkTime.Instance.Tick} synced={NetworkTime.Instance.IsInitialSyncDone()}";
         var tail = FormattableString.Invariant(
-            $"players=[{names}] peak={_maxPlayers} platform_x={platform.Position.X:F2} own_pos={self?.Position} jumps={self?.JumpsLeft}");
+            $"players=[{names}] peak={_maxPlayers} state={self?.StateMachine.State} platform_x={platform.Position.X:F2} own_pos={self?.Position} jumps={self?.JumpsLeft}");
         GD.Print($"{head} {tail}");
 
         GetTree().Quit(ok ? 0 : 1);

@@ -1,37 +1,38 @@
 using Godot;
+using Netfox.Extras;
 
 namespace Netfox.Examples.Playground;
 
 /// <summary>
 /// A player driven entirely from <see cref="PlayerInput"/>, so every peer can arrive at the same result for a tick.
 /// <para>
-/// Movement lives in <see cref="RollbackTick"/> rather than in <c>_PhysicsProcess</c>: netfox calls it once per
-/// simulated tick, and again for every tick a resimulation covers. That is the whole contract - the method has to be a
-/// function of the state it is given and the input for that tick, and of nothing else. Reading the wall clock, a
-/// random number or an unreplicated field here is what makes peers disagree.
+/// The movement itself lives in the states under the <see cref="RewindableStateMachine"/>; this class holds the
+/// shared state and the pieces both states need. What matters either way is the contract: a tick has to be a function
+/// of the state it is given and the input for that tick, and of nothing else. Reading the wall clock, a random number
+/// or an unreplicated field is what makes peers disagree.
 /// </para>
 /// </summary>
 [GlobalClass]
-public partial class PlayerCharacter : CharacterBody3D, IRollbackTick
+public partial class PlayerCharacter : CharacterBody3D
 {
     [Export] public float Speed { get; set; } = 5.0f;
     [Export] public float JumpVelocity { get; set; } = 5.0f;
     [Export] public int MaxJumps { get; set; } = 2;
 
     /// <summary>
-    /// Jumps left before touching the ground again. Its own state, so it carries a <c>[RollbackState]</c> attribute
-    /// and the synchronizer gathers the path from the property itself.
+    /// Jumps left before touching the ground again. Its own property, so it carries a <c>[RollbackState]</c>
+    /// attribute and the synchronizer gathers the path from the property itself.
     /// <para>
     /// <c>position</c> and <c>velocity</c> are rollback state too, but they belong to CharacterBody3D rather than to
-    /// this class, so there is nowhere to put an attribute: those two are listed as strings on the synchronizer in the
-    /// scene. The synchronizer takes both sources.
+    /// this class, so there is nowhere to put an attribute: those two are listed as strings on the synchronizer in
+    /// the scene. The synchronizer takes both sources.
     /// </para>
     /// </summary>
     [RollbackState] public int JumpsLeft { get; set; }
 
     /// <summary>
-    /// Whether jump was held last tick. Edge detection needs the previous input, and during a resimulation "previous"
-    /// means the tick being resimulated, not the latest one - so it has to be rollback state like anything else.
+    /// Whether jump was held last tick. Edge detection needs the previous input, and during a resimulation
+    /// "previous" means the tick being resimulated, not the latest one - so it has to be rollback state too.
     /// </summary>
     [RollbackState] public bool JumpHeld { get; set; }
 
@@ -40,57 +41,56 @@ public partial class PlayerCharacter : CharacterBody3D, IRollbackTick
 
     public PlayerInput Input { get; private set; } = null!;
     public RollbackSynchronizer Synchronizer { get; private set; } = null!;
+    public RewindableStateMachine StateMachine { get; private set; } = null!;
 
-    private float _gravity;
+    public float Gravity { get; private set; }
 
     public override void _Ready()
     {
         Input = GetNode<PlayerInput>("Input");
         Synchronizer = GetNode<RollbackSynchronizer>("RollbackSynchronizer");
-        _gravity = (float)(double)ProjectSettings.GetSetting("physics/3d/default_gravity", 9.8);
+        StateMachine = GetNode<RewindableStateMachine>("RewindableStateMachine");
+        Gravity = (float)(double)ProjectSettings.GetSetting("physics/3d/default_gravity", 9.8);
         JumpsLeft = MaxJumps;
+
+        // Set here rather than in the scene: the machine collects its states as children are added, which happens
+        // after a scene sets the node's own properties, so a State written into the .tscn would find nothing
+        StateMachine.State = "Airborne";
     }
 
-    public void RollbackTick(double delta, int tick, bool isFresh)
+    /// <summary>Horizontal movement from this tick's input, keeping the vertical component it was handed.</summary>
+    public Vector3 WithInput(Vector3 velocity)
     {
-        // IsOnFloor only updates during MoveAndSlide. A rewind restores the position but not the flag, so the first
-        // read of a resimulated tick would be whatever the last pass left behind - a zero length move refreshes it.
-        RefreshIsOnFloor();
+        velocity.X = Input.Movement.X * Speed;
+        velocity.Z = Input.Movement.Y * Speed;
+        return velocity;
+    }
 
-        var velocity = Velocity;
-
-        if (IsOnFloor())
-        {
-            JumpsLeft = MaxJumps;
-            velocity.Y = Mathf.Max(velocity.Y, 0);
-        }
-        else
-        {
-            velocity.Y -= _gravity * (float)delta;
-        }
-
+    /// <summary>True on the tick jump goes down, false while it stays down. Also records it for the next tick.</summary>
+    public bool ConsumeJump()
+    {
         var justPressed = Input.Jump && !JumpHeld;
         JumpHeld = Input.Jump;
+        return justPressed;
+    }
 
-        if (justPressed && JumpsLeft > 0)
-        {
-            velocity.Y = JumpVelocity;
-            JumpsLeft--;
-        }
-
-        var direction = new Vector3(Input.Movement.X, 0, Input.Movement.Y);
-        velocity.X = direction.X * Speed;
-        velocity.Z = direction.Z * Speed;
-
-        // MoveAndSlide assumes the delta of whatever frame it is called from, which is not the tick delta a rollback
-        // runs at. PhysicsFactor is the ratio between the two, for both kinds of frame.
+    /// <summary>
+    /// Moves at the tick's speed. MoveAndSlide assumes the delta of whatever frame it is called from, which is not
+    /// the tick delta a rollback runs at; PhysicsFactor is the ratio between the two, for both kinds of frame.
+    /// </summary>
+    public void Move(Vector3 velocity, double delta)
+    {
         var factor = (float)NetworkTime.Instance.PhysicsFactor;
         Velocity = velocity * factor;
         MoveAndSlide();
         Velocity /= factor;
     }
 
-    private void RefreshIsOnFloor()
+    /// <summary>
+    /// IsOnFloor only updates during MoveAndSlide. A rewind restores the position but not the flag, so the first read
+    /// of a resimulated tick would be whatever the last pass left behind - a zero length move refreshes it.
+    /// </summary>
+    public void RefreshIsOnFloor()
     {
         var velocity = Velocity;
         Velocity = Vector3.Zero;
