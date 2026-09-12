@@ -89,6 +89,21 @@ public abstract partial class TestSuite : Node
 
     protected async Task NextFrame() => await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
 
+    /// <summary>
+    /// Pumps frames until <paramref name="condition"/> holds or <paramref name="seconds"/> of wall clock pass. Netfox
+    /// ticks on real time, so tests that need ticks have to wait on the clock, not on a frame count.
+    /// </summary>
+    protected async Task<bool> WaitUntil(Func<bool> condition, double seconds = 3)
+    {
+        var deadline = Time.GetTicksMsec() + (ulong)(seconds * 1000);
+        while (!condition())
+        {
+            if (Time.GetTicksMsec() > deadline) return false;
+            await NextFrame();
+        }
+        return true;
+    }
+
     /// <summary>Frees every child added during a case.</summary>
     protected void FreeChildren()
     {

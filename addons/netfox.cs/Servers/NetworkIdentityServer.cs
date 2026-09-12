@@ -82,7 +82,22 @@ public partial class NetworkIdentityServer : Node
             Logger.Error("Cannot register node {0} that is not inside tree!", node);
             return;
         }
-        Register(node, node.GetPath().ToString());
+        Register(node, IdentityPathOf(node));
+    }
+
+    /// <summary>
+    /// Nodes are named by their path below the multiplayer root ("/root" unless the game sets its own), the same way
+    /// RPCs address them. Upstream uses the absolute path (network-identity-server.gd:74), which assumes a single netfox
+    /// stack per process; relative paths let two stacks in one tree agree on names.
+    /// </summary>
+    private string IdentityPathOf(Node node)
+    {
+        if (Multiplayer is SceneMultiplayer { RootPath: var rootPath }
+            && !rootPath.IsEmpty
+            && node.GetNodeOrNull(rootPath) is { } root)
+            return root.GetPathTo(node);
+
+        return node.GetPath();
     }
 
     public void DeregisterNode(Node node) => Deregister(node);

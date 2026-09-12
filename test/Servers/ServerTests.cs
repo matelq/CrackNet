@@ -568,7 +568,9 @@ public partial class NetworkIdentityServerTests : TestSuite
         _identity.RegisterNode(_node);
         var identifier = _identity.GetIdentifierOf(_node);
         Expect.NotNull(identifier);
-        Expect.Equal(_node.GetPath().ToString(), identifier!.FullName);
+
+        // Identities are named relative to the multiplayer root, which is /root here
+        Expect.Equal(GetTree().Root.GetPathTo(_node).ToString(), identifier!.FullName);
     }
 
     [Test]
