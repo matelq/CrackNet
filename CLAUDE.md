@@ -25,6 +25,16 @@ dotnet build Netfox.csproj                                                # addo
 <godot> --headless --path . res://examples/e2e/E2E.tscn -- --join --seconds=10  # add --latency=40 --loss=3 on both for the proxy run
 ```
 
+## Before committing
+
+Run the whole CI set locally, not a subset: `dotnet format Netfox.slnx --verify-no-changes`, `dotnet test Netfox.slnx`,
+`dotnet build Netfox.csproj`, then the Godot runner. Building only the project you touched once let a broken
+`Netfox.csproj` through, because the Godot project compiles everything under the repo root that is not excluded.
+
+Performance claims come from tests that print their numbers (`PropertyAccessBenchmarkTests`, `HotPathBenchmarkTests`,
+and the bandwidth case in the harness) and fail on regression. Tick-level timings swing by ±60% between runs on the
+same build, so measure in isolation and take allocations and byte counts, which are stable, over wall clock.
+
 ## Conventions
 
 - Signals → C# `event`. Events are NOT auto-disconnected when a node is freed: store the delegate and unsubscribe in `_ExitTree`. For the three synchronizers that lives in `BaseSynchronizer` (reworked).
