@@ -161,6 +161,32 @@ public partial class LoopbackHarnessTests : TestSuite
             $"client Player_1={clientPlayers[1].Position} host Player_2={hostPlayers[2].Position} under 30% loss");
     }
 
+    [Test]
+    public async Task StateIsNotResentForEveryResimulatedTick()
+    {
+        // Latency well past the input delay: every client input lands on an already simulated tick, so the host
+        // resimulates a range every frame. Sending state for each of those ticks is what upstream #630 is about.
+        _network.LatencyMs = 150;
+
+        SpawnPlayers(_host);
+        var clientPlayers = SpawnPlayers(_client);
+
+        var states = 0;
+        _client.Context.NetworkSynchronizationServer.OnState += _ => states++;
+
+        await WaitUntil(() => clientPlayers[1].Position.X > 0.3f, 6);
+
+        var firstTick = _host.Context.NetworkTime.Tick;
+        var firstStates = states;
+        await WaitUntil(() => _host.Context.NetworkTime.Tick - firstTick > 30, 6);
+
+        var ticks = _host.Context.NetworkTime.Tick - firstTick;
+        var packets = states - firstStates;
+
+        Expect.True(packets <= ticks * 1.5,
+            $"{packets} state packets for {ticks} host ticks: state is being re-sent for resimulated ticks");
+    }
+
     private static Dictionary<int, HarnessPlayer> SpawnPlayers(NetfoxStack stack) => new()
     {
         [1] = HarnessPlayer.Spawn(stack, 1),

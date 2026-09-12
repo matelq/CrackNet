@@ -246,9 +246,13 @@ public partial class NetworkRollback : Node
             _rollbackStage = StageRecord;
             OnRecordTick?.Invoke(tick + 1);
             history.RecordRollbackState(tick + 1);
-            synchronization.SynchronizeState(tick + 1);
             history.FlushIgnores();
         }
+
+        // Send state once per loop, for the newest tick only. Upstream sends inside the loop (network-rollback.gd:429),
+        // so resimulating a range re-broadcasts every tick in it, every frame, to every peer; the corrections are
+        // already contained in the newest tick's state. See foxssake/netfox#630.
+        if (to > from) synchronization.SynchronizeState(to);
 
         // Restore display state
         _rollbackStage = StageAfter;
