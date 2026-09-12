@@ -1,98 +1,138 @@
-// Steam transport bootstrap for netfox.cs, built on GodotSteam (GDExtension) + LauraWebdev/GodotSteam_CSharpBindings.
-//
-// Setup:
-//   1. Install GodotSteam GDExtension 4.22+ into addons/godotsteam and the C# bindings into addons/godotsteam_csharpbindings.
-//   2. Put steam_appid.txt next to the executable (480 for testing).
-//   3. Define GODOTSTEAM in the csproj: <DefineConstants>$(DefineConstants);GODOTSTEAM</DefineConstants>
-//   4. Add this node to your lobby scene and call Host() or Join(lobbyId).
-//
-// netfox.cs never creates peers itself: once Multiplayer.MultiplayerPeer is assigned, NetworkEvents starts NetworkTime
-// on the host immediately and on clients after connected_to_server, exactly as with ENet.
-//
-// NOTE: this file is a reference implementation compiled only with GODOTSTEAM defined; it has not been exercised
-// against a live Steam client in this repository.
-#if GODOTSTEAM
 using Godot;
-using GodotSteam;
 
 namespace Netfox.Examples.Steam;
 
+/// <summary>
+/// Steam as netfox's transport: create or join a lobby, hand the resulting peer to Godot, and netfox behaves exactly
+/// as it does over ENet - it never creates peers itself.
+/// <para>
+/// Driven through <c>ClassDB</c> and the <c>Steam</c> singleton rather than through C# bindings, the same way
+/// <c>RapierPhysicsDriver3D</c> drives the Rapier extension. GodotSteam registers <c>Steam</c>,
+/// <c>SteamMultiplayerPeer</c> and <c>SteamPacketPeer</c>, and that is all we need - so there is no dependency on
+/// GodotSteam_CSharpBindings, whose last release predates the extension by two years.
+/// </para>
+/// <para>
+/// Setup: unzip the GodotSteam GDExtension (<c>v4.22.1-gde</c> or newer) into <c>addons/godotsteam</c>, put
+/// <c>steam_appid.txt</c> next to the executable - 480, Spacewar, for testing - and run with the Steam client open.
+/// </para>
+/// </summary>
+[GlobalClass]
 public partial class SteamLobbyBootstrap : Node
 {
+    /// <summary>480 is Valve's Spacewar, the app id to develop against before you have your own.</summary>
     [Export] public uint AppId { get; set; } = 480;
+
     [Export] public int MaxPlayers { get; set; } = 4;
 
-    public ulong LobbyId { get; private set; }
-    public SteamMultiplayerPeer? Peer { get; private set; }
+    /// <summary>Matches GodotSteam's LOBBY_TYPE_ enum: 0 private, 1 friends only, 2 public.</summary>
+    [Export] public int LobbyType { get; set; } = 1;
 
+    public ulong LobbyId { get; private set; }
+
+    /// <summary>The Steam peer, once a lobby is up. It is a MultiplayerPeerExtension, so Godot takes it as it is.</summary>
+    public MultiplayerPeer? Peer { get; private set; }
+
+    /// <summary>Raised once the lobby exists and the peer is assigned. Carries the lobby id, to share or to show.</summary>
     public event Action<ulong>? LobbyReady;
+
+    /// <summary>Raised with a readable reason when Steam, the lobby or the peer could not be brought up.</summary>
+    public event Action<string>? Failed;
+
+    private GodotObject? _steam;
+
+    /// <summary>True when the GodotSteam extension is installed. Everything here is a no-op without it.</summary>
+    public static bool IsAvailable
+        => Engine.HasSingleton("Steam") && ClassDB.ClassExists("SteamMultiplayerPeer");
 
     public override void _Ready()
     {
-        var init = Steam.SteamInitEx(AppId, true);
-        if (init.Status != Steam.SteamAPIInitResult.Ok)
+        if (!IsAvailable)
         {
-            GD.PushError($"Steam init failed: {init.Verbal}");
+            Fail("GodotSteam is not installed: no Steam singleton and no SteamMultiplayerPeer class");
             return;
         }
 
-        Steam.LobbyCreated += OnLobbyCreated;
-        Steam.LobbyJoined += OnLobbyJoined;
+        _steam = Engine.GetSingleton("Steam");
+
+        var init = _steam.Call("steamInitEx", AppId, false).AsGodotDictionary();
+        var status = init["status"].AsInt32();
+        if (status != 0)
+        {
+            Fail($"Steam init failed ({status}): {init["verbal"].AsString()}");
+            return;
+        }
+
+        _steam.Connect("lobby_created", Callable.From<long, ulong>(HandleLobbyCreated));
+        _steam.Connect("lobby_joined", Callable.From<ulong, long, bool, long>(HandleLobbyJoined));
     }
 
-    public override void _Process(double delta) => Steam.RunCallbacks();
+    /// <summary>Steam's callbacks are pumped by hand, the way its API expects.</summary>
+    public override void _Process(double delta) => _steam?.Call("run_callbacks");
 
-    /// <summary>Create a friends-only lobby and host the game inside it. Peer id 1, authority over the world.</summary>
-    public void Host() => Steam.CreateLobby(Steam.LobbyType.FriendsOnly, MaxPlayers);
+    /// <summary>Creates a lobby and hosts inside it. The lobby owner is the host, and netfox's peer 1.</summary>
+    public void Host() => _steam?.Call("createLobby", LobbyType, MaxPlayers);
 
-    /// <summary>Join an existing lobby; the lobby owner is the host.</summary>
-    public void Join(ulong lobbyId) => Steam.JoinLobby(lobbyId);
+    /// <summary>Joins an existing lobby; its owner is the host.</summary>
+    public void Join(ulong lobbyId) => _steam?.Call("joinLobby", lobbyId);
 
-    private void OnLobbyCreated(long connect, ulong lobbyId)
+    private void HandleLobbyCreated(long connect, ulong lobbyId)
     {
         if (connect != 1)
         {
-            GD.PushError($"Lobby creation failed: {connect}");
+            Fail($"Lobby creation failed: {connect}");
             return;
         }
 
         LobbyId = lobbyId;
-        Steam.SetLobbyJoinable(lobbyId, true);
+        _steam?.Call("setLobbyJoinable", lobbyId, true);
 
-        Peer = SteamMultiplayerPeer.Instantiate();
-        var error = Peer.CreateHost(0);
-        if (error != Error.Ok)
+        // host_with_lobby creates the host peer and connects to anyone already in the lobby
+        Assign("host_with_lobby", lobbyId);
+    }
+
+    private void HandleLobbyJoined(ulong lobbyId, long permissions, bool locked, long response)
+    {
+        const long enterSuccess = 1;
+        if (response != enterSuccess)
         {
-            GD.PushError($"SteamMultiplayerPeer.CreateHost failed: {error}");
+            Fail($"Joining the lobby failed: {response}");
             return;
         }
 
-        Multiplayer.MultiplayerPeer = Peer;
+        LobbyId = lobbyId;
+
+        // The owner already built its peer in HandleLobbyCreated
+        if (Peer is not null) return;
+
+        Assign("connect_to_lobby", lobbyId);
+    }
+
+    private void Assign(string method, ulong lobbyId)
+    {
+        if (ClassDB.Instantiate("SteamMultiplayerPeer").AsGodotObject() is not MultiplayerPeer peer)
+        {
+            Fail("SteamMultiplayerPeer did not instantiate as a MultiplayerPeer");
+            return;
+        }
+
+        var error = (Error)peer.Call(method, lobbyId).AsInt32();
+        if (error != Error.Ok)
+        {
+            Fail($"{method} failed: {error}");
+            peer.Dispose();
+            return;
+        }
+
+        Peer = peer;
+
+        // From here netfox is on its own: NetworkEvents starts the tick loop with the session, exactly as over ENet
+        Multiplayer.MultiplayerPeer = peer;
         LobbyReady?.Invoke(lobbyId);
     }
 
-    private void OnLobbyJoined(ulong lobbyId, long permissions, bool locked, long response)
+    private void Fail(string reason)
     {
-        if (response != (long)Steam.ChatRoomEnterResponse.Success)
-        {
-            GD.PushError($"Joining lobby failed: {response}");
-            return;
-        }
-
-        LobbyId = lobbyId;
-        var hostId = Steam.GetLobbyOwner(lobbyId);
-        if (hostId == Steam.GetSteamID()) return; // We are the host, peer already created
-
-        Peer = SteamMultiplayerPeer.Instantiate();
-        var error = Peer.CreateClient(hostId, 0);
-        if (error != Error.Ok)
-        {
-            GD.PushError($"SteamMultiplayerPeer.CreateClient failed: {error}");
-            return;
-        }
-
-        Multiplayer.MultiplayerPeer = Peer;
-        LobbyReady?.Invoke(lobbyId);
+        GD.PushError($"SteamLobbyBootstrap: {reason}");
+        Failed?.Invoke(reason);
     }
 }
-#endif
