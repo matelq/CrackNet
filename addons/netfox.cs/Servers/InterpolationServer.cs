@@ -61,7 +61,7 @@ public partial class InterpolationServer : Node
         if (_properties.Has(subject, property)) return;
 
         _properties.Add(subject, property);
-        _interpolators[subject][property] = interpolator ?? Interpolators.FindInterpolatorFor(subject.GetIndexed(property));
+        _interpolators[subject][property] = interpolator ?? Interpolators.FindInterpolatorFor(subject.GetValue(property));
     }
 
     public void Deregister(Node subject)
@@ -127,7 +127,7 @@ public partial class InterpolationServer : Node
         _stateTo.EraseSubject(subject);
         foreach (var property in _properties.GetPropertiesOf(subject))
         {
-            var value = subject.GetIndexed(property);
+            var value = subject.GetValue(property);
             if (value.VariantType == Variant.Type.Nil)
                 Logger.Warning("Captured null value for interpolation on {0}:{1}; either a bug or wrong usage", subject, property);
             else
@@ -167,7 +167,7 @@ public partial class InterpolationServer : Node
             if (!_stateTo.TryGetProperty(subject, property, out var b)) continue;
 
             var interpolator = interps is not null && interps.TryGetValue(property, out var found) ? found : Interpolators.DefaultInterpolator;
-            subject.SetIndexed(property, interpolator.Apply(a, b, factor));
+            subject.SetValue(property, interpolator.Apply(a, b, factor));
         }
     }
 

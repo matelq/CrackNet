@@ -215,7 +215,7 @@ public partial class NetworkHistoryServer : Node
 
             foreach (var property in propertyPool.GetPropertiesOf(subject))
             {
-                var value = subject.GetIndexed(property);
+                var value = subject.GetValue(property);
                 subjectSnapshot.SetValue(property, value);
                 snapshot.SetProperty(subject, property, value);
             }

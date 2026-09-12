@@ -1,4 +1,5 @@
 using Godot;
+using Netfox.Internal;
 
 namespace Netfox;
 
@@ -6,14 +7,14 @@ namespace Netfox;
 public static class GodotDataExtensions
 {
     public static void RecordProperty(this Snapshot snapshot, Node subject, NodePath property)
-        => snapshot.SetProperty(subject, property, subject.GetIndexed(property));
+        => snapshot.SetProperty(subject, property, subject.GetValue(property));
 
     /// <summary>Writes every stored value back onto its subject.</summary>
     public static void Apply(this Snapshot snapshot)
     {
         foreach (var subject in snapshot.Subjects)
             foreach (var (property, value) in snapshot.GetSubjectData(subject))
-                subject.SetIndexed(property, value);
+                subject.SetValue(property, value);
     }
 
     /// <summary>Drops every subject that <paramref name="sender"/> does not have authority over.</summary>
@@ -21,12 +22,12 @@ public static class GodotDataExtensions
         => snapshot.Sanitize(subject => subject.GetMultiplayerAuthority() == sender);
 
     public static void RecordProperty(this ObjectSnapshot snapshot, NodePath property)
-        => snapshot.SetValue(property, snapshot.Subject.GetIndexed(property));
+        => snapshot.SetValue(property, snapshot.Subject.GetValue(property));
 
     public static void Apply(this ObjectSnapshot snapshot)
     {
         foreach (var (property, value) in snapshot.Data)
-            snapshot.Subject.SetIndexed(property, value);
+            snapshot.Subject.SetValue(property, value);
     }
 
     /// <summary>Replaces the pool contents with the parsed "node:property" paths relative to <paramref name="root"/>.</summary>
