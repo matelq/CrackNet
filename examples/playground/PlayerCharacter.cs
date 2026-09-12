@@ -53,6 +53,10 @@ public partial class PlayerCharacter : CharacterBody3D, IRollbackTick
 
     public void RollbackTick(double delta, int tick, bool isFresh)
     {
+        // IsOnFloor only updates during MoveAndSlide. A rewind restores the position but not the flag, so the first
+        // read of a resimulated tick would be whatever the last pass left behind - a zero length move refreshes it.
+        RefreshIsOnFloor();
+
         var velocity = Velocity;
 
         if (IsOnFloor())
@@ -78,11 +82,19 @@ public partial class PlayerCharacter : CharacterBody3D, IRollbackTick
         velocity.X = direction.X * Speed;
         velocity.Z = direction.Z * Speed;
 
-        // MoveAndSlide uses the physics frame delta, which is not the tick delta a resimulation runs at. Scaling the
-        // velocity around the call is how netfox's own examples reconcile the two.
-        var scale = (float)(delta / GetPhysicsProcessDeltaTime());
-        Velocity = velocity * scale;
+        // MoveAndSlide assumes the delta of whatever frame it is called from, which is not the tick delta a rollback
+        // runs at. PhysicsFactor is the ratio between the two, for both kinds of frame.
+        var factor = (float)NetworkTime.Instance.PhysicsFactor;
+        Velocity = velocity * factor;
         MoveAndSlide();
-        Velocity = Velocity / scale;
+        Velocity /= factor;
+    }
+
+    private void RefreshIsOnFloor()
+    {
+        var velocity = Velocity;
+        Velocity = Vector3.Zero;
+        MoveAndSlide();
+        Velocity = velocity;
     }
 }
