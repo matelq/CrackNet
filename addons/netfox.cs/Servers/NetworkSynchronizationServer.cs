@@ -251,7 +251,15 @@ public partial class NetworkSynchronizationServer : Node
             // Send inputs to the peers owning nodes controlled by our inputs
             foreach (var inputSubject in _rbOwnedInputProperties.Subjects)
                 foreach (var node in simulation.GetControlledBy(inputSubject))
+                {
                     notifiedPeers.Add(node.GetMultiplayerAuthority());
+
+                    // A peer owning another input node of the same subject simulates that subject too, so it needs
+                    // this input as well. Upstream only notifies the state authority (foxssake/netfox#236), which
+                    // leaves such a peer unable to simulate at all unless input broadcast is turned on for everyone.
+                    foreach (var sibling in simulation.GetInputsOf(node))
+                        notifiedPeers.Add(sibling.GetMultiplayerAuthority());
+                }
         }
         else
         {

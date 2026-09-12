@@ -284,9 +284,11 @@ public partial class NetworkHistoryServer : Node
         var historyStart = Context.NetworkRollback?.HistoryStart ?? 0;
         if (tick < historyStart)
         {
-            if (ReferenceEquals(history, _rbInputHistory)) Logger.Warning("Input being merged is too old! (@{0})", tick);
-            else if (ReferenceEquals(history, _rbStateHistory)) Logger.Warning("State being merged is too old! (@{0})", tick);
-            else Logger.Warning("Sync state being merged is too old! (@{0})", tick);
+            // Upstream names only the tick (foxssake/netfox#514); without the subjects there is nothing to act on
+            var subjects = string.Join(", ", snapshot.Subjects.Select(subject => subject.Name));
+            if (ReferenceEquals(history, _rbInputHistory)) Logger.Warning("Input being merged is too old! (@{0}, for {1})", tick, subjects);
+            else if (ReferenceEquals(history, _rbStateHistory)) Logger.Warning("State being merged is too old! (@{0}, for {1})", tick, subjects);
+            else Logger.Warning("Sync state being merged is too old! (@{0}, for {1})", tick, subjects);
             return false;
         }
 
@@ -295,7 +297,7 @@ public partial class NetworkHistoryServer : Node
             var objectSnapshot = history.EnsureSnapshot(tick, subject, carryForward: !reverse);
             if (objectSnapshot is null)
             {
-                Logger.Warning("Snapshot being merged is out of bounds! (@{0})", tick);
+                Logger.Warning("Snapshot being merged is out of bounds! (@{0}, for {1})", tick, subject);
                 continue;
             }
 

@@ -314,9 +314,117 @@ public partial class LoopbackHarnessTests : TestSuite
             fromClient.Packets / seconds, fromClient.Bytes / (double)Math.Max(1, fromClient.Packets));
     }
 
-    private static Dictionary<int, HarnessPlayer> SpawnPlayers(NetfoxStack stack) => new()
+    /// <summary>
+    /// Upstream foxssake/netfox#613: with prediction on, a player is reported to keep moving after letting go of the
+    /// button and then snap back. Packet fragmentation is in our port too, so the symptom would be ours as well.
+    /// </summary>
+    [Test]
+    public async Task PredictedPlayerStopsWhenTheInputStops()
     {
-        [1] = HarnessPlayer.Spawn(stack, 1),
-        [2] = HarnessPlayer.Spawn(stack, 2),
+        _network.LatencyMs = 40;
+
+        var hostPlayers = SpawnPlayers(_host, enablePrediction: true);
+        var clientPlayers = SpawnPlayers(_client, enablePrediction: true);
+
+        Expect.True(await WaitUntil(() => hostPlayers[2].Position.Z > 0.5f, 6),
+            $"the client player never got moving on the host: {hostPlayers[2].Position}");
+
+        // The client lets go. Its own input stops immediately; the host learns about it one latency later.
+        clientPlayers[2].Input.Held = false;
+        var releasedAt = _host.Context.NetworkTime.Tick;
+        var releasedFrom = hostPlayers[2].Position.Z;
+
+        // Give the release time to arrive and any prediction to be corrected
+        await WaitUntil(() => _host.Context.NetworkTime.Tick - releasedAt > 20, 4);
+
+        var settled = hostPlayers[2].Position.Z;
+        var perTick = HarnessPlayer.Speed / _host.Context.NetworkTime.Tickrate;
+
+        // Some overshoot is expected: input in flight plus the input delay. Running on is not.
+        Expect.True(settled - releasedFrom < perTick * 12,
+            FormattableString.Invariant(
+                $"host kept moving the player {settled - releasedFrom:F3} past the release, over {perTick * 12:F3}"));
+
+        // And once settled it must stay put, rather than creep forward on predicted input
+        var before = hostPlayers[2].Position.Z;
+        var at = _host.Context.NetworkTime.Tick;
+        await WaitUntil(() => _host.Context.NetworkTime.Tick - at > 20, 4);
+
+        Expect.True(Math.Abs(hostPlayers[2].Position.Z - before) < perTick,
+            FormattableString.Invariant(
+                $"host player drifted {hostPlayers[2].Position.Z - before:F3} while the client held no input"));
+
+        // Without this the case proves nothing about #613: the host has to have run at least one predicted tick
+        Expect.True(hostPlayers[2].PredictedTicks > 0,
+            $"the host never predicted the client player, so this case says nothing about prediction");
+
+        // The client's own view has to agree, or it is the snapping back from the report
+        Expect.True(Math.Abs(clientPlayers[2].Position.Z - hostPlayers[2].Position.Z) < perTick * 8,
+            FormattableString.Invariant(
+                $"client sees {clientPlayers[2].Position.Z:F3}, host {hostPlayers[2].Position.Z:F3}"));
+    }
+
+    /// <summary>The same release, with the packets it depends on going missing: prediction must still converge.</summary>
+    [Test]
+    public async Task PredictedPlayerStopsWhenTheInputStopsUnderLoss()
+    {
+        _network.LatencyMs = 40;
+        _network.PacketLoss = 0.2;
+
+        var hostPlayers = SpawnPlayers(_host, enablePrediction: true);
+        var clientPlayers = SpawnPlayers(_client, enablePrediction: true);
+
+        Expect.True(await WaitUntil(() => hostPlayers[2].Position.Z > 0.5f, 8),
+            $"the client player never got moving on the host: {hostPlayers[2].Position}");
+
+        clientPlayers[2].Input.Held = false;
+        var releasedAt = _host.Context.NetworkTime.Tick;
+        await WaitUntil(() => _host.Context.NetworkTime.Tick - releasedAt > 40, 6);
+
+        var before = hostPlayers[2].Position.Z;
+        var at = _host.Context.NetworkTime.Tick;
+        await WaitUntil(() => _host.Context.NetworkTime.Tick - at > 20, 4);
+
+        var perTick = HarnessPlayer.Speed / _host.Context.NetworkTime.Tickrate;
+        Expect.True(hostPlayers[2].PredictedTicks > 0, "the host never predicted the client player");
+        Expect.True(Math.Abs(hostPlayers[2].Position.Z - before) < perTick,
+            FormattableString.Invariant(
+                $"host player drifted {hostPlayers[2].Position.Z - before:F3} after the release, under 20% loss"));
+    }
+
+    /// <summary>
+    /// Upstream foxssake/netfox#236: with a second input node owned by the server, the client is reported to treat its
+    /// state as fully server-determined and stop taking its own input into account.
+    /// </summary>
+    [Test]
+    public async Task InputNodesWithDifferentAuthoritiesStillLetTheClientSimulate()
+    {
+        _network.LatencyMs = 40;
+
+        var hostPlayer = HarnessPlayer.Spawn(_host, 2, withServerEvents: true);
+        var clientPlayer = HarnessPlayer.Spawn(_client, 2, withServerEvents: true);
+
+        Expect.True(await WaitUntil(() => hostPlayer.Position.Z > 0.5f, 6),
+            $"the player never got moving on the host: {hostPlayer.Position}");
+
+        // The client owns one of the two input nodes, so it has to keep simulating its own player rather than
+        // waiting for the host to tell it where it is
+        Expect.True(clientPlayer.SimulatedTicks > 0,
+            "the client stopped simulating its own player once a server-owned input node was added");
+
+        // And the state it is told about must not run away from the ticks it is simulating
+        var stateAge = clientPlayer.Synchronizer.GetLastKnownState();
+        Expect.True(stateAge >= 0, "the client never received state for its player");
+
+        var perTick = HarnessPlayer.Speed / _host.Context.NetworkTime.Tickrate;
+        Expect.True(Math.Abs(clientPlayer.Position.Z - hostPlayer.Position.Z) < perTick * 10,
+            FormattableString.Invariant(
+                $"client sees {clientPlayer.Position.Z:F3}, host {hostPlayer.Position.Z:F3}, state age {stateAge}"));
+    }
+
+    private static Dictionary<int, HarnessPlayer> SpawnPlayers(NetfoxStack stack, bool enablePrediction = false) => new()
+    {
+        [1] = HarnessPlayer.Spawn(stack, 1, enablePrediction),
+        [2] = HarnessPlayer.Spawn(stack, 2, enablePrediction),
     };
 }

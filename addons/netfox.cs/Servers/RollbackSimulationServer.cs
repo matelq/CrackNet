@@ -109,6 +109,9 @@ public partial class RollbackSimulationServer : Node
 
     public bool IsPredictionEnabledFor(Node node) => _predictionEnabledNodes.Contains(node);
 
+    /// <summary>Every node registered for simulation, in registration order.</summary>
+    internal IReadOnlyCollection<Node> RegisteredNodes => _callbacks.Keys;
+
     /// <summary>True if the node currently being simulated is predicted.</summary>
     public bool IsPredictingCurrent()
     {
