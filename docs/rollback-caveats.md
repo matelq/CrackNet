@@ -101,6 +101,43 @@ For real RigidBody rollback, `Netfox.Extras` has physics drivers that step and s
 [PR 76462](https://github.com/godotengine/godot/pull/76462), which is not in a release yet. The Rapier path is
 verified - see `examples/physics/RapierCheck.tscn`.
 
+## Every peer has to simulate in the same order
+
+netfox simulates the nodes of a tick in scene tree order - `get_nodes_in_group` hands them back sorted by their
+position in the tree, and that is the order the rollback runs them in. So the tree order is part of your simulation,
+and two peers that hold a different order are running a different simulation.
+
+It costs nothing when nothing interacts. It costs you the session when two bodies touch: whoever moves first is
+blocked by where the other still is, and whoever moves second resolves against where the first has already gone. Swap
+the two and you get a different answer. Both peers then correct each other forever, the bodies work their way into
+each other, and the two views drift apart for good - the failure that looks like "we see each other in completely
+different places and it only gets worse".
+
+Spawn order is the usual way to get it wrong, and it is easy to miss because it is not visibly an order at all:
+
+```csharp
+// On the host:   OnServerStart spawns Player_1, then OnPeerJoin spawns the client  -> [Player_1, Player_7]
+// On the client: OnClientStart spawns itself,   then OnPeerJoin spawns the host    -> [Player_7, Player_1]
+```
+
+Nothing about that looks wrong, and every peer has the same set of players with the same names under the same parent.
+Put them in an order every peer computes the same way:
+
+```csharp
+private void SortPlayers()
+{
+    var sorted = SpawnRoot.GetChildren().OrderBy(node => node.Name.ToString(), StringComparer.Ordinal).ToList();
+    for (var index = 0; index < sorted.Count; index++) SpawnRoot.MoveChild(sorted[index], index);
+}
+```
+
+The names are the one thing every peer already agrees on, because netfox addresses nodes by path. Anything else
+derived identically everywhere works just as well - the point is that it must not depend on the order events
+happened to arrive in.
+
+`examples/playground/ConvergenceSmoke.tscn` is what catches this: two processes, two players pushed into each other
+under latency and packet loss, and then a comparison of what each peer believes once everything has stopped.
+
 ## Anything that is not state, is not rewound
 
 The rule behind most surprises: if a value affects the simulation and is not in the synchronizer's state properties,

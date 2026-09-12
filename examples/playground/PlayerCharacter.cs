@@ -151,16 +151,19 @@ public partial class PlayerCharacter : CharacterBody3D
     /// </summary>
     public void RideFloor(int tick)
     {
-        if (!IsOnFloor()) return;
+        foreach (var node in GetTree().GetNodesInGroup(MovingPlatform.Group))
+        {
+            if (node is not MovingPlatform platform) continue;
+            if (!platform.CarriesAt(GlobalPosition, tick)) continue;
 
-        // A short ray rather than the last slide collision: standing still may not produce a collision at all, and
-        // the floor is still there. It costs one query per player per tick.
-        var query = PhysicsRayQueryParameters3D.Create(GlobalPosition, GlobalPosition + Vector3.Down * 1.1f);
-        query.Exclude = [GetRid()];
-        var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
-
-        if (hit.Count > 0 && hit["collider"].As<GodotObject>() is MovingPlatform platform)
-            Position += platform.MotionAt(tick);
+            // MoveAndCollide rather than an assignment to Position: the ride has to be a move like any other.
+            // Writing the position directly pushes the rider straight through whatever is standing next to it on the
+            // platform, and the two peers then dig the same two bodies into each other by different amounts - which
+            // is the one way two players can shove each other here at all, since MoveAndSlide otherwise just slides
+            // them apart.
+            MoveAndCollide(platform.MotionAt(tick));
+            return;
+        }
     }
 
     /// <summary>

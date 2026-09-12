@@ -165,6 +165,12 @@ public partial class Playground : Node3D
         SpawnRoot.AddChild(player);
         _players[peer] = player;
 
+        // netfox simulates in scene tree order, so every peer has to hold the same order. Join order is not it: a
+        // client spawns its own player before it hears about anyone else, so it ends up with the reverse of the
+        // host's. Two bodies that touch then resolve the collision in a different sequence on each peer - whoever
+        // moves first is blocked by the other's old position - and the two disagree about the result for good.
+        SortPlayers();
+
         // Projectiles live in the world, not under the player, or they would ride along with whoever fired them
         var weapon = player.GetNode<PlayerWeapon>("Weapon");
         weapon.SpawnRoot = ProjectileRoot;
@@ -174,6 +180,13 @@ public partial class Playground : Node3D
 
         if (peer == Multiplayer.GetUniqueId())
             GetNode<PlaygroundCamera>("Camera3D").Follow(player);
+    }
+
+    /// <summary>By name, because the names are the one thing every peer already agrees on.</summary>
+    private void SortPlayers()
+    {
+        var sorted = SpawnRoot.GetChildren().OrderBy(node => node.Name.ToString(), StringComparer.Ordinal).ToList();
+        for (var index = 0; index < sorted.Count; index++) SpawnRoot.MoveChild(sorted[index], index);
     }
 
     private void DespawnPlayer(int peer)

@@ -23,12 +23,45 @@ public partial class MovingPlatform : AnimatableBody3D, IRollbackTick
     /// <summary>Seconds for one full there-and-back.</summary>
     [Export] public float Period { get; set; } = 6.0f;
 
+    /// <summary>Riders look platforms up by this rather than by casting a ray. See <see cref="CarriesAt"/>.</summary>
+    public const string Group = "moving_platforms";
+
     private Vector3 _origin;
+    private Vector3 _halfExtents;
 
     public override void _Ready()
     {
         _origin = Position;
         SyncToPhysics = false;
+        AddToGroup(Group);
+
+        var shape = GetNode<CollisionShape3D>("CollisionShape3D").Shape as BoxShape3D;
+        _halfExtents = (shape?.Size ?? Vector3.One) / 2;
+    }
+
+    /// <summary>
+    /// Whether a point is standing on this platform on a given tick - the test a rider makes before asking to be
+    /// carried.
+    /// <para>
+    /// Deliberately arithmetic rather than a physics query. A query answers from the physics space, which holds the
+    /// transforms of the last physics step and not of the tick being resimulated, so during a rewind it can say "on
+    /// the platform" where the first pass said "off it" - and a rider that is carried on one pass and not on another
+    /// walks away from itself by a tick of platform travel each time. This is a function of the point and the tick,
+    /// which is what a rollback tick is allowed to depend on.
+    /// </para>
+    /// </summary>
+    public bool CarriesAt(Vector3 point, int tick)
+    {
+        // PositionAt is relative to the parent, which is where this node's own Position lives
+        var parent = (GetParent() as Node3D)?.GlobalPosition ?? Vector3.Zero;
+        var centre = parent + PositionAt(tick);
+        var above = point.Y - centre.Y;
+
+        // Standing on the top face rather than passing by underneath it. One player height of headroom is plenty:
+        // a rider's origin sits half its capsule above the surface.
+        return above > 0 && above < 2.0f
+            && Mathf.Abs(point.X - centre.X) <= _halfExtents.X + 0.5f
+            && Mathf.Abs(point.Z - centre.Z) <= _halfExtents.Z + 0.5f;
     }
 
     /// <summary>

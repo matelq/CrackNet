@@ -28,6 +28,7 @@ dotnet build Netfox.csproj                                                # addo
 <godot> --headless --path . res://examples/playground/PlaygroundSmoke.tscn -- --host --seconds=14   # sample, host first
 <godot> --headless --path . res://examples/playground/PlaygroundSmoke.tscn -- --join --seconds=8
 <godot> --headless --path . res://examples/playground/PlatformRideCheck.tscn   # rider stays on the moving platform
+<godot> --headless --path . res://examples/playground/ConvergenceSmoke.tscn -- --host|--join   # two peers agree after colliding; add --on-platform --latency=120 --loss=10 for #35
 ```
 
 The playground scenes are `.tscn` files and are the source of truth. They were generated once by a throwaway script

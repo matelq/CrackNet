@@ -74,6 +74,16 @@ jobs:
           echo "--- host"; cat pg-host.log
           echo "--- client"; cat pg-client.log
           grep -q "ok=True" pg-host.log && grep -q "ok=True" pg-client.log
+      - name: Check two peers agree about each other after a collision
+        run: |
+          "$GODOT" --headless --path . res://examples/playground/ConvergenceSmoke.tscn -- --host > cv-host.log 2>&1 &
+          host=$!
+          sleep 3
+          "$GODOT" --headless --path . res://examples/playground/ConvergenceSmoke.tscn -- --join > cv-client.log 2>&1 || true
+          wait $host || true
+          echo "--- host"; cat cv-host.log
+          echo "--- client"; cat cv-client.log
+          grep -q "ok=True" cv-host.log && grep -q "ok=True" cv-client.log
       - name: Check a player rides the moving platform
         run: $GODOT --headless --path . res://examples/playground/PlatformRideCheck.tscn
       - name: Clone the GDScript original for the parity trace

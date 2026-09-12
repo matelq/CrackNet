@@ -76,6 +76,19 @@ changed go out.
 than from an accumulator, so a resimulated tick puts it exactly where the first pass did. Change it to accumulate
 `delta` instead and ride it: a correction will drag the player off.
 
+**Two players agreeing about each other is checked separately.** `ConvergenceSmoke.tscn` runs two processes, walks
+both players into each other, and then compares what each peer believes on one and the same tick - position, state,
+jumps left, scoreboard. Comparing by tick rather than by wall clock is what makes it meaningful with the platform in
+play, since the platform never stops. Under latency and packet loss it currently fails, which is
+[#35](https://github.com/matelq/netfox-net/issues/35):
+
+```
+godot --headless --path . res://examples/playground/ConvergenceSmoke.tscn -- --host --on-platform --latency=120 --loss=10
+godot --headless --path . res://examples/playground/ConvergenceSmoke.tscn -- --join --on-platform --latency=120 --loss=10
+```
+
+Add `--dump` to have both peers write every tick they recorded, which is how the two runs get diffed.
+
 **Riding it is done by hand, and has to be.** `PlayerCharacter` sets `PlatformFloorLayers = 0` to switch off Godot's
 own moving platform support, and `RideFloor` adds `MovingPlatform.MotionAt(tick)` instead. Godot's version derives
 the platform's velocity per physics frame and applies it inside every `MoveAndSlide`; a rollback runs many ticks per
