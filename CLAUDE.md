@@ -10,7 +10,7 @@ Rule: 1:1 semantics and public API with the original, idiomatic C# inside. When 
 - `addons/netfox.cs/` — the addon (namespace `Netfox`, extras in `Netfox.Extras`). Autoloads expose `Instance`; order is fixed in `Editor/NetfoxPlugin.cs` and `project.godot` (dependencies first).
 - `test/` — Godot-side tests (`TestSuite` + `[Test]`), `Netfox.Core.Tests/` — xUnit.
 - `examples/e2e/` — two-process ENet check; `examples/steam/` — GodotSteam bootstrap under `#if GODOTSTEAM`.
-- Repo root is the Godot project. Godot 4.7 mono binary: `.tools/godot/...console.exe` (gitignored).
+- Repo root is the Godot project. Godot 4.7.2 mono binary: `.tools/godot/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe` (gitignored). Use exactly this version: older editors downgrade the SDK in Netfox.csproj.
 
 ## Commands
 
