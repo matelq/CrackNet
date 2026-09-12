@@ -72,9 +72,11 @@ public partial class Playground : Node3D
         NetworkEvents.Instance.OnPeerJoin += SpawnPlayer;
         NetworkEvents.Instance.OnPeerLeave += DespawnPlayer;
 
-        // The NetworkSimulator in the scene connects the editor's extra instances on its own when autoconnect is on
-        // (Project Settings > Netfox > Autoconnect). It also hosts the latency and loss proxy configured there.
-        var simulator = GetNodeOrNull<NetworkSimulator>("NetworkSimulator");
+        // NetworkSimulator is an autoload, and it connects the editor's extra instances on its own when autoconnect
+        // is on (Project Settings > Netfox > Autoconnect), hosting the latency and loss proxy configured there. It
+        // must not also sit in this scene: a second one hosts or joins a second time and overwrites the peer the
+        // first one just assigned, which leaves both instances connected to nothing.
+        var simulator = GetNodeOrNull<NetworkSimulator>("/root/NetworkSimulator");
         if (simulator is not null)
         {
             simulator.ServerCreated += HandleServerStart;

@@ -11,7 +11,6 @@
 [ext_resource type="Script" path="res://examples/playground/PhysicsTier.cs" id="8_a8fih"]
 [ext_resource type="PackedScene" path="res://examples/playground/crate.tscn" id="9_kx0p6"]
 [ext_resource type="Script" path="res://examples/playground/PlaygroundCamera.cs" id="10_cv6dk"]
-[ext_resource type="Script" path="res://addons/netfox.cs/Extras/NetworkSimulator.cs" id="11_rcrmb"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_8hnew"]
 size = Vector3(40, 1, 40)
@@ -107,9 +106,6 @@ script = ExtResource("10_cv6dk")
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1925929537]
 transform = Transform3D(0.809017, 0.4156269, -0.4156269, 0, 0.70710677, 0.70710677, 0.58778524, -0.5720614, 0.5720614, 0, 0, 0)
 shadow_enabled = true
-
-[node name="NetworkSimulator" type="Node" parent="." unique_id=1710365260]
-script = ExtResource("11_rcrmb")
 
 [node name="UI" type="CanvasLayer" parent="." unique_id=2034200824]
 
