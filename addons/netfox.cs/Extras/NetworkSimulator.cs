@@ -23,7 +23,28 @@ public partial class NetworkSimulator : Node
     public int LatencyMs { get; private set; }
     public double PacketLossPercent { get; private set; }
 
-    private readonly ENetMultiplayerPeer _enetPeer = new();
+    /// <summary>Port clients connect to when the latency and loss proxy is in the way; otherwise <see cref="ServerPort"/>.</summary>
+    public int ProxyPort => _udpProxyPort;
+
+    /// <summary>The port to actually dial: the proxy's when it is running, the server's otherwise.</summary>
+    public int ConnectPort => IsProxyRequired() ? _udpProxyPort : ServerPort;
+
+    /// <summary>
+    /// Creates the peer to host with, or null when this instance could not take the host role - which is what makes
+    /// the next one join instead.
+    /// <para>
+    /// Upstream hardcodes <see cref="ENetMultiplayerPeer"/> (network-simulator.gd:70), so autoconnect is unusable with
+    /// a Steam or loopback peer. Replace these before the simulator enters the tree to autoconnect over any transport.
+    /// The UDP proxy only applies to ENet and is skipped for anything else, since it forwards real UDP packets.
+    /// </para>
+    /// </summary>
+    public static Func<NetworkSimulator, MultiplayerPeer?> HostPeerFactory { get; set; } = CreateENetServer;
+
+    /// <summary>Creates the peer to join with. See <see cref="HostPeerFactory"/>.</summary>
+    public static Func<NetworkSimulator, MultiplayerPeer?> JoinPeerFactory { get; set; } = CreateENetClient;
+
+    /// <summary>The peer the last autoconnect produced, or null if it never got one.</summary>
+    public MultiplayerPeer? Peer { get; private set; }
 
     private Thread? _proxyThread;
     private volatile bool _proxyLoopEnabled = true;
@@ -61,18 +82,65 @@ public partial class NetworkSimulator : Node
 
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         if (!IsInsideTree()) return;
+
+        Connect();
+    }
+
+    /// <summary>
+    /// The autoconnect itself, without the editor and environment guards around it: host if nothing else has, join if
+    /// something has. Assigns the resulting peer to the multiplayer API.
+    /// </summary>
+    internal void Connect()
+    {
         _udpProxyPort = ServerPort + 1;
 
-        var status = TryAndHost();
-        if (status == Error.CantCreate)
-            TryAndJoin();
-        else if (status != Error.Ok)
-            Logger.Error("Autoconnect failed with error - {0}", status);
+        Peer = HostPeerFactory(this);
+        if (Peer is not null)
+        {
+            if (IsProxyRequired()) StartUdpProxy();
+            ServerCreated?.Invoke();
+            Logger.Info("Server started on port {0}", ServerPort);
+        }
+        else
+        {
+            Peer = JoinPeerFactory(this);
+            if (Peer is null)
+            {
+                Logger.Error("Autoconnect could neither host nor join");
+                return;
+            }
 
-        if (UseCompression)
-            _enetPeer.Host.Compress(ENetConnection.CompressionMode.RangeCoder);
+            ClientConnected?.Invoke();
+            Logger.Info("Client connected to {0}:{1}", Hostname, ConnectPort);
+        }
 
-        Multiplayer.MultiplayerPeer = _enetPeer;
+        // Compression is an ENet feature; other transports bring their own, or none
+        if (UseCompression && Peer is ENetMultiplayerPeer enet)
+            enet.Host.Compress(ENetConnection.CompressionMode.RangeCoder);
+
+        Multiplayer.MultiplayerPeer = Peer;
+    }
+
+    private static MultiplayerPeer? CreateENetServer(NetworkSimulator simulator)
+    {
+        var peer = new ENetMultiplayerPeer();
+        var status = peer.CreateServer(simulator.ServerPort);
+        if (status == Error.Ok) return peer;
+
+        // Anything but "the port is taken" is worth saying out loud before we go and join
+        if (status != Error.CantCreate)
+            Logger.Error("Hosting failed with error - {0}", status);
+        return null;
+    }
+
+    private static MultiplayerPeer? CreateENetClient(NetworkSimulator simulator)
+    {
+        var peer = new ENetMultiplayerPeer();
+        var status = peer.CreateClient(simulator.Hostname, simulator.ConnectPort);
+        if (status == Error.Ok) return peer;
+
+        Logger.Error("Joining failed with error - {0}", status);
+        return null;
     }
 
     public override void _ExitTree()
@@ -100,30 +168,6 @@ public partial class NetworkSimulator : Node
     }
 
     private bool IsProxyRequired() => LatencyMs > 0 || PacketLossPercent > 0.0;
-
-    private Error TryAndHost()
-    {
-        var status = _enetPeer.CreateServer(ServerPort);
-        if (status == Error.Ok)
-        {
-            if (IsProxyRequired()) StartUdpProxy();
-            ServerCreated?.Invoke();
-            Logger.Info("Server started on port {0}", ServerPort);
-        }
-        return status;
-    }
-
-    private Error TryAndJoin()
-    {
-        var connectPort = IsProxyRequired() ? _udpProxyPort : ServerPort;
-        var status = _enetPeer.CreateClient(Hostname, connectPort);
-        if (status == Error.Ok)
-        {
-            ClientConnected?.Invoke();
-            Logger.Info("Client connected to {0}:{1}", Hostname, connectPort);
-        }
-        return status;
-    }
 
     // Listens on the proxy port, forwards to the server port with delay and loss, on its own thread
     private void StartUdpProxy()
