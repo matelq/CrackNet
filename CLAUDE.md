@@ -18,6 +18,7 @@ Branches: `reworked` is the default and where work happens; `master` keeps parit
 
 ```
 dotnet test Netfox.slnx                                                   # core tests
+dotnet run -c Release --project Netfox.Core.Benchmarks -- --filter '*'    # core benchmarks (BenchmarkDotNet)
 dotnet build Netfox.csproj                                                # addon + tests
 <godot> --headless --path . res://test/TestRunner.tscn                    # Godot tests, exit 0 = ok
 <godot> --headless --path . res://examples/e2e/E2E.tscn -- --host --seconds=14   # host must outlive the client

@@ -37,3 +37,4 @@ CLAUDE.local.md
 
 # Godot csproj upgrade backups
 *.csproj.old
+BenchmarkDotNet.Artifacts/

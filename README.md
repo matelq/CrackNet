@@ -4,8 +4,8 @@ Native C# port of [netfox](https://github.com/foxssake/netfox) (v1.48.5) for God
 rollback with client-side prediction and server reconciliation, state synchronization, interpolation, and the
 netfox.extras toolbox. No GDScript, no interop layer. The addon folder is `addons/netfox.cs`.
 
-Status: functional and code parity with upstream, verified by 77 core tests, 90 Godot-side tests and a two-process
-ENet run. Steam transport is wired but not yet tested against a live Steam client. Roadmap: [issues](https://github.com/matelq/netfox-net/issues).
+Status: functional and code parity with upstream, verified by 77 core tests, 115 Godot-side tests (including two
+netfox stacks talking to each other in one process) and a two-process ENet run. Steam transport is wired but not yet tested against a live Steam client. Roadmap: [issues](https://github.com/matelq/netfox-net/issues).
 
 ## Layout
 
@@ -14,6 +14,7 @@ ENet run. Steam transport is wired but not yet tested against a live Steam clien
 | `addons/netfox.cs/` | The addon. Copy this folder into your project and reference `Netfox.Core`. |
 | `Netfox.Core/` | Engine-agnostic core (history buffers, snapshots, serialization primitives, clock math). No Godot dependency. |
 | `Netfox.Core.Tests/` | xUnit tests for the core: `dotnet test`. |
+| `Netfox.Core.Benchmarks/` | BenchmarkDotNet cases for the core: history buffer, snapshot merge and diff, serializers, graph. |
 | `test/` | Godot-side tests (servers, nodes, serializers, extras) with a tiny reflection-based runner. |
 | `examples/e2e/` | Two-process ENet end-to-end scene. |
 | `examples/steam/` | Steam lobby bootstrap on GodotSteam + C# bindings, compiled only with `GODOTSTEAM` defined. |
@@ -47,8 +48,9 @@ depending on autoload order. Snapshot sanitization actually drops foreign subjec
 
 ```
 dotnet test Netfox.slnx                                  # 77 core tests
+dotnet run -c Release --project Netfox.Core.Benchmarks -- --filter '*'   # core benchmarks
 dotnet build Netfox.csproj
-godot --headless --path . res://test/TestRunner.tscn     # 90 Godot-side tests, exit code 0 on success
+godot --headless --path . res://test/TestRunner.tscn     # 115 Godot-side tests, exit code 0 on success
 ```
 
 End to end over ENet, two processes:
