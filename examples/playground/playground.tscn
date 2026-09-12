@@ -149,7 +149,7 @@ text = "Join"
 
 [node name="Steam" type="Button" parent="UI/Lobby/Panel/Rows/Buttons" unique_id=641183842]
 layout_mode = 2
-text = "Host on Steam"
+text = "Steam host/join"
 
 [node name="Hint" type="Label" parent="UI/Lobby/Panel/Rows" unique_id=1393215556]
 layout_mode = 2

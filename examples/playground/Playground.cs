@@ -45,7 +45,13 @@ public partial class Playground : Node3D
             _steam.Failed += reason => _status.Text = $"Steam: {reason}";
             _steam.LobbyReady += lobby => _status.Text = $"Steam lobby {lobby} - share this to be joined";
             AddChild(_steam);
-            steamButton.Pressed += () => { _lobby.Hide(); _steam.Host(); };
+            // A lobby id in the address field joins that lobby; anything else hosts a new one
+            steamButton.Pressed += () =>
+            {
+                _lobby.Hide();
+                if (ulong.TryParse(_address.Text, out var lobby)) _steam.Join(lobby);
+                else _steam.Host();
+            };
         }
         else
         {

@@ -96,7 +96,9 @@ and a long resimulation with many bodies will make itself felt.
 
 Install the [GodotSteam GDExtension](https://codeberg.org/godotsteam/godotsteam) into `addons/godotsteam`, put
 `steam_appid.txt` next to the executable (480, Spacewar, for development) and run with the Steam client open. The
-"Host on Steam" button then creates a lobby and hosts inside it; the status line shows the lobby id to share.
+"Steam host/join" button then creates a lobby and hosts inside it, and the status line shows the lobby id to share.
+Paste a lobby id into the address field instead and the same button joins that lobby - Steam overlay invites are not
+wired up, so the id is passed by hand.
 
 netfox itself does not change: once a peer is assigned to `Multiplayer.MultiplayerPeer`, everything behaves as it
 does over ENet. The extension is driven through `ClassDB` rather than through C# bindings, the same way the Rapier
