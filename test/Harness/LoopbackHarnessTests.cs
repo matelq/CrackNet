@@ -267,17 +267,24 @@ public partial class LoopbackHarnessTests : TestSuite
         var idle = await MeasureBandwidth(0);
         var lagging = await MeasureBandwidth(100);
 
-        GD.Print(FormattableString.Invariant(
-            $"BANDWIDTH 2 moving players, no latency: host {idle.HostKbps:F1}KB/s ({idle.PerPlayerTick:F0}B per player per tick), client {idle.ClientKbps:F1}KB/s"));
-        GD.Print(FormattableString.Invariant(
-            $"BANDWIDTH 2 moving players, 100ms latency: host {lagging.HostKbps:F1}KB/s ({lagging.PerPlayerTick:F0}B per player per tick), client {lagging.ClientKbps:F1}KB/s"));
+        Report("no latency", idle);
+        Report("100ms latency", lagging);
+
+        static void Report(string label, (double HostKbps, double ClientKbps, double PerPlayerTick, double HostPps, double HostPacket, double ClientPps, double ClientPacket) m)
+        {
+            var host = FormattableString.Invariant(
+                $"host {m.HostKbps:F1}KB/s = {m.HostPps:F0} packets/s x {m.HostPacket:F0}B ({m.PerPlayerTick:F0}B per player per tick)");
+            var client = FormattableString.Invariant(
+                $"client {m.ClientKbps:F1}KB/s = {m.ClientPps:F0} packets/s x {m.ClientPacket:F0}B");
+            GD.Print($"BANDWIDTH 2 moving players, {label}: {host}, {client}");
+        }
 
         // State is sent once per loop, so resimulating a range must not multiply what goes out
         Expect.True(lagging.PerPlayerTick < idle.PerPlayerTick * 2,
             $"latency should not multiply state traffic: {lagging.PerPlayerTick:F0}B per player per tick against {idle.PerPlayerTick:F0}B without latency");
     }
 
-    private async Task<(double HostKbps, double ClientKbps, double PerPlayerTick)> MeasureBandwidth(int latencyMs)
+    private async Task<(double HostKbps, double ClientKbps, double PerPlayerTick, double HostPps, double HostPacket, double ClientPps, double ClientPacket)> MeasureBandwidth(int latencyMs)
     {
         foreach (var stack in _stacks)
             foreach (var child in stack.GetChildren())
@@ -302,7 +309,9 @@ public partial class LoopbackHarnessTests : TestSuite
         var fromHost = _network.TrafficFrom(1);
         var fromClient = _network.TrafficFrom(2);
 
-        return (fromHost.Bytes / seconds / 1024, fromClient.Bytes / seconds / 1024, fromHost.Bytes / (double)ticks / 2);
+        return (fromHost.Bytes / seconds / 1024, fromClient.Bytes / seconds / 1024, fromHost.Bytes / (double)ticks / 2,
+            fromHost.Packets / seconds, fromHost.Bytes / (double)Math.Max(1, fromHost.Packets),
+            fromClient.Packets / seconds, fromClient.Bytes / (double)Math.Max(1, fromClient.Packets));
     }
 
     private static Dictionary<int, HarnessPlayer> SpawnPlayers(NetfoxStack stack) => new()
