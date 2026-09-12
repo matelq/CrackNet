@@ -11,6 +11,10 @@ namespace Netfox.Examples.Playground;
 /// filter decides before anything is sent.
 /// </para>
 /// <para>
+/// Filters subtract: every one of them has to agree before a peer is visible, and <c>DefaultVisibility</c> is what
+/// applies when none objects. Setting it to false alongside a filter is how to make a node nobody ever receives.
+/// </para>
+/// <para>
 /// The peers it can see are recomputed every tick loop, because this depends on where players are rather than on who
 /// is in the game. The default, <c>OnPeer</c>, would decide once when someone joins and never again.
 /// </para>
@@ -38,7 +42,9 @@ public partial class Beacon : Node3D
         _synchronizer = GetNode<StateSynchronizer>("StateSynchronizer");
         _mesh = GetNode<MeshInstance3D>("MeshInstance3D");
 
-        _synchronizer.VisibilityFilter.DefaultVisibility = false;
+        // DefaultVisibility stays true. A filter can only take visibility away - GetVisibilityFor returns false the
+        // moment any filter says so, and otherwise falls back to the default - so pairing a filter with a default of
+        // false makes the node visible to nobody, ever. The default is the base, the filters carve out of it.
         _synchronizer.VisibilityFilter.UpdateMode = PeerVisibilityFilter.UpdateModeEnum.PerTickLoop;
         _synchronizer.VisibilityFilter.AddVisibilityFilter(IsNear);
 

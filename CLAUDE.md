@@ -47,8 +47,9 @@ zip under `addons/netfox.cs/analyzers/`, and is optional - the interfaces can st
 ## Physics drivers
 
 `examples/physics/RapierCheck.tscn` runs the Rapier driver against a real install; it skips and exits 0 without one.
-To set one up: unzip the `godot-rapier-3d-single` asset from appsinacup/godot-rapier-physics into `addons/`
-(gitignored) and set `physics/3d/physics_engine="Rapier3D"` in project.godot. Stock Godot has no `space_step`, so
+To set one up: `sh tools/install-extensions.sh rapier --enable-rapier`, which unpacks a pinned release into
+`addons/godot-rapier3d` (gitignored) and writes `3d/physics_engine="Rapier3D"` under `[physics]` in project.godot -
+note that project.godot strips the section name from its keys. The same script installs GodotSteam with `steam`. Stock Godot has no `space_step`, so
 `GodotPhysicsDriver2D/3D` report themselves unavailable and only work on a build carrying godotengine/godot PR 76462.
 
 ## Docs

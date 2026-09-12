@@ -158,6 +158,8 @@ Both are what CI runs on every commit, so if either fails on a clean checkout, s
 You do not need this for anything above. The platform, the players and the projectiles are all kinematic, which stock
 Godot handles. Rapier is only for the crates - actual rigid bodies.
 
+`sh tools/install-extensions.sh` installs both in one go, if you want them without reading the rest of this.
+
 Neither Rapier nor GodotSteam ships with this repository, and that is deliberate rather than an omission: both are
 native GDExtensions, which means a separate binary per platform, tens of megabytes, their own licences, and a build
 tied to a particular Godot version. Bundling them would make the release zip platform specific and force everyone
@@ -165,6 +167,13 @@ onto one Godot and one Steam SDK. They are installed per project, which is how G
 
 Stock Godot cannot rewind rigid bodies at all - there is no way to step its physics by hand, so rollback cannot
 resimulate it. Rapier can.
+
+```
+sh tools/install-extensions.sh rapier --enable-rapier
+```
+
+That downloads a pinned release, unpacks it into `addons/godot-rapier3d/`, and sets the physics engine. Restart
+Godot afterwards - an extension is only loaded at startup. By hand instead, if you would rather:
 
 1. Download `godot-rapier-3d-single.zip` from
    [godot-rapier-physics releases](https://github.com/appsinacup/godot-rapier-physics/releases).
@@ -186,13 +195,21 @@ To go back, delete `addons/godot-rapier3d` and set the physics engine to `DEFAUL
 
 ## 7. Optional: hosting through Steam
 
-1. Install and log into the Steam client.
-2. Download the GDExtension from [GodotSteam releases](https://codeberg.org/godotsteam/godotsteam/releases) - the
+Install and log into the Steam client, then:
+
+```
+sh tools/install-extensions.sh steam
+```
+
+That unpacks the extension into `addons/godotsteam/` and writes the `steam_appid.txt` it needs. Restart Godot
+afterwards. By hand instead:
+
+1. Download the GDExtension from [GodotSteam releases](https://codeberg.org/godotsteam/godotsteam/releases) - the
    asset named `...-gdextension-plugin-...zip`, from a `-gde` tag.
-3. Unzip so you have `addons/godotsteam/`.
-4. Put a file named `steam_appid.txt` containing `480` next to the Godot executable. 480 is Valve's Spacewar, the app
-   id everyone develops against before they have their own.
-5. Restart Godot.
+2. Unzip so you have `addons/godotsteam/`.
+3. Put a file named `steam_appid.txt` containing `480` next to the Godot executable and in the project directory.
+   480 is Valve's Spacewar, the app id everyone develops against before they have their own.
+4. Restart Godot.
 
 Check it took:
 

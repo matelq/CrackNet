@@ -103,9 +103,9 @@ arrived. Add `--latency=40 --loss=3` to both to route it through the latency and
 ## Steam
 
 The transport is the [GodotSteam](https://codeberg.org/godotsteam/godotsteam) GDExtension, driven from C# through
-`ClassDB` — no C# bindings involved, the same way the Rapier physics drivers work. Install the extension into
-`addons/godotsteam`, put `steam_appid.txt` next to the executable, and use `examples/steam/SteamLobbyBootstrap.cs` to
-create or join a lobby. `examples/steam/SteamSmoke.tscn` reports whether everything it needs is present.
+`ClassDB` — no C# bindings involved, the same way the Rapier physics drivers work. Run
+`sh tools/install-extensions.sh steam` to install it, then use `examples/steam/SteamLobbyBootstrap.cs` to create or
+join a lobby. `examples/steam/SteamSmoke.tscn` reports whether everything it needs is present.
 
 netfox itself is transport-agnostic: once a peer is assigned, nothing above it knows the difference.
 

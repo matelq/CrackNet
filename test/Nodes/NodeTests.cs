@@ -433,6 +433,27 @@ public partial class PeerVisibilityFilterTests : TestSuite
         filter.Free();
     }
 
+    /// <summary>
+    /// Filters only ever subtract: a filter returning true does not grant visibility, it merely declines to take it
+    /// away, and the default is what is left. Pairing a filter with DefaultVisibility = false therefore hides the
+    /// node from everyone - which reads as a replication bug rather than as filtering, and did exactly that in the
+    /// playground sample's beacon.
+    /// </summary>
+    [Test]
+    public void FilterReturningTrueShouldNotOverrideDefaultInvisibility()
+    {
+        var filter = new PeerVisibilityFilter { DefaultVisibility = false };
+        filter.AddVisibilityFilter(_ => true);
+        filter.UpdateVisibility(Peers);
+        Expect.Empty(filter.GetVisiblePeers());
+
+        // What does work with a default of false is a per-peer override, which is consulted after the filters
+        filter.SetVisibilityFor(3, true);
+        filter.UpdateVisibility(Peers);
+        Expect.SequenceEqual([3], filter.GetVisiblePeers());
+        filter.Free();
+    }
+
     [Test]
     public void FilterShouldHavePrecedenceOverOverride()
     {

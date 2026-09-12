@@ -45,11 +45,27 @@ filter.UnsetVisibilityFor(peer);        // back to the default
 **Default visibility** is the fallback when nothing else has an opinion:
 
 ```csharp
-filter.DefaultVisibility = false;       // hidden unless something says otherwise
+filter.DefaultVisibility = false;       // hidden unless an override says otherwise
 ```
 
-A useful shape for fog of war is `DefaultVisibility = false` plus one callback that answers "can this peer see the
-node right now".
+**Filters only subtract.** This is the one thing worth getting right. `GetVisibilityFor` returns false as soon as any
+filter says false, and otherwise falls through to the override or the default - so a filter that returns `true` does
+not grant visibility, it only declines to take it away. `DefaultVisibility = false` *plus a filter* is a node nobody
+ever receives, and it looks like broken replication rather than like filtering.
+
+So for fog of war, pick one of the two shapes:
+
+```csharp
+// Keep the default visible and let the callback carve peers out. This is what a distance or line of sight check is.
+filter.DefaultVisibility = true;
+filter.AddVisibilityFilter(peer => CanSee(peer));
+```
+
+```csharp
+// Or start from nothing and hand visibility out per peer. Overrides are consulted after the filters, so these work.
+filter.DefaultVisibility = false;
+filter.SetVisibilityFor(peer, true);
+```
 
 ## Update modes
 

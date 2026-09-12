@@ -20,10 +20,29 @@ public partial class PlaygroundSmoke : Node
     // the count is the peak, not the count at the end.
     private int _maxPlayers;
 
+    // How often the beacon's position changed here, and how close this peer's player ever got to it. On a client
+    // the first only moves while the second is inside the beacon's VisibleWithin: that is the visibility filter, and
+    // measuring both is what tells a working filter apart from a beacon that is simply not replicating.
+    private int _beaconMoves;
+    private float _beaconClosest = float.PositiveInfinity;
+    private Vector3 _beaconWas;
+
     public override void _Process(double delta)
     {
         var players = _playground?.GetNodeOrNull("World/Players");
-        if (players is not null) _maxPlayers = Mathf.Max(_maxPlayers, players.GetChildCount());
+        if (players is null) return;
+        _maxPlayers = Mathf.Max(_maxPlayers, players.GetChildCount());
+
+        var beacon = _playground!.GetNode<Beacon>("World/Beacon");
+        if (beacon.Position != _beaconWas)
+        {
+            _beaconWas = beacon.Position;
+            _beaconMoves++;
+        }
+
+        var self = players.GetChildren().OfType<PlayerCharacter>().FirstOrDefault(player => player.IsLocal);
+        if (self is not null)
+            _beaconClosest = Mathf.Min(_beaconClosest, self.GlobalPosition.DistanceTo(beacon.GlobalPosition));
     }
 
     public override async void _Ready()
@@ -62,6 +81,7 @@ public partial class PlaygroundSmoke : Node
     {
         var players = _playground.GetNode("World/Players").GetChildren().OfType<PlayerCharacter>().ToList();
         var platform = _playground.GetNode<MovingPlatform>("World/Platform");
+        var beacon = _playground.GetNode<Beacon>("World/Beacon");
         var self = players.FirstOrDefault(player => player.IsLocal);
 
         var crates = _playground.GetNode("World/Crates").GetChildren().OfType<Node3D>().ToList();
@@ -84,13 +104,16 @@ public partial class PlaygroundSmoke : Node
                  // The scoreboard is replicated without rollback, so both peers see the host's count
                  && scoreboard.Shots > 0
                  // The platform is simulated from the tick, so it is somewhere other than where it started
-                 && Mathf.Abs(platform.Position.X) > 0.1f;
+                 && Mathf.Abs(platform.Position.X) > 0.1f
+                 // The beacon replicates to whoever the visibility filter let through. The host always sees it move,
+                 // it being the one simulating; a client only while it was in range, so that is what is asked of it.
+                 && (_beaconMoves > 0 || _beaconClosest > beacon.VisibleWithin);
 
         var names = string.Join(",", players.Select(player => player.Name));
         var head = $"PLAYGROUND role={(_isHost ? "host" : "client")} ok={ok} peer=#{Multiplayer.GetUniqueId()} " +
                    $"tick={NetworkTime.Instance.Tick} synced={NetworkTime.Instance.IsInitialSyncDone()}";
         var tail = FormattableString.Invariant(
-            $"players=[{names}] peak={_maxPlayers} physics={(physics.Active ? "rapier" : physics.Reason)} crates={crates.Count} state={self?.StateMachine.State} shots={string.Join("/", players.Select(p => p.Weapon.Shots))} score={scoreboard.Shots} platform_x={platform.Position.X:F2} own_pos={self?.Position} jumps={self?.JumpsLeft}");
+            $"players=[{names}] peak={_maxPlayers} physics={(physics.Active ? "rapier" : physics.Reason)} crates={crates.Count} state={self?.StateMachine.State} shots={string.Join("/", players.Select(p => p.Weapon.Shots))} score={scoreboard.Shots} platform_x={platform.Position.X:F2} own_pos={self?.Position} jumps={self?.JumpsLeft} beacon_moves={_beaconMoves} beacon_closest={_beaconClosest:F1}/{beacon.VisibleWithin:F0}");
         GD.Print($"{head} {tail}");
 
         GetTree().Quit(ok ? 0 : 1);

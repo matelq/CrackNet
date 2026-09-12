@@ -36,6 +36,16 @@ public partial class RapierCheck : Node3D
         }
 
         var engine = (string)ProjectSettings.GetSetting("physics/3d/physics_engine", "DEFAULT");
+        if (engine != "Rapier3D")
+        {
+            // The extension can be installed while Godot still owns the space, and then the driver steps a space
+            // with no Rapier state behind it: nothing falls, and the run looks broken rather than unconfigured
+            GD.Print($"RAPIER CHECK skipped=True reason=physics-engine-is-{engine} " +
+                     "fix=set physics/3d/physics_engine=\"Rapier3D\" in project.godot");
+            GetTree().Quit(0);
+            return;
+        }
+
         GD.Print($"RAPIER CHECK engine={engine}");
 
         var ground = new StaticBody3D { Name = "Ground", Position = new Vector3(0, -4, 0) };
