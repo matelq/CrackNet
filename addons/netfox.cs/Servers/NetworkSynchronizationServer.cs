@@ -240,11 +240,12 @@ public partial class NetworkSynchronizationServer : Node
     }
 
     /// <summary>Snapshot to send to <paramref name="peer"/>: only visible subjects and their auth properties.</summary>
-    internal Snapshot MakePeerSnapshot(Snapshot snapshot, int peer, PropertyPool properties)
+    internal Snapshot MakePeerSnapshot(Snapshot snapshot, int peer, PropertyPool properties, Func<Node, bool>? include = null)
     {
         var result = new Snapshot(snapshot.Tick);
         foreach (var subject in properties.Subjects)
         {
+            if (include is not null && !include(subject)) continue;
             if (!IsNodeVisibleTo(peer, subject)) continue;
             if (!snapshot.IsAuth(subject)) continue;
 
@@ -312,7 +313,46 @@ public partial class NetworkSynchronizationServer : Node
         }
     }
 
-    internal void SynchronizeState(int tick)
+    /// <summary>
+    /// Sends every subject at the newest tick of the range it is authoritative for, rather than all of them at the
+    /// newest tick of the range.
+    /// <para>
+    /// The distinction is the difference between working and not. State is only sent for subjects the sender is
+    /// authoritative for, and a node driven by a remote peer's input is <i>predicted</i> at the newest tick - that
+    /// peer's input for it is still a round trip away - so it is not authoritative there and nothing goes out for it.
+    /// Sending only the newest tick therefore sent such a node nothing at all, ever, and the peer driving it never
+    /// converged (netfox-net#35).
+    /// </para>
+    /// <para>
+    /// Upstream sends every tick of the range instead (network-rollback.gd:429), which is correct but multiplies
+    /// state traffic by the length of the range, every frame (#29). One tick per distinct answer is both: two, in a
+    /// session where the host drives its own player and one remote player.
+    /// </para>
+    /// </summary>
+    internal void SynchronizeStateRange(int fromTick, int toTick)
+    {
+        if (_rbOwnedStateProperties.IsEmpty) return;
+
+        var history = _historyServer ?? Context.NetworkHistoryServer;
+        var subjects = _rbOwnedStateProperties.Subjects;
+        var newest = new Dictionary<Node, int>(ReferenceEqualityComparer.Instance);
+
+        for (var tick = toTick; tick >= fromTick && newest.Count < subjects.Count; tick--)
+        {
+            var snapshot = history.GetRollbackStateSnapshot(tick);
+            if (snapshot is null) continue;
+
+            foreach (var subject in subjects)
+                if (!newest.ContainsKey(subject) && snapshot.IsAuth(subject))
+                    newest[subject] = tick;
+        }
+
+        // Oldest first, so each peer's diff baseline is written in the order it will be read back in
+        foreach (var tick in newest.Values.Distinct().OrderBy(value => value))
+            SynchronizeState(tick, subject => newest.TryGetValue(subject, out var at) && at == tick);
+    }
+
+    internal void SynchronizeState(int tick, Func<Node, bool>? include = null)
     {
         if (_rbOwnedStateProperties.IsEmpty) return;
 
@@ -325,7 +365,7 @@ public partial class NetworkSynchronizationServer : Node
 
         foreach (var peer in Multiplayer.GetPeers())
         {
-            var peerSnapshot = MakePeerSnapshot(snapshot, peer, _rbOwnedStateProperties);
+            var peerSnapshot = MakePeerSnapshot(snapshot, peer, _rbOwnedStateProperties, include);
             if (peerSnapshot.IsEmpty) continue;
 
             var reference = GetLastSentRollbackState(peer, tick);

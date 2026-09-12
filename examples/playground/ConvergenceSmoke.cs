@@ -124,6 +124,17 @@ public partial class ConvergenceSmoke : Node
 
         NetworkTime.Instance.AfterTickLoop += Record;
 
+        // What actually arrives over the wire for each player, so "the state never got here" can be told apart from
+        // "the state got here and was not applied"
+        if (_dump)
+            NetworkSynchronizationServer.Instance.OnState += snapshot =>
+            {
+                foreach (var player in Ordered())
+                    if (snapshot.TryGetProperty(player, "position", out var value))
+                        _received.Add(FormattableString.Invariant(
+                            $"{snapshot.Tick},{player.Name},{value.AsVector3().X:F4},{value.AsVector3().Y:F4},{value.AsVector3().Z:F4},recv,0"));
+            };
+
         if (!await WaitFor(() => _players.GetChildCount() >= 2 && NetworkTime.Instance.IsInitialSyncDone(), 15))
         {
             Report(false, $"never saw two synchronized players (peer #{Multiplayer.GetUniqueId()})");
@@ -333,9 +344,15 @@ public partial class ConvergenceSmoke : Node
         GetTree().Quit(ok ? 0 : 1);
     }
 
+    private readonly List<string> _received = new();
+
     /// <summary>Every tick this peer recorded, so the two runs can be diffed to find where they first parted.</summary>
     private void Dump()
     {
+        using (var incoming = FileAccess.Open($"user://received-{(_isHost ? "host" : "client")}.csv", FileAccess.ModeFlags.Write))
+            if (incoming is not null)
+                foreach (var line in _received) incoming.StoreLine(line);
+
         var path = $"user://convergence-{(_isHost ? "host" : "client")}.csv";
         using var file = FileAccess.Open(path, FileAccess.ModeFlags.Write);
         if (file is null) return;

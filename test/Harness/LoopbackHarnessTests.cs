@@ -141,8 +141,46 @@ public partial class LoopbackHarnessTests : HarnessSuite
         var ticks = Host.Context.NetworkTime.Tick - firstTick;
         var packets = states - firstStates;
 
-        Expect.True(packets <= ticks * 1.5,
-            $"{packets} state packets for {ticks} host ticks: state is being re-sent for resimulated ticks");
+        // The ceiling is one packet per subject per tick: each subject is sent once per loop, at the newest tick it
+        // is authoritative for, and two subjects driven by different peers rarely share that tick. What this rules
+        // out is the range length multiplying it - at 150ms the host resimulates about five ticks every frame.
+        var subjects = Host.Context.NetworkSynchronizationServer.OwnedRollbackStateProperties.Subjects.Count;
+        Expect.True(packets <= ticks * subjects,
+            $"{packets} state packets for {ticks} host ticks over {subjects} subjects: state is being re-sent for resimulated ticks");
+    }
+
+    /// <summary>
+    /// The peer driving a node has to receive the authority's state for it, and that is not the same question as
+    /// whether state arrives at all.
+    /// <para>
+    /// State is only sent for subjects the sender is authoritative for, and the authority is <i>predicting</i> a node
+    /// driven by a remote peer on the newest tick - that peer's input has not arrived yet. So the newest tick alone
+    /// carries every node except the ones whose drivers most need it, and a client can receive thousands of updates
+    /// about everyone else while never being told once where its own player is (netfox-net#35).
+    /// </para>
+    /// </summary>
+    [Test]
+    public async Task StateReachesThePeerDrivingTheNode()
+    {
+        Network.LatencyMs = 150;
+
+        SpawnPlayers(Host);
+        var clientPlayers = SpawnPlayers(Client);
+
+        var ownStates = 0;
+        var otherStates = 0;
+        Client.Context.NetworkSynchronizationServer.OnState += snapshot =>
+        {
+            if (snapshot.TryGetProperty(clientPlayers[2], "position", out _)) ownStates++;
+            if (snapshot.TryGetProperty(clientPlayers[1], "position", out _)) otherStates++;
+        };
+
+        await WaitUntil(() => ownStates > 5 && otherStates > 5, 8);
+
+        Expect.True(otherStates > 5, $"client received {otherStates} states for the host's player");
+        Expect.True(ownStates > 5,
+            $"client received {otherStates} states for the host's player and {ownStates} for its own: the node it " +
+            "drives is predicted on the newest tick, so only sending that tick never tells it anything");
     }
 
     [Test]

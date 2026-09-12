@@ -316,7 +316,11 @@ public partial class NetworkRollback : Node
         // Send state once per loop, for the newest tick only. Upstream sends inside the loop (network-rollback.gd:429),
         // so resimulating a range re-broadcasts every tick in it, every frame, to every peer; the corrections are
         // already contained in the newest tick's state. See foxssake/netfox#630.
-        if (to > from) synchronization.SynchronizeState(to);
+        // Send state once per loop rather than once per resimulated tick as upstream does (network-rollback.gd:429),
+        // which re-broadcasts the whole range every frame. Not the newest tick alone, though: a node driven by a
+        // remote peer is still predicted there, predicted state is not sent, and that node then never reached the
+        // peer driving it at all. SynchronizeStateRange sends each subject at the newest tick it is real for.
+        if (to > from) synchronization.SynchronizeStateRange(from + 1, to);
 
         // Restore display state
         _rollbackStage = StageAfter;
