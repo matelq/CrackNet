@@ -9,6 +9,8 @@ peers, authority, RPCs - and not much else.
 
 ## Start here
 
+0. **[Getting started](getting-started.md)** - a rollback-networked character from nothing, ending where
+   `examples/playground` begins.
 1. **[NetworkTime and the tick loop](network-time.md)** - the fixed-rate clock everything hangs off, what runs in
    what order, and why reading the frame clock inside a tick breaks things.
 2. **[RollbackSynchronizer](rollback-synchronizer.md)** - the node that makes a subtree rewindable. State versus
@@ -24,6 +26,7 @@ Then, as you need them:
   committing to anything you cannot take back.
 - **[Network schemas](network-schemas.md)** - telling netfox how to encode a property, once bandwidth matters.
 - **[Visibility filters](visibility-filters.md)** - deciding per peer what gets replicated at all.
+- **[API reference](api.md)** - every public type and member with its summary, generated from the XML doc comments.
 
 ## Learning by running something
 
@@ -56,4 +59,5 @@ Two things that are easy to get wrong coming from GDScript:
 - **`Variant` has no value equality.** Use `VariantComparer` or `Snapshot.ValueComparer` when comparing replicated
   values.
 
-Deliberate deviations from upstream's design, and the reasoning behind each, are listed in the migration notes.
+The full table, the three things that catch GDScript users out, and every deliberate deviation with its reasoning
+are in the **[migration notes](migration.md)**.

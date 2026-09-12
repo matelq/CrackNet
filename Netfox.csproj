@@ -6,6 +6,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Netfox</RootNamespace>
     <LangVersion>latest</LangVersion>
+    <!-- Feeds docs/generate-api.py. CS1591 off: the summaries that matter are written, not every member. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="Netfox.Core/**;Netfox.Core.Tests/**;Netfox.Core.Benchmarks/**;Netfox.SourceGenerators/**;netfox/**;.tools/**;.godot/**" />

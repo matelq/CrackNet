@@ -50,6 +50,13 @@ To set one up: unzip the `godot-rapier-3d-single` asset from appsinacup/godot-ra
 (gitignored) and set `physics/3d/physics_engine="Rapier3D"` in project.godot. Stock Godot has no `space_step`, so
 `GodotPhysicsDriver2D/3D` report themselves unavailable and only work on a build carrying godotengine/godot PR 76462.
 
+## Docs
+
+`docs/` holds the guides, written for C# users of the library rather than for this repo. `docs/api.md` is generated:
+`dotnet build Netfox.csproj` then `python docs/generate-api.py`. Regenerate it when public API or its XML comments
+change. Both projects have `GenerateDocumentationFile` on with CS1591 suppressed, so the XML exists without demanding
+a comment on every member.
+
 ## Parity against the original
 
 `sh parity/run-parity.sh` runs the same scene against the GDScript original in `netfox/` and against this port, and
