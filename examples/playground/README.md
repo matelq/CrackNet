@@ -56,6 +56,12 @@ adds one distance check per peer, recomputed every tick loop rather than on join
 where people are, not on who is in the game. Without filtering, a client receives everything and no amount of hiding
 it on screen changes that.
 
+**The player carries a network schema.** `PlayerCharacter.ApplySchema` tells netfox how to encode each property
+rather than leaving it on the general-purpose variant encoding, which carries a type tag per value and sizes
+everything for the worst case. Both peers have to agree, which is why it is code both run rather than a scene
+setting. Only the input direction is lossy: half precision on a value that never accumulates is invisible, while a
+velocity that gathers gravity over many ticks is not the place for it.
+
 **The status line shows the netfox monitors.** `props sent/full` is what diff states buy: only the properties that
 changed go out.
 

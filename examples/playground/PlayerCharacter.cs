@@ -55,6 +55,8 @@ public partial class PlayerCharacter : CharacterBody3D
         Gravity = (float)(double)ProjectSettings.GetSetting("physics/3d/default_gravity", 9.8);
         JumpsLeft = MaxJumps;
 
+        ApplySchema();
+
         // Set here rather than in the scene: the machine collects its states as children are added, which happens
         // after a scene sets the node's own properties, so a State written into the .tscn would find nothing.
         // Deferred, because whether the machine has collected its children yet depends on notification order, and
@@ -80,6 +82,25 @@ public partial class PlayerCharacter : CharacterBody3D
     }
 
     private bool _fireHeld;
+
+    /// <summary>
+    /// Tells netfox how to encode each property instead of leaving it on the general-purpose variant encoding, which
+    /// carries a type tag per value and sizes everything for the worst case.
+    /// <para>
+    /// Both peers have to agree, which is why this is code both of them run rather than a scene setting. Anything not
+    /// listed stays on variant. Only the input direction is lossy here: half precision on a value that never
+    /// accumulates is invisible, while a velocity that gathers gravity over many ticks is not the place for it.
+    /// </para>
+    /// </summary>
+    private void ApplySchema() => Synchronizer.SetSchema(new Dictionary<string, NetworkSchemaSerializer>
+    {
+        [":position"] = NetworkSchemas.Vec3F32(),
+        [":velocity"] = NetworkSchemas.Vec3F32(),
+        [":JumpsLeft"] = NetworkSchemas.Uint8(),
+        [":JumpHeld"] = NetworkSchemas.Bool8(),
+        ["Input:Movement"] = NetworkSchemas.Vec2F16(),
+        ["Input:Jump"] = NetworkSchemas.Bool8(),
+    });
 
     /// <summary>Horizontal movement from this tick's input, keeping the vertical component it was handed.</summary>
     public Vector3 WithInput(Vector3 velocity)
