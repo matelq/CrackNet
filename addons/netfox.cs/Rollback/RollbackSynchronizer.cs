@@ -39,8 +39,9 @@ public partial class RollbackSynchronizer : BaseSynchronizer
     [ExportGroup("Inputs")]
     [Export] public string[] InputProperties { get; set; } = [];
 
-    /// <summary>Controls which peers receive state. Added as a child automatically.</summary>
-    public PeerVisibilityFilter VisibilityFilter { get; set; } = new();
+    /// <summary>Controls which peers receive state. Added as a child automatically, under its own name so that it
+    /// reads as itself in a saved scene rather than as a generated one.</summary>
+    public PeerVisibilityFilter VisibilityFilter { get; set; } = new() { Name = "PeerVisibilityFilter" };
 
     /// <summary>Tick the managed nodes came to life. Defaults to the tick after entering the tree.</summary>
     public int SpawnTick { get; set; } = -1;
@@ -272,7 +273,7 @@ public partial class RollbackSynchronizer : BaseSynchronizer
         };
         rollback.BeforeLoop += _spawnResimHandler;
 
-        VisibilityFilter ??= new PeerVisibilityFilter();
+        VisibilityFilter ??= new PeerVisibilityFilter { Name = "PeerVisibilityFilter" };
         if (VisibilityFilter.GetParent() is null)
             AddChild(VisibilityFilter);
     }

@@ -1,0 +1,116 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://examples/playground/Playground.cs" id="1_mf1vj"]
+[ext_resource type="PackedScene" path="res://examples/playground/player.tscn" id="2_iqxcq"]
+[ext_resource type="Script" path="res://examples/playground/MovingPlatform.cs" id="3_7tofo"]
+[ext_resource type="Script" path="res://addons/netfox.cs/Rollback/RollbackSynchronizer.cs" id="4_nf6v4"]
+[ext_resource type="Script" path="res://examples/playground/PlaygroundCamera.cs" id="5_5edy7"]
+[ext_resource type="Script" path="res://addons/netfox.cs/Extras/NetworkSimulator.cs" id="6_v1cmp"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_sbxnr"]
+size = Vector3(40, 1, 40)
+
+[sub_resource type="BoxMesh" id="BoxMesh_o1lki"]
+size = Vector3(40, 1, 40)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_m2yo0"]
+size = Vector3(4, 0.4, 4)
+
+[sub_resource type="BoxMesh" id="BoxMesh_0x2dt"]
+size = Vector3(4, 0.4, 4)
+
+[node name="Playground" type="Node3D" unique_id=216367155 node_paths=PackedStringArray("SpawnRoot")]
+script = ExtResource("1_mf1vj")
+PlayerScene = ExtResource("2_iqxcq")
+SpawnRoot = NodePath("World/Players")
+
+[node name="World" type="Node3D" parent="." unique_id=1895238671]
+
+[node name="Ground" type="StaticBody3D" parent="World" unique_id=443241001]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="World/Ground" unique_id=1042440570]
+shape = SubResource("BoxShape3D_sbxnr")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="World/Ground" unique_id=1478762688]
+mesh = SubResource("BoxMesh_o1lki")
+
+[node name="Platform" type="AnimatableBody3D" parent="World" unique_id=869492656]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -6)
+script = ExtResource("3_7tofo")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="World/Platform" unique_id=1767820789]
+shape = SubResource("BoxShape3D_m2yo0")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="World/Platform" unique_id=1653832551]
+mesh = SubResource("BoxMesh_0x2dt")
+
+[node name="RollbackSynchronizer" type="Node" parent="World/Platform" unique_id=819327122 node_paths=PackedStringArray("Root")]
+script = ExtResource("4_nf6v4")
+Root = NodePath("..")
+StateProperties = PackedStringArray(":position")
+
+[node name="Players" type="Node3D" parent="World" unique_id=1509370444]
+
+[node name="Camera3D" type="Camera3D" parent="." unique_id=1695306053]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 8, 12)
+script = ExtResource("5_5edy7")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=435132478]
+transform = Transform3D(0.809017, 0.4156269, -0.4156269, 0, 0.70710677, 0.70710677, 0.58778524, -0.5720614, 0.5720614, 0, 0, 0)
+shadow_enabled = true
+
+[node name="NetworkSimulator" type="Node" parent="." unique_id=1266179667]
+script = ExtResource("6_v1cmp")
+
+[node name="UI" type="CanvasLayer" parent="." unique_id=277861625]
+
+[node name="Status" type="Label" parent="UI" unique_id=1559606190]
+anchors_preset = 10
+anchor_right = 1.0
+offset_left = 12.0
+offset_top = 8.0
+offset_right = -12.0
+text = "Not connected"
+
+[node name="Lobby" type="Control" parent="UI" unique_id=623420548]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="Panel" type="PanelContainer" parent="UI/Lobby" unique_id=546171319]
+custom_minimum_size = Vector2(280, 0)
+layout_mode = 0
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+
+[node name="Rows" type="VBoxContainer" parent="UI/Lobby/Panel" unique_id=92086884]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="UI/Lobby/Panel/Rows" unique_id=487424651]
+layout_mode = 2
+text = "netfox.cs playground"
+
+[node name="Address" type="LineEdit" parent="UI/Lobby/Panel/Rows" unique_id=886940914]
+layout_mode = 2
+text = "127.0.0.1"
+placeholder_text = "address to join"
+
+[node name="Buttons" type="HBoxContainer" parent="UI/Lobby/Panel/Rows" unique_id=690715473]
+layout_mode = 2
+
+[node name="Host" type="Button" parent="UI/Lobby/Panel/Rows/Buttons" unique_id=721099572]
+layout_mode = 2
+text = "Host"
+
+[node name="Join" type="Button" parent="UI/Lobby/Panel/Rows/Buttons" unique_id=421743557]
+layout_mode = 2
+text = "Join"
+
+[node name="Hint" type="Label" parent="UI/Lobby/Panel/Rows" unique_id=1812231199]
+layout_mode = 2
+text = "Arrows or WASD to move, Space to jump (twice).
+Ride the platform to see prediction at work."

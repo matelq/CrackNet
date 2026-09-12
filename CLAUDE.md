@@ -11,7 +11,9 @@ Branches: `reworked` is the default and where work happens; `master` keeps parit
 - `addons/netfox.cs/` — the addon (namespace `Netfox`, extras in `Netfox.Extras`). Autoloads expose `Instance`; order is fixed in `Editor/NetfoxPlugin.cs` and `project.godot` (dependencies first).
 - `test/` — Godot-side tests (`TestSuite` + `[Test]`), `Netfox.Core.Tests/` — xUnit. `test/Harness/` runs two stacks in one tree over a loopback peer (reworked).
 - `NetfoxContext` (reworked only): servers register into `NetfoxContext.Default`; a `NetfoxContextRoot` node gives its subtree a second stack. Nodes resolve `Context` in `_EnterTree`; `Instance` still points at the default stack.
-- `examples/e2e/` — two-process ENet check; `examples/steam/` — GodotSteam bootstrap under `#if GODOTSTEAM`.
+- `examples/e2e/` — two-process ENet check; `examples/steam/` — GodotSteam bootstrap under `#if GODOTSTEAM`;
+  `examples/playground/` — the scene-based sample (see its README), driven headless by `PlaygroundSmoke.tscn` in CI;
+  `examples/parity/` and `examples/physics/` — the checks below.
 - Repo root is the Godot project. Godot 4.7.2 mono binary: `.tools/godot/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe` (gitignored). Use exactly this version: older editors downgrade the SDK in Netfox.csproj.
 
 ## Commands
@@ -23,7 +25,15 @@ dotnet build Netfox.csproj                                                # addo
 <godot> --headless --path . res://test/TestRunner.tscn                    # Godot tests, exit 0 = ok
 <godot> --headless --path . res://examples/e2e/E2E.tscn -- --host --seconds=14   # host must outlive the client
 <godot> --headless --path . res://examples/e2e/E2E.tscn -- --join --seconds=10  # add --latency=40 --loss=3 on both for the proxy run
+<godot> --headless --path . res://examples/playground/PlaygroundSmoke.tscn -- --host --seconds=14   # sample, host first
+<godot> --headless --path . res://examples/playground/PlaygroundSmoke.tscn -- --join --seconds=8
 ```
+
+The playground scenes are `.tscn` files and are the source of truth. They were generated once by a throwaway script
+rather than typed by hand; to change them, edit in the editor, or rebuild the tree in code and `ResourceSaver.Save` it.
+Two traps if you do: a node only lands in a packed scene when its `Owner` is the scene root, and Godot binds one
+Node-derived class per `.cs` file, named after the file - a second class in the same file silently gets an empty
+embedded script.
 
 ## Property attributes
 
