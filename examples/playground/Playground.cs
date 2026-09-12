@@ -19,6 +19,8 @@ public partial class Playground : Node3D
     [Export] public int Port { get; set; } = 9999;
 
     private PhysicsTier _physics = null!;
+    private Scoreboard _scoreboard = null!;
+    private Steam.SteamLobbyBootstrap? _steam;
     private LineEdit _address = null!;
     private Control _lobby = null!;
     private Label _status = null!;
@@ -27,12 +29,31 @@ public partial class Playground : Node3D
     public override void _Ready()
     {
         _physics = GetNode<PhysicsTier>("PhysicsTier");
+        _scoreboard = GetNode<Scoreboard>("World/Scoreboard");
         _lobby = GetNode<Control>("UI/Lobby");
         _address = GetNode<LineEdit>("UI/Lobby/Panel/Rows/Address");
         _status = GetNode<Label>("UI/Status");
 
         GetNode<Button>("UI/Lobby/Panel/Rows/Buttons/Host").Pressed += Host;
         GetNode<Button>("UI/Lobby/Panel/Rows/Buttons/Join").Pressed += Join;
+
+        // The Steam tier: present only when the GodotSteam extension is installed, so the button says so otherwise
+        var steamButton = GetNode<Button>("UI/Lobby/Panel/Rows/Buttons/Steam");
+        if (Steam.SteamLobbyBootstrap.IsAvailable)
+        {
+            _steam = new Steam.SteamLobbyBootstrap { Name = "SteamLobbyBootstrap" };
+            _steam.Failed += reason => _status.Text = $"Steam: {reason}";
+            _steam.LobbyReady += lobby => _status.Text = $"Steam lobby {lobby} - share this to be joined";
+            AddChild(_steam);
+            steamButton.Pressed += () => { _lobby.Hide(); _steam.Host(); };
+        }
+        else
+        {
+            steamButton.Disabled = true;
+            steamButton.TooltipText = "GodotSteam is not installed";
+        }
+
+        GetNode<Beacon>("World/Beacon").PlayerRoot = SpawnRoot;
 
         // NetworkEvents starts and stops the tick loop with the session, so nothing here has to
         NetworkEvents.Instance.OnServerStart += HandleServerStart;
@@ -65,8 +86,16 @@ public partial class Playground : Node3D
 
         var rollback = NetworkRollback.Instance;
         var physics = _physics.Active ? "rapier" : $"kinematic ({_physics.Reason})";
+        var performance = NetworkPerformance.Instance;
+
+        // Sent against full is what diff states buy: only the properties that changed go out
+        var traffic = performance.IsEnabled()
+            ? $"  props {performance.GetSentStatePropsCount()}/{performance.GetFullStatePropsCount()}"
+            : "";
+
         _status.Text = $"peer #{Multiplayer.GetUniqueId()}  tick {NetworkTime.Instance.Tick}  " +
-                       $"players {_players.Count}  rollback {rollback.RollbackFrom}>{rollback.Tick}  physics {physics}";
+                       $"players {_players.Count}  shots {_scoreboard.Shots}  " +
+                       $"rollback {rollback.RollbackFrom}>{rollback.Tick}  physics {physics}{traffic}";
     }
 
     private void Host()
@@ -124,7 +153,11 @@ public partial class Playground : Node3D
         _players[peer] = player;
 
         // Projectiles live in the world, not under the player, or they would ride along with whoever fired them
-        player.GetNode<PlayerWeapon>("Weapon").SpawnRoot = ProjectileRoot;
+        var weapon = player.GetNode<PlayerWeapon>("Weapon");
+        weapon.SpawnRoot = ProjectileRoot;
+
+        // The host owns the scoreboard, so only it counts; every peer raises the event for its own accepted shots
+        weapon.Fired += _scoreboard.CountShot;
 
         if (peer == Multiplayer.GetUniqueId())
             GetNode<PlaygroundCamera>("Camera3D").Follow(player);

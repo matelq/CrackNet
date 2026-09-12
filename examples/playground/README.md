@@ -42,6 +42,23 @@ despawns projectiles, so `Projectile` gives up after a fixed number of ticks by 
 Note where the firing happens: in `_Process`, on the peer that owns the input, and not in a rollback tick. The weapon
 sends an RPC, and a rollback tick runs again for every resimulated tick - which would fire again each time.
 
+**The tolerance on a shot has to cover the round trip.** `NetworkWeapon3D` accepts a shot when the shooter and the
+authority agree about where it came from within `DistanceThreshold`. The default is one metre, and at 5 m/s with ten
+ticks of lag a player has already moved 1.6 - so ordinary shots get rejected. The sample sets three.
+
+**Not everything replicated is rollback state.** The scoreboard is a `StateSynchronizer`, not a
+`RollbackSynchronizer`: the host decides it, it only goes up, and no rewind should ever take a shot back. The rule of
+thumb is whether resimulating a tick could legitimately produce a different value. If it could, it is rollback state;
+if not, a StateSynchronizer is less machinery and cannot be corrected into something surprising.
+
+**The beacon is only replicated to players standing near it.** Its `PeerVisibilityFilter` defaults to invisible and
+adds one distance check per peer, recomputed every tick loop rather than on join - because who can see it depends on
+where people are, not on who is in the game. Without filtering, a client receives everything and no amount of hiding
+it on screen changes that.
+
+**The status line shows the netfox monitors.** `props sent/full` is what diff states buy: only the properties that
+changed go out.
+
 **The platform is what makes misprediction visible.** `MovingPlatform` computes its position from the tick rather
 than from an accumulator, so a resimulated tick puts it exactly where the first pass did. Change it to accumulate
 `delta` instead and ride it: a correction will drag the player off.
@@ -66,6 +83,16 @@ Two things worth knowing. Rapier's single build per dimension is already cross p
 determinism option to hunt for. And a rewind steps the whole space again for every tick of the range, so it is much
 more expensive than kinematic rollback: the tier uses one physics step per tick rather than the driver's default two,
 and a long resimulation with many bodies will make itself felt.
+
+### Steam: hosting through a lobby
+
+Install the [GodotSteam GDExtension](https://codeberg.org/godotsteam/godotsteam) into `addons/godotsteam`, put
+`steam_appid.txt` next to the executable (480, Spacewar, for development) and run with the Steam client open. The
+"Host on Steam" button then creates a lobby and hosts inside it; the status line shows the lobby id to share.
+
+netfox itself does not change: once a peer is assigned to `Multiplayer.MultiplayerPeer`, everything behaves as it
+does over ENet. The extension is driven through `ClassDB` rather than through C# bindings, the same way the Rapier
+driver is.
 
 ## Latency and loss
 

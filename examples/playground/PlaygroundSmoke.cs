@@ -64,6 +64,10 @@ public partial class PlaygroundSmoke : Node
         var platform = _playground.GetNode<MovingPlatform>("World/Platform");
         var self = players.FirstOrDefault(player => player.IsLocal);
 
+        var crates = _playground.GetNode("World/Crates").GetChildren().OfType<Node3D>().ToList();
+        var scoreboard = _playground.GetNode<Scoreboard>("World/Scoreboard");
+        var physics = _playground.GetNode<PhysicsTier>("PhysicsTier");
+
         var ok = NetworkTime.Instance.IsInitialSyncDone()
                  // Run as a pair, so both sides have to have seen both players at some point
                  && _maxPlayers >= 2
@@ -77,16 +81,16 @@ public partial class PlaygroundSmoke : Node
                  // Each peer fires its own player, and the shot has to have been accepted. Whether the other peer's
                  // shot is seen depends on who was connected when - the host fires before the client has joined.
                  && self.Weapon.Shots > 0
+                 // The scoreboard is replicated without rollback, so both peers see the host's count
+                 && scoreboard.Shots > 0
                  // The platform is simulated from the tick, so it is somewhere other than where it started
                  && Mathf.Abs(platform.Position.X) > 0.1f;
 
-        var crates = _playground.GetNode("World/Crates").GetChildren().OfType<Node3D>().ToList();
-        var physics = _playground.GetNode<PhysicsTier>("PhysicsTier");
         var names = string.Join(",", players.Select(player => player.Name));
         var head = $"PLAYGROUND role={(_isHost ? "host" : "client")} ok={ok} peer=#{Multiplayer.GetUniqueId()} " +
                    $"tick={NetworkTime.Instance.Tick} synced={NetworkTime.Instance.IsInitialSyncDone()}";
         var tail = FormattableString.Invariant(
-            $"players=[{names}] peak={_maxPlayers} physics={(physics.Active ? "rapier" : physics.Reason)} crates={crates.Count} state={self?.StateMachine.State} shots={string.Join("/", players.Select(p => p.Weapon.Shots))} platform_x={platform.Position.X:F2} own_pos={self?.Position} jumps={self?.JumpsLeft}");
+            $"players=[{names}] peak={_maxPlayers} physics={(physics.Active ? "rapier" : physics.Reason)} crates={crates.Count} state={self?.StateMachine.State} shots={string.Join("/", players.Select(p => p.Weapon.Shots))} score={scoreboard.Shots} platform_x={platform.Position.X:F2} own_pos={self?.Position} jumps={self?.JumpsLeft}");
         GD.Print($"{head} {tail}");
 
         GetTree().Quit(ok ? 0 : 1);

@@ -1,0 +1,70 @@
+using Godot;
+
+namespace Netfox.Examples.Playground;
+
+/// <summary>
+/// A marker that circles the arena and is only replicated to players standing near it, through the
+/// <c>PeerVisibilityFilter</c> on its <c>StateSynchronizer</c>.
+/// <para>
+/// This is what visibility filtering is for. Without it, every peer receives every replicated property, and a client
+/// that is not allowed to see something still has the data - no amount of hiding it on screen changes that. The
+/// filter decides before anything is sent.
+/// </para>
+/// <para>
+/// The peers it can see are recomputed every tick loop, because this depends on where players are rather than on who
+/// is in the game. The default, <c>OnPeer</c>, would decide once when someone joins and never again.
+/// </para>
+/// </summary>
+[GlobalClass]
+public partial class Beacon : Node3D
+{
+    [Export] public float Radius { get; set; } = 8.0f;
+
+    /// <summary>How far a player has to be before it stops hearing about this beacon.</summary>
+    [Export] public float VisibleWithin { get; set; } = 10.0f;
+
+    [Export] public float Period { get; set; } = 12.0f;
+
+    /// <summary>Where to look for players, to decide who is close enough.</summary>
+    public Node3D PlayerRoot { get; set; } = null!;
+
+    private Vector3 _origin;
+    private StateSynchronizer _synchronizer = null!;
+
+    public override void _Ready()
+    {
+        _origin = Position;
+        _synchronizer = GetNode<StateSynchronizer>("StateSynchronizer");
+
+        _synchronizer.VisibilityFilter.DefaultVisibility = false;
+        _synchronizer.VisibilityFilter.UpdateMode = PeerVisibilityFilter.UpdateModeEnum.PerTickLoop;
+        _synchronizer.VisibilityFilter.AddVisibilityFilter(IsNear);
+
+        NetworkTime.Instance.AfterTick += Advance;
+    }
+
+    public override void _ExitTree()
+    {
+        if (NetworkTime.Instance is { } time) time.AfterTick -= Advance;
+    }
+
+    /// <summary>Circles on the tick, so the host's copy is where it says it is regardless of frame rate.</summary>
+    private void Advance(double delta, int tick)
+    {
+        if (!IsMultiplayerAuthority()) return;
+
+        var phase = tick / (double)NetworkTime.Instance.Tickrate / Period * Mathf.Tau;
+        Position = _origin + new Vector3(Mathf.Cos((float)phase), 0, Mathf.Sin((float)phase)) * Radius;
+    }
+
+    /// <summary>
+    /// Runs for every peer, as often as the update mode says, so it stays cheap: one distance check against that
+    /// peer's player.
+    /// </summary>
+    private bool IsNear(int peer)
+    {
+        var player = PlayerRoot?.GetNodeOrNull<Node3D>($"Player_{peer}");
+        if (player is null) return false;
+        return player.GlobalPosition.DistanceTo(GlobalPosition) <= VisibleWithin;
+    }
+}

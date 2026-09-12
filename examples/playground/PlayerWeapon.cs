@@ -27,6 +27,9 @@ public partial class PlayerWeapon : NetworkWeapon3D
     /// <summary>Shots this weapon has accepted, for the sample's status line and its smoke test.</summary>
     public int Shots { get; private set; }
 
+    /// <summary>Raised on every peer that accepts a shot, which is what the scoreboard counts on the host.</summary>
+    public event Action? Fired;
+
     private const int NeverFired = int.MinValue;
 
     private int _lastAcceptedTick = NeverFired;
@@ -59,5 +62,6 @@ public partial class PlayerWeapon : NetworkWeapon3D
     {
         _lastAcceptedTick = ShotTick;
         Shots++;
+        Fired?.Invoke();
     }
 }

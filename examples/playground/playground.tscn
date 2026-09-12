@@ -1,83 +1,108 @@
 [gd_scene format=3]
 
-[ext_resource type="Script" path="res://examples/playground/Playground.cs" id="1_7tofo"]
-[ext_resource type="PackedScene" path="res://examples/playground/player.tscn" id="2_nf6v4"]
-[ext_resource type="Script" path="res://examples/playground/MovingPlatform.cs" id="3_5edy7"]
-[ext_resource type="Script" path="res://addons/netfox.cs/Rollback/RollbackSynchronizer.cs" id="4_v1cmp"]
-[ext_resource type="Script" path="res://examples/playground/PhysicsTier.cs" id="5_sbxnr"]
-[ext_resource type="PackedScene" path="res://examples/playground/crate.tscn" id="6_o1lki"]
-[ext_resource type="Script" path="res://examples/playground/PlaygroundCamera.cs" id="7_m2yo0"]
-[ext_resource type="Script" path="res://addons/netfox.cs/Extras/NetworkSimulator.cs" id="8_0x2dt"]
+[ext_resource type="Script" path="res://examples/playground/Playground.cs" id="1_v1cmp"]
+[ext_resource type="PackedScene" path="res://examples/playground/player.tscn" id="2_sbxnr"]
+[ext_resource type="Script" path="res://examples/playground/MovingPlatform.cs" id="3_o1lki"]
+[ext_resource type="Script" path="res://addons/netfox.cs/Rollback/RollbackSynchronizer.cs" id="4_m2yo0"]
+[ext_resource type="Script" path="res://examples/playground/Scoreboard.cs" id="5_0x2dt"]
+[ext_resource type="Script" path="res://addons/netfox.cs/StateSynchronizer.cs" id="6_k1m7m"]
+[ext_resource type="Script" path="res://examples/playground/Beacon.cs" id="7_wbw74"]
+[ext_resource type="Script" path="res://examples/playground/PhysicsTier.cs" id="8_a8fih"]
+[ext_resource type="PackedScene" path="res://examples/playground/crate.tscn" id="9_kx0p6"]
+[ext_resource type="Script" path="res://examples/playground/PlaygroundCamera.cs" id="10_cv6dk"]
+[ext_resource type="Script" path="res://addons/netfox.cs/Extras/NetworkSimulator.cs" id="11_rcrmb"]
 
-[sub_resource type="BoxShape3D" id="BoxShape3D_k1m7m"]
+[sub_resource type="BoxShape3D" id="BoxShape3D_8hnew"]
 size = Vector3(40, 1, 40)
 
-[sub_resource type="BoxMesh" id="BoxMesh_wbw74"]
+[sub_resource type="BoxMesh" id="BoxMesh_1jng3"]
 size = Vector3(40, 1, 40)
 
-[sub_resource type="BoxShape3D" id="BoxShape3D_a8fih"]
+[sub_resource type="BoxShape3D" id="BoxShape3D_q6l7h"]
 size = Vector3(4, 0.4, 4)
 
-[sub_resource type="BoxMesh" id="BoxMesh_kx0p6"]
+[sub_resource type="BoxMesh" id="BoxMesh_ftnhu"]
 size = Vector3(4, 0.4, 4)
 
-[node name="Playground" type="Node3D" unique_id=223231428 node_paths=PackedStringArray("SpawnRoot", "ProjectileRoot")]
-script = ExtResource("1_7tofo")
-PlayerScene = ExtResource("2_nf6v4")
+[sub_resource type="SphereMesh" id="SphereMesh_pvflk"]
+
+[node name="Playground" type="Node3D" unique_id=584935409 node_paths=PackedStringArray("SpawnRoot", "ProjectileRoot")]
+script = ExtResource("1_v1cmp")
+PlayerScene = ExtResource("2_sbxnr")
 SpawnRoot = NodePath("World/Players")
 ProjectileRoot = NodePath("World/Projectiles")
 
-[node name="World" type="Node3D" parent="." unique_id=429242688]
+[node name="World" type="Node3D" parent="." unique_id=1151307475]
 
-[node name="Ground" type="StaticBody3D" parent="World" unique_id=1288256709]
+[node name="Ground" type="StaticBody3D" parent="World" unique_id=440802938]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="World/Ground" unique_id=1770032590]
-shape = SubResource("BoxShape3D_k1m7m")
+[node name="CollisionShape3D" type="CollisionShape3D" parent="World/Ground" unique_id=350404852]
+shape = SubResource("BoxShape3D_8hnew")
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="World/Ground" unique_id=1840966598]
-mesh = SubResource("BoxMesh_wbw74")
+[node name="MeshInstance3D" type="MeshInstance3D" parent="World/Ground" unique_id=684764712]
+mesh = SubResource("BoxMesh_1jng3")
 
-[node name="Platform" type="AnimatableBody3D" parent="World" unique_id=2018337755]
+[node name="Platform" type="AnimatableBody3D" parent="World" unique_id=54395392]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -6)
-script = ExtResource("3_5edy7")
+script = ExtResource("3_o1lki")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="World/Platform" unique_id=1008342830]
-shape = SubResource("BoxShape3D_a8fih")
+[node name="CollisionShape3D" type="CollisionShape3D" parent="World/Platform" unique_id=930559095]
+shape = SubResource("BoxShape3D_q6l7h")
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="World/Platform" unique_id=895093989]
-mesh = SubResource("BoxMesh_kx0p6")
+[node name="MeshInstance3D" type="MeshInstance3D" parent="World/Platform" unique_id=1542745999]
+mesh = SubResource("BoxMesh_ftnhu")
 
-[node name="RollbackSynchronizer" type="Node" parent="World/Platform" unique_id=1158452004 node_paths=PackedStringArray("Root")]
-script = ExtResource("4_v1cmp")
+[node name="RollbackSynchronizer" type="Node" parent="World/Platform" unique_id=1101546352 node_paths=PackedStringArray("Root")]
+script = ExtResource("4_m2yo0")
 Root = NodePath("..")
 StateProperties = PackedStringArray(":position")
 
-[node name="Players" type="Node3D" parent="World" unique_id=1271994802]
+[node name="Players" type="Node3D" parent="World" unique_id=2026694638]
 
-[node name="Projectiles" type="Node3D" parent="World" unique_id=1369722248]
+[node name="Projectiles" type="Node3D" parent="World" unique_id=1367362503]
 
-[node name="Crates" type="Node3D" parent="World" unique_id=2009674748]
+[node name="Crates" type="Node3D" parent="World" unique_id=2104046854]
 
-[node name="PhysicsTier" type="Node" parent="." unique_id=1068627213 node_paths=PackedStringArray("CrateRoot")]
-script = ExtResource("5_sbxnr")
-CrateScene = ExtResource("6_o1lki")
+[node name="Scoreboard" type="Node" parent="World" unique_id=1528487790]
+script = ExtResource("5_0x2dt")
+
+[node name="StateSynchronizer" type="Node" parent="World/Scoreboard" unique_id=783824534 node_paths=PackedStringArray("Root")]
+script = ExtResource("6_k1m7m")
+Root = NodePath("..")
+Properties = PackedStringArray(":Shots")
+
+[node name="Beacon" type="Node3D" parent="World" unique_id=128700039]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 8)
+script = ExtResource("7_wbw74")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="World/Beacon" unique_id=1852944369]
+mesh = SubResource("SphereMesh_pvflk")
+
+[node name="StateSynchronizer" type="Node" parent="World/Beacon" unique_id=515522244 node_paths=PackedStringArray("Root")]
+script = ExtResource("6_k1m7m")
+Root = NodePath("..")
+Properties = PackedStringArray(":position")
+
+[node name="PhysicsTier" type="Node" parent="." unique_id=1594961848 node_paths=PackedStringArray("CrateRoot")]
+script = ExtResource("8_a8fih")
+CrateScene = ExtResource("9_kx0p6")
 CrateRoot = NodePath("../World/Crates")
 
-[node name="Camera3D" type="Camera3D" parent="." unique_id=169437317]
+[node name="Camera3D" type="Camera3D" parent="." unique_id=1832258750]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 8, 12)
-script = ExtResource("7_m2yo0")
+script = ExtResource("10_cv6dk")
 
-[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1545288119]
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1925929537]
 transform = Transform3D(0.809017, 0.4156269, -0.4156269, 0, 0.70710677, 0.70710677, 0.58778524, -0.5720614, 0.5720614, 0, 0, 0)
 shadow_enabled = true
 
-[node name="NetworkSimulator" type="Node" parent="." unique_id=647194718]
-script = ExtResource("8_0x2dt")
+[node name="NetworkSimulator" type="Node" parent="." unique_id=1710365260]
+script = ExtResource("11_rcrmb")
 
-[node name="UI" type="CanvasLayer" parent="." unique_id=1004346132]
+[node name="UI" type="CanvasLayer" parent="." unique_id=2034200824]
 
-[node name="Status" type="Label" parent="UI" unique_id=1587779923]
+[node name="Status" type="Label" parent="UI" unique_id=839019470]
 anchors_preset = 10
 anchor_right = 1.0
 offset_left = 12.0
@@ -85,13 +110,13 @@ offset_top = 8.0
 offset_right = -12.0
 text = "Not connected"
 
-[node name="Lobby" type="Control" parent="UI" unique_id=244486425]
+[node name="Lobby" type="Control" parent="UI" unique_id=2071904425]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 
-[node name="Panel" type="PanelContainer" parent="UI/Lobby" unique_id=1204030363]
+[node name="Panel" type="PanelContainer" parent="UI/Lobby" unique_id=81960913]
 custom_minimum_size = Vector2(300, 0)
 layout_mode = 0
 anchor_left = 0.5
@@ -99,30 +124,34 @@ anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
 
-[node name="Rows" type="VBoxContainer" parent="UI/Lobby/Panel" unique_id=249612188]
+[node name="Rows" type="VBoxContainer" parent="UI/Lobby/Panel" unique_id=1133938655]
 layout_mode = 2
 
-[node name="Title" type="Label" parent="UI/Lobby/Panel/Rows" unique_id=344280055]
+[node name="Title" type="Label" parent="UI/Lobby/Panel/Rows" unique_id=670842627]
 layout_mode = 2
 text = "netfox.cs playground"
 
-[node name="Address" type="LineEdit" parent="UI/Lobby/Panel/Rows" unique_id=351341589]
+[node name="Address" type="LineEdit" parent="UI/Lobby/Panel/Rows" unique_id=1751358616]
 layout_mode = 2
 text = "127.0.0.1"
 placeholder_text = "address to join"
 
-[node name="Buttons" type="HBoxContainer" parent="UI/Lobby/Panel/Rows" unique_id=678683152]
+[node name="Buttons" type="HBoxContainer" parent="UI/Lobby/Panel/Rows" unique_id=369132086]
 layout_mode = 2
 
-[node name="Host" type="Button" parent="UI/Lobby/Panel/Rows/Buttons" unique_id=1960362258]
+[node name="Host" type="Button" parent="UI/Lobby/Panel/Rows/Buttons" unique_id=1807278940]
 layout_mode = 2
 text = "Host"
 
-[node name="Join" type="Button" parent="UI/Lobby/Panel/Rows/Buttons" unique_id=906842400]
+[node name="Join" type="Button" parent="UI/Lobby/Panel/Rows/Buttons" unique_id=813913825]
 layout_mode = 2
 text = "Join"
 
-[node name="Hint" type="Label" parent="UI/Lobby/Panel/Rows" unique_id=445227227]
+[node name="Steam" type="Button" parent="UI/Lobby/Panel/Rows/Buttons" unique_id=641183842]
+layout_mode = 2
+text = "Host on Steam"
+
+[node name="Hint" type="Label" parent="UI/Lobby/Panel/Rows" unique_id=1393215556]
 layout_mode = 2
 text = "Arrows or WASD to move, Space to jump twice, Enter to shoot.
 Ride the platform to see prediction at work."
