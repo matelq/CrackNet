@@ -33,11 +33,20 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
+      - name: Cache Godot
+        uses: actions/cache@v4
+        with:
+          path: godot
+          key: godot-${{ env.GODOT_VERSION }}-mono-linux-x86_64
       - name: Install Godot
         run: |
-          curl -sSLo godot.zip "https://github.com/godotengine/godot-builds/releases/download/$GODOT_VERSION/Godot_v${GODOT_VERSION}_mono_linux_x86_64.zip"
-          unzip -q godot.zip
-          echo "GODOT=$PWD/Godot_v${GODOT_VERSION}_mono_linux_x86_64/Godot_v${GODOT_VERSION}_mono_linux.x86_64" >> "$GITHUB_ENV"
+          # The download has failed mid-run before, leaving an HTML error page named godot.zip: -f rejects that, and
+          # the retries cover a flaky release server. The cache above means most runs do not download at all.
+          if [ ! -x "godot/Godot_v${GODOT_VERSION}_mono_linux_x86_64/Godot_v${GODOT_VERSION}_mono_linux.x86_64" ]; then
+            curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o godot.zip "https://github.com/godotengine/godot-builds/releases/download/$GODOT_VERSION/Godot_v${GODOT_VERSION}_mono_linux_x86_64.zip"
+            unzip -q godot.zip -d godot
+          fi
+          echo "GODOT=$PWD/godot/Godot_v${GODOT_VERSION}_mono_linux_x86_64/Godot_v${GODOT_VERSION}_mono_linux.x86_64" >> "$GITHUB_ENV"
       - name: Import resources
         # --import exits with a segfault after a successful import on 4.7.2, so its exit code says nothing
         run: $GODOT --headless --path . --import || true
