@@ -43,7 +43,12 @@ public partial class Playground : Node3D
         {
             _steam = new Steam.SteamLobbyBootstrap { Name = "SteamLobbyBootstrap" };
             _steam.Failed += reason => _status.Text = $"Steam: {reason}";
-            _steam.LobbyReady += lobby => _status.Text = $"Steam lobby {lobby} - share this to be joined";
+            _steam.LobbyReady += lobby =>
+            {
+                _status.Text = $"Steam lobby {lobby} - share this to be joined";
+                // The status line is a Label, so the id is printed too: the console is where it can be copied from
+                GD.Print($"Steam lobby id: {lobby}");
+            };
             AddChild(_steam);
             // A lobby id in the address field joins that lobby; anything else hosts a new one
             steamButton.Pressed += () =>
