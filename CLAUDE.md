@@ -26,7 +26,7 @@ dotnet build Netfox.csproj                                                # addo
 
 ## Conventions
 
-- Signals → C# `event`. Events are NOT auto-disconnected when a node is freed: store the delegate and unsubscribe in `_ExitTree`.
+- Signals → C# `event`. Events are NOT auto-disconnected when a node is freed: store the delegate and unsubscribe in `_ExitTree`. For the three synchronizers that lives in `BaseSynchronizer` (reworked).
 - Duck-typing (`has_method("_rollback_tick")`) → interfaces in `Rollback/RollbackInterfaces.cs`.
 - Command ids are explicit (`CommandIds`), never auto-incremented.
 - Read settings via `Internal/Settings.cs`; log via `NetfoxLogger` with `{0}` placeholders.

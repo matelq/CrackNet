@@ -11,10 +11,8 @@ namespace Netfox;
 [Tool]
 [GlobalClass]
 [Icon("res://addons/netfox.cs/icons/rollback-synchronizer.svg")]
-public partial class RollbackSynchronizer : Node
+public partial class RollbackSynchronizer : BaseSynchronizer
 {
-    /// <summary>The netfox stack this node uses; resolved when it enters the tree.</summary>
-    public NetfoxContext Context { get; private set; } = NetfoxContext.Default;
     private static readonly Dictionary<Node, RollbackSynchronizer> ManagedRoots = new(ReferenceEqualityComparer.Instance);
 
     /// <summary>Node the property paths are relative to; defaults to the parent.</summary>
@@ -52,19 +50,20 @@ public partial class RollbackSynchronizer : Node
     private readonly PropertyPool _inputProperties = new();
     private readonly List<Node> _simNodes = new();
     private readonly List<Node> _livenessNodes = new();
-    private readonly HashSet<Node> _schemaNodes = new(ReferenceEqualityComparer.Instance);
-    private bool _propertiesDirty;
     private NetfoxLogger _logger = NetfoxLogger.ForNetfox("RollbackSynchronizer");
     private Action? _spawnResimHandler;
-    private Action<int>? _clientStartHandler;
-    private bool _listensToMultiplayer;
 
     internal IReadOnlyList<Node> SimulatedNodes => _simNodes;
 
     /// <summary>Re-reads the configuration and registers nodes for simulation, liveness, identity and visibility.</summary>
-    public void ProcessSettings()
+    protected override Node ResolveRoot() => Root ??= GetParent();
+
+    protected override bool IsForeignRoot(Node node)
+        => ManagedRoots.TryGetValue(node, out var owner) && owner != this;
+
+    public override void ProcessSettings()
     {
-        var root = Root ??= GetParent();
+        var root = ResolveRoot();
         var simulation = Context.RollbackSimulationServer;
         var liveness = Context.RollbackLivenessServer;
 
@@ -159,8 +158,7 @@ public partial class RollbackSynchronizer : Node
         if (path.Length == 0 || StateProperties.Contains(path)) return;
 
         StateProperties = [.. StateProperties, path];
-        _propertiesDirty = true;
-        Callable.From(ReprocessSettings).CallDeferred();
+        MarkPropertiesDirty();
     }
 
     /// <summary>Add an input property at runtime. Node may be a string, NodePath or Node relative to Root.</summary>
@@ -170,34 +168,15 @@ public partial class RollbackSynchronizer : Node
         if (path.Length == 0 || InputProperties.Contains(path)) return;
 
         InputProperties = [.. InputProperties, path];
-        _propertiesDirty = true;
-        Callable.From(ReprocessSettings).CallDeferred();
+        MarkPropertiesDirty();
     }
 
     /// <summary>Replace the serialization schema: property path to serializer.</summary>
-    public void SetSchema(IReadOnlyDictionary<string, NetworkSchemaSerializer> schema)
-    {
-        ClearSchema();
-        MergeSchema(schema);
-    }
+    public void SetSchema(IReadOnlyDictionary<string, NetworkSchemaSerializer> schema) => SetSchemaInternal(schema);
 
-    public void MergeSchema(IReadOnlyDictionary<string, NetworkSchemaSerializer> schema)
-    {
-        var root = Root ?? GetParent();
-        foreach (var (path, serializer) in schema)
-        {
-            var entry = PropertyEntry.Parse(root, path);
-            Context.NetworkSynchronizationServer.RegisterSchema(entry.Node, entry.Property, serializer);
-            _schemaNodes.Add(entry.Node);
-        }
-    }
+    public void MergeSchema(IReadOnlyDictionary<string, NetworkSchemaSerializer> schema) => MergeSchemaInternal(schema);
 
-    public void ClearSchema()
-    {
-        foreach (var node in _schemaNodes)
-            Context.NetworkSynchronizationServer.DeregisterSchemaFor(node);
-        _schemaNodes.Clear();
-    }
+    public void ClearSchema() => ClearSchemaInternal();
 
     /// <summary>Whether any input is known for the current rollback tick.</summary>
     public bool HasInput() => GetInputAge() >= 0;
@@ -265,28 +244,12 @@ public partial class RollbackSynchronizer : Node
 
         if (SpawnTick < 0) SpawnTick = Context.NetworkRollback.Tick + 1;
         Callable.From(ProcessSettings).CallDeferred();
-
-        // Reprocess authority on connect
-        if (Context.NetworkEvents is { Enabled: true } events)
-        {
-            _clientStartHandler = _ => ProcessSettings();
-            events.OnClientStart += _clientStartHandler;
-        }
-        else
-        {
-            Multiplayer.ConnectedToServer += ProcessSettings;
-            _listensToMultiplayer = true;
-        }
-    }
-
-    public override void _Notification(int what)
-    {
-        if (what == NotificationEditorPreSave) UpdateConfigurationWarnings();
+        ReprocessOnConnect();
     }
 
     public override void _EnterTree()
     {
-        Context = NetfoxContext.For(this);
+        base._EnterTree();
         if (Engine.IsEditorHint()) return;
 
         Root ??= GetParent();
@@ -316,9 +279,7 @@ public partial class RollbackSynchronizer : Node
         // Godot auto-disconnects signals of freed nodes; C# events need explicit cleanup
         if (_spawnResimHandler is not null && Context.NetworkRollback is { } rollback)
             rollback.BeforeLoop -= _spawnResimHandler;
-        if (_clientStartHandler is not null && Context.NetworkEvents is { } events)
-            events.OnClientStart -= _clientStartHandler;
-        if (_listensToMultiplayer && GodotObject.IsInstanceValid(Multiplayer)) Multiplayer.ConnectedToServer -= ProcessSettings;
+        StopReprocessOnConnect();
 
         // Consider the synchronizer and its nodes freed, deregister everything
         foreach (var node in _simNodes.Concat(_stateProperties.Subjects).Concat(_inputProperties.Subjects).ToList())
@@ -344,13 +305,6 @@ public partial class RollbackSynchronizer : Node
         return warnings.ToArray();
     }
 
-    private void ReprocessSettings()
-    {
-        if (!_propertiesDirty || Engine.IsEditorHint()) return;
-        _propertiesDirty = false;
-        ProcessSettings();
-    }
-
     private void SetPredictionEnabled(bool enabled)
     {
         var simulation = Context.RollbackSimulationServer;
@@ -358,20 +312,4 @@ public partial class RollbackSynchronizer : Node
         foreach (var node in _simNodes)
             simulation.SetPredictionEnabledFor(node, enabled);
     }
-
-    // Managed nodes are all descendants, except branches rooted by another RollbackSynchronizer
-    private List<Node> CollectManagedNodes(Node root)
-    {
-        var result = new List<Node>();
-        foreach (var child in root.GetChildren())
-        {
-            if (IsForeignRollbackRoot(child)) continue;
-            result.Add(child);
-            result.AddRange(CollectManagedNodes(child));
-        }
-        return result;
-    }
-
-    private bool IsForeignRollbackRoot(Node node)
-        => ManagedRoots.TryGetValue(node, out var owner) && owner != this;
 }

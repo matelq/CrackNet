@@ -10,10 +10,8 @@ namespace Netfox;
 [Tool]
 [GlobalClass]
 [Icon("res://addons/netfox.cs/icons/predictive-synchronizer.svg")]
-public partial class PredictiveSynchronizer : Node
+public partial class PredictiveSynchronizer : BaseSynchronizer
 {
-    /// <summary>The netfox stack this node uses; resolved when it enters the tree.</summary>
-    public NetfoxContext Context { get; private set; } = NetfoxContext.Default;
     private static readonly Dictionary<Node, PredictiveSynchronizer> ManagedRoots = new(ReferenceEqualityComparer.Instance);
 
     /// <summary>Node the property paths are relative to; defaults to the parent.</summary>
@@ -28,16 +26,18 @@ public partial class PredictiveSynchronizer : Node
     private readonly PropertyPool _stateProperties = new();
     private readonly List<Node> _simNodes = new();
     private readonly List<Node> _livenessNodes = new();
-    private bool _propertiesDirty;
     private Action? _spawnResimHandler;
-    private Action<int>? _clientStartHandler;
-    private bool _listensToMultiplayer;
 
     internal IReadOnlyList<Node> SimulatedNodes => _simNodes;
 
-    public void ProcessSettings()
+    protected override Node ResolveRoot() => Root ??= GetParent();
+
+    protected override bool IsForeignRoot(Node node)
+        => ManagedRoots.TryGetValue(node, out var owner) && owner != this;
+
+    public override void ProcessSettings()
     {
-        var root = Root ??= GetParent();
+        var root = ResolveRoot();
         var history = Context.NetworkHistoryServer;
         var simulation = Context.RollbackSimulationServer;
         var liveness = Context.RollbackLivenessServer;
@@ -115,8 +115,7 @@ public partial class PredictiveSynchronizer : Node
         if (path.Length == 0 || StateProperties.Contains(path)) return;
 
         StateProperties = [.. StateProperties, path];
-        _propertiesDirty = true;
-        Callable.From(ReprocessSettings).CallDeferred();
+        MarkPropertiesDirty();
     }
 
     public override void _Ready()
@@ -124,23 +123,12 @@ public partial class PredictiveSynchronizer : Node
         if (Engine.IsEditorHint()) return;
 
         Callable.From(ProcessSettings).CallDeferred();
-
-        // Reprocess on connect: pre-placed nodes start owned by us (offline peer 1), then change owner
-        if (Context.NetworkEvents is { Enabled: true } events)
-        {
-            _clientStartHandler = _ => ProcessSettings();
-            events.OnClientStart += _clientStartHandler;
-        }
-        else
-        {
-            Multiplayer.ConnectedToServer += ProcessSettings;
-            _listensToMultiplayer = true;
-        }
+        ReprocessOnConnect();
     }
 
     public override void _EnterTree()
     {
-        Context = NetfoxContext.For(this);
+        base._EnterTree();
         if (Engine.IsEditorHint()) return;
 
         Root ??= GetParent();
@@ -166,9 +154,7 @@ public partial class PredictiveSynchronizer : Node
 
         if (_spawnResimHandler is not null && Context.NetworkRollback is { } rollback)
             rollback.BeforeLoop -= _spawnResimHandler;
-        if (_clientStartHandler is not null && Context.NetworkEvents is { } events)
-            events.OnClientStart -= _clientStartHandler;
-        if (_listensToMultiplayer && GodotObject.IsInstanceValid(Multiplayer)) Multiplayer.ConnectedToServer -= ProcessSettings;
+        StopReprocessOnConnect();
 
         foreach (var node in _simNodes)
             Context.RollbackSimulationServer?.DeregisterNode(node);
@@ -178,11 +164,6 @@ public partial class PredictiveSynchronizer : Node
             Context.NetworkHistoryServer?.Deregister(subject);
     }
 
-    public override void _Notification(int what)
-    {
-        if (what == NotificationEditorPreSave) UpdateConfigurationWarnings();
-    }
-
     public override string[] _GetConfigurationWarnings()
     {
         Root ??= GetParent();
@@ -190,26 +171,4 @@ public partial class PredictiveSynchronizer : Node
 
         return EditorUtils.GatherProperties<IRollbackStateProperties>(Root, n => n.GetRollbackStateProperties(), AddState);
     }
-
-    private void ReprocessSettings()
-    {
-        if (!_propertiesDirty || Engine.IsEditorHint()) return;
-        _propertiesDirty = false;
-        ProcessSettings();
-    }
-
-    private List<Node> CollectManagedNodes(Node root)
-    {
-        var result = new List<Node>();
-        foreach (var child in root.GetChildren())
-        {
-            if (IsForeignRollbackRoot(child)) continue;
-            result.Add(child);
-            result.AddRange(CollectManagedNodes(child));
-        }
-        return result;
-    }
-
-    private bool IsForeignRollbackRoot(Node node)
-        => ManagedRoots.TryGetValue(node, out var owner) && owner != this;
 }

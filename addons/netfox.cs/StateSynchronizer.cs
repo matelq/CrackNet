@@ -1,5 +1,4 @@
 using Godot;
-using Netfox.Core.Logging;
 using Netfox.Internal;
 
 namespace Netfox;
@@ -8,12 +7,8 @@ namespace Netfox;
 [Tool]
 [GlobalClass]
 [Icon("res://addons/netfox.cs/icons/state-synchronizer.svg")]
-public partial class StateSynchronizer : Node
+public partial class StateSynchronizer : BaseSynchronizer
 {
-    /// <summary>The netfox stack this node uses; resolved when it enters the tree.</summary>
-    public NetfoxContext Context { get; private set; } = NetfoxContext.Default;
-    private static readonly NetfoxLogger Logger = NetfoxLogger.ForNetfox("StateSynchronizer");
-
     /// <summary>Node the property paths are relative to; defaults to the parent.</summary>
     [Export] public Node? Root { get; set; }
 
@@ -23,18 +18,16 @@ public partial class StateSynchronizer : Node
     /// <summary>Controls which peers receive state. Added as a child automatically.</summary>
     public PeerVisibilityFilter VisibilityFilter { get; set; } = new();
 
-    private bool _propertiesDirty;
     private readonly PropertyPool _properties = new();
-    private readonly HashSet<Node> _schemaNodes = new(ReferenceEqualityComparer.Instance);
     private bool _isInitialized;
-    private Action<int>? _clientStartHandler;
-    private bool _listensToMultiplayer;
 
     public bool IsInitialized => _isInitialized;
 
-    public void ProcessSettings()
+    protected override Node ResolveRoot() => Root ??= GetParent();
+
+    public override void ProcessSettings()
     {
-        var root = Root ??= GetParent();
+        var root = ResolveRoot();
         var history = Context.NetworkHistoryServer;
         var synchronization = Context.NetworkSynchronizationServer;
 
@@ -68,38 +61,14 @@ public partial class StateSynchronizer : Node
         if (path.Length == 0 || Properties.Contains(path)) return;
 
         Properties = [.. Properties, path];
-        _propertiesDirty = true;
-        Callable.From(ReprocessSettings).CallDeferred();
+        MarkPropertiesDirty();
     }
 
-    public void SetSchema(IReadOnlyDictionary<string, NetworkSchemaSerializer> schema)
-    {
-        ClearSchema();
-        MergeSchema(schema);
-    }
+    public void SetSchema(IReadOnlyDictionary<string, NetworkSchemaSerializer> schema) => SetSchemaInternal(schema);
 
-    public void MergeSchema(IReadOnlyDictionary<string, NetworkSchemaSerializer> schema)
-    {
-        var root = Root ?? GetParent();
-        foreach (var (path, serializer) in schema)
-        {
-            var entry = PropertyEntry.Parse(root, path);
-            Context.NetworkSynchronizationServer.RegisterSchema(entry.Node, entry.Property, serializer);
-            _schemaNodes.Add(entry.Node);
-        }
-    }
+    public void MergeSchema(IReadOnlyDictionary<string, NetworkSchemaSerializer> schema) => MergeSchemaInternal(schema);
 
-    public void ClearSchema()
-    {
-        foreach (var node in _schemaNodes)
-            Context.NetworkSynchronizationServer.DeregisterSchemaFor(node);
-        _schemaNodes.Clear();
-    }
-
-    public override void _Notification(int what)
-    {
-        if (what == NotificationEditorPreSave) UpdateConfigurationWarnings();
-    }
+    public void ClearSchema() => ClearSchemaInternal();
 
     public override string[] _GetConfigurationWarnings()
     {
@@ -111,7 +80,7 @@ public partial class StateSynchronizer : Node
 
     public override void _EnterTree()
     {
-        Context = NetfoxContext.For(this);
+        base._EnterTree();
         if (Engine.IsEditorHint()) return;
 
         VisibilityFilter ??= new PeerVisibilityFilter();
@@ -123,9 +92,7 @@ public partial class StateSynchronizer : Node
     {
         if (Engine.IsEditorHint()) return;
 
-        if (_clientStartHandler is not null && Context.NetworkEvents is { } events)
-            events.OnClientStart -= _clientStartHandler;
-        if (_listensToMultiplayer && GodotObject.IsInstanceValid(Multiplayer)) Multiplayer.ConnectedToServer -= ProcessSettings;
+        StopReprocessOnConnect();
 
         foreach (var node in _properties.Subjects.ToList())
         {
@@ -140,24 +107,6 @@ public partial class StateSynchronizer : Node
         if (Engine.IsEditorHint()) return;
 
         Callable.From(ProcessSettings).CallDeferred();
-
-        // Reprocess on connect: pre-placed nodes start owned by us (offline peer 1), then change owner
-        if (Context.NetworkEvents is { Enabled: true } events)
-        {
-            _clientStartHandler = _ => ProcessSettings();
-            events.OnClientStart += _clientStartHandler;
-        }
-        else
-        {
-            Multiplayer.ConnectedToServer += ProcessSettings;
-            _listensToMultiplayer = true;
-        }
-    }
-
-    private void ReprocessSettings()
-    {
-        if (!_propertiesDirty) return;
-        _propertiesDirty = false;
-        ProcessSettings();
+        ReprocessOnConnect();
     }
 }
