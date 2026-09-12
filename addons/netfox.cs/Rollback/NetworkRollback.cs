@@ -1,4 +1,5 @@
 using Godot;
+using Netfox.Core.Collections;
 using Netfox.Core.Logging;
 using Netfox.Internal;
 
@@ -77,6 +78,9 @@ public partial class NetworkRollback : Node
     private readonly HashSet<Node> _simulatedNodes = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<GodotObject, int> _mutatedNodes = new(ReferenceEqualityComparer.Instance);
 
+    // What was mutated at which tick, kept across loops: only used to notice mutations that a resimulation does not reproduce
+    private readonly HistoryBuffer<HashSet<Node>> _mutationHistory;
+
     private int _earliestInput = -1;
     private int _earliestState = -1;
 
@@ -84,6 +88,7 @@ public partial class NetworkRollback : Node
 
     public NetworkRollback()
     {
+        _mutationHistory = new HistoryBuffer<HashSet<Node>>(HistoryLimit);
         _rollbackTag = () => _isRollback ? $"{_rollbackStage}@{_tick}|{_rollbackFrom}>{_rollbackTo}" : "_";
     }
 
@@ -113,6 +118,7 @@ public partial class NetworkRollback : Node
     {
         var at = tick ?? _tick;
         _mutatedNodes[target] = _mutatedNodes.TryGetValue(target, out var existing) ? Math.Min(at, existing) : at;
+        if (target is Node node) RememberMutation(node, at);
 
         if (_isRollback && at < _tick)
             Logger.Warning("Trying to mutate object {0} in the past, for tick {1}!", target, at);
@@ -166,6 +172,44 @@ public partial class NetworkRollback : Node
         {
             sync.OnInput += HandleInput;
             sync.OnState += HandleState;
+        }
+    }
+
+    private void RememberMutation(Node node, int tick)
+    {
+        var mutations = _mutationHistory.GetAt(tick);
+        if (mutations is null)
+        {
+            mutations = new HashSet<Node>(ReferenceEqualityComparer.Instance);
+            _mutationHistory.SetAt(tick, mutations);
+        }
+        mutations.Add(node);
+    }
+
+    private HashSet<Node>? TakeRememberedMutations(int tick)
+    {
+        var previous = _mutationHistory.GetAt(tick);
+        _mutationHistory.SetAt(tick, new HashSet<Node>(ReferenceEqualityComparer.Instance));
+        return previous;
+    }
+
+    /// <summary>
+    /// Mutations are expected to be a function of state and input, so resimulating a tick should produce them again.
+    /// One that does not come back is either a legitimate change of outcome, or a one-off effect that the resimulation
+    /// has just silently dropped, which is the hard-to-find half of foxssake/netfox#383. Traced, not warned, because
+    /// only the second case is a problem and the two cannot be told apart from here.
+    /// </summary>
+    private void ReportUnreproducedMutations(HashSet<Node>? previous, int tick)
+    {
+        if (previous is null || previous.Count == 0) return;
+
+        var current = _mutationHistory.GetAt(tick);
+        foreach (var node in previous)
+        {
+            if (current is not null && current.Contains(node)) continue;
+            if (!GodotObject.IsInstanceValid(node)) continue;
+
+            Logger.Trace("Mutation of {0} @{1} was not reproduced while resimulating; if it was a one-off effect, it is gone now", node, tick);
         }
     }
 
@@ -254,9 +298,11 @@ public partial class NetworkRollback : Node
 
             // Simulate
             _rollbackStage = StageSimulate;
+            var previousMutations = TakeRememberedMutations(tick);
             OnProcessTick?.Invoke(tick);
             simulation.Simulate(networkTime.Ticktime, tick);
             AfterProcessTick?.Invoke(tick);
+            ReportUnreproducedMutations(previousMutations, tick);
 
             // Record state for tick + 1
             _rollbackStage = StageRecord;
