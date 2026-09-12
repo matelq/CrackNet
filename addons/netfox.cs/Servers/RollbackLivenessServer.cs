@@ -133,5 +133,17 @@ public partial class RollbackLivenessServer : Node
         }
     }
 
+    /// <summary>Respawns every registered subject at the current tick, dropping the previous session's spawn ticks.</summary>
+    internal void ResetSession()
+    {
+        var tick = CurrentTick();
+        _despawnTick.Clear();
+        foreach (var subject in _respawnCallback.Keys.ToList())
+        {
+            _spawnTick[subject] = tick;
+            _appliedLiveness[subject] = true;
+        }
+    }
+
     private int CurrentTick() => Context.NetworkRollback?.Tick ?? 0;
 }

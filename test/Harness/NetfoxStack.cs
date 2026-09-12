@@ -28,6 +28,20 @@ public partial class NetfoxStack : NetfoxContextRoot
         return stack;
     }
 
+    /// <summary>Drops the current peer, the way leaving a lobby does.</summary>
+    public void Disconnect()
+    {
+        Api.MultiplayerPeer?.Close();
+        Api.MultiplayerPeer = null;
+    }
+
+    /// <summary>Joins a new session with the same servers, the way rejoining from a lobby does.</summary>
+    public void Reconnect(LoopbackNetwork network, int peerId)
+    {
+        Peer = network.CreatePeer(peerId);
+        Api.MultiplayerPeer = Peer;
+    }
+
     /// <summary>Frees the stack and drops the MultiplayerAPI that was bound to its path.</summary>
     public void Teardown()
     {

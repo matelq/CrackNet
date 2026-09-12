@@ -112,6 +112,17 @@ public partial class NetworkIdentityServer : Node
             identifier.EraseIdFor(peer);
     }
 
+    /// <summary>Forgets the ids exchanged with peers, keeping the nodes registered locally.</summary>
+    internal void ResetSession()
+    {
+        _pushQueue.Clear();
+        foreach (var peer in _identifierById.Keys.ToList())
+            foreach (var identifier in _identifiers.Values)
+                identifier.EraseIdFor(peer);
+        _identifierById.Clear();
+        _hasWarnedQueueLength = false;
+    }
+
     public void Clear()
     {
         _identifiers.Clear();

@@ -26,6 +26,9 @@ public sealed class PerObjectHistory<TSubject, TProperty, TValue>
 
     public void EraseSubject(TSubject subject) => _data.Remove(subject);
 
+    /// <summary>Drops every recorded tick for every subject. Subjects get a fresh history on their next write.</summary>
+    public void Clear() => _data.Clear();
+
     /// <returns>The snapshot at <paramref name="tick"/>, or null if the tick is too old to store.</returns>
     public ObjectSnapshot<TSubject, TProperty, TValue>? EnsureSnapshot(int tick, TSubject subject, bool carryForward)
     {

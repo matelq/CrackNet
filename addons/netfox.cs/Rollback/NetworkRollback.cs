@@ -169,6 +169,22 @@ public partial class NetworkRollback : Node
         }
     }
 
+    /// <summary>Drops the state left over from the session that just ended.</summary>
+    internal void ResetSession()
+    {
+        // NetworkTime.Stop() rewinds its own clock, but the rollback tick lives here; leaving it at the last session's
+        // value makes everything that derives a tick from it, spawn ticks above all, point into a future that never comes
+        _tick = 0;
+        _rollbackFrom = 0;
+        _rollbackTo = 0;
+        _resimFrom = -1;
+        _earliestInput = -1;
+        _earliestState = -1;
+        _mutatedNodes.Clear();
+        _simulatedNodes.Clear();
+        _isRollback = false;
+    }
+
     public override void _ExitTree()
     {
         NetfoxLogger.FreeTag(_rollbackTag);

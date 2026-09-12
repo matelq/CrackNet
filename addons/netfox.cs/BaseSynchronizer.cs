@@ -20,7 +20,9 @@ public abstract partial class BaseSynchronizer : Node
 
     private bool _propertiesDirty;
     private Action<int>? _clientStartHandler;
+    private Action? _serverStartHandler;
     private bool _listensToMultiplayer;
+    private Action? _sessionResetHandler;
     private readonly HashSet<Node> _schemaNodes = new(ReferenceEqualityComparer.Instance);
 
     /// <summary>(Re)registers everything this synchronizer manages with the servers.</summary>
@@ -32,7 +34,23 @@ public abstract partial class BaseSynchronizer : Node
     /// <summary>True when another synchronizer of the same kind treats <paramref name="node"/> as its root.</summary>
     protected virtual bool IsForeignRoot(Node node) => false;
 
-    public override void _EnterTree() => Context = NetfoxContext.For(this);
+    public override void _EnterTree()
+    {
+        Context = NetfoxContext.For(this);
+
+        _sessionResetHandler = OnSessionReset;
+        Context.SessionReset += _sessionResetHandler;
+    }
+
+    /// <summary>
+    /// The servers have dropped the ticks of the session that just ended, so everything this synchronizer registered
+    /// has to be registered again, at the new session's ticks.
+    /// </summary>
+    protected virtual void OnSessionReset()
+    {
+        if (Engine.IsEditorHint() || !IsInsideTree()) return;
+        ProcessSettings();
+    }
 
     public override void _Notification(int what)
     {
@@ -63,6 +81,11 @@ public abstract partial class BaseSynchronizer : Node
         {
             _clientStartHandler = _ => ProcessSettings();
             events.OnClientStart += _clientStartHandler;
+
+            // Upstream only reprocesses on the client (rollback-synchronizer.gd:_ready). The host needs it too: between
+            // sessions it has no peer, and without one every node looks like someone else's, so nothing is owned
+            _serverStartHandler = ProcessSettings;
+            events.OnServerStart += _serverStartHandler;
         }
         else
         {
@@ -77,9 +100,16 @@ public abstract partial class BaseSynchronizer : Node
     /// </summary>
     protected void StopReprocessOnConnect()
     {
-        if (_clientStartHandler is not null && Context.NetworkEvents is { } events)
-            events.OnClientStart -= _clientStartHandler;
+        if (_sessionResetHandler is not null) Context.SessionReset -= _sessionResetHandler;
+        _sessionResetHandler = null;
+
+        if (Context.NetworkEvents is { } events)
+        {
+            if (_clientStartHandler is not null) events.OnClientStart -= _clientStartHandler;
+            if (_serverStartHandler is not null) events.OnServerStart -= _serverStartHandler;
+        }
         _clientStartHandler = null;
+        _serverStartHandler = null;
 
         if (_listensToMultiplayer && GodotObject.IsInstanceValid(Multiplayer))
             Multiplayer.ConnectedToServer -= ProcessSettings;

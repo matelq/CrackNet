@@ -26,6 +26,7 @@ public partial class NetworkEvents : Node
     public event Action<int>? OnPeerLeave;
 
     private bool _isServer;
+    private bool _clientRunning;
     private bool _enabled;
     private MultiplayerApi? _multiplayer;
     private readonly Func<string> _peerIdTag;
@@ -68,9 +69,9 @@ public partial class NetworkEvents : Node
 
         // Automatically start ticking when entering multiplayer and stop when leaving
         OnServerStart += () => Context.NetworkTime.Start();
-        OnServerStop += () => Context.NetworkTime.Stop();
+        OnServerStop += () => { Context.NetworkTime.Stop(); Context.ResetSession(); };
         OnClientStart += _ => Context.NetworkTime.Start();
-        OnClientStop += () => Context.NetworkTime.Stop();
+        OnClientStop += () => { Context.NetworkTime.Stop(); Context.ResetSession(); };
     }
 
     public override void _ExitTree()
@@ -102,6 +103,23 @@ public partial class NetworkEvents : Node
             _isServer = false;
             OnServerStop?.Invoke();
         }
+        else if (!isServer && !HasPeer())
+        {
+            // A client that leaves on its own never gets server_disconnected, and upstream then never emits
+            // on_client_stop (network-events.gd:_process), leaving the servers holding the old session's data
+            StopClient();
+        }
+    }
+
+    private bool HasPeer()
+        => GodotObject.IsInstanceValid(Multiplayer) && Multiplayer.HasMultiplayerPeer();
+
+    /// <summary>Emits OnClientStop at most once per session, however the session ended.</summary>
+    private void StopClient()
+    {
+        if (!_clientRunning) return;
+        _clientRunning = false;
+        OnClientStop?.Invoke();
     }
 
     private void ConnectHandlers(MultiplayerApi? mp)
@@ -122,8 +140,13 @@ public partial class NetworkEvents : Node
         mp.PeerDisconnected -= HandlePeerDisconnected;
     }
 
-    private void HandleConnectedToServer() => OnClientStart?.Invoke(Multiplayer.GetUniqueId());
-    private void HandleServerDisconnected() => OnClientStop?.Invoke();
+    private void HandleConnectedToServer()
+    {
+        _clientRunning = true;
+        OnClientStart?.Invoke(Multiplayer.GetUniqueId());
+    }
+
+    private void HandleServerDisconnected() => StopClient();
     private void HandlePeerConnected(long id) => OnPeerJoin?.Invoke((int)id);
     private void HandlePeerDisconnected(long id) => OnPeerLeave?.Invoke((int)id);
 

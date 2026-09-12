@@ -174,6 +174,13 @@ public partial class NetworkSynchronizationServer : Node
     /// <summary>Erase everything kept about <paramref name="peer"/>. Called by default when a peer leaves.</summary>
     public void ErasePeer(int peer) => _rbSentStateHistory.Remove(peer);
 
+    /// <summary>Drops what was sent to whom, keeping registrations, schemas and visibility filters.</summary>
+    internal void ResetSession()
+    {
+        _rbSentStateHistory.Clear();
+        _lastSyncStateSent = new Snapshot(0);
+    }
+
     internal PropertyPool OwnedRollbackStateProperties => _rbOwnedStateProperties;
 
     private HistoryBuffer<Snapshot> GetPeerSentHistory(int peer)

@@ -33,6 +33,34 @@ public sealed class NetfoxContext
     public bool IsDefault => ReferenceEquals(this, Default);
 
     /// <summary>
+    /// Raised at the end of <see cref="ResetSession"/>, once the servers have dropped their per-session data. Nodes that
+    /// hold ticks of their own, like the synchronizers, listen to this to re-register themselves.
+    /// </summary>
+    public event Action? SessionReset;
+
+    /// <summary>
+    /// Drops everything tied to the session that just ended: recorded history, what was sent to which peer, the ids
+    /// exchanged with peers, spawn ticks. Registrations survive, so a scene that stays in the tree keeps working.
+    /// <para>
+    /// Called automatically when <see cref="NetworkEvents"/> sees the session stop. Games that disable NetworkEvents
+    /// have to call it themselves; without it, the next session starts at tick zero while the histories still hold the
+    /// previous session's ticks, and every write lands outside their window and is dropped.
+    /// </para>
+    /// </summary>
+    public void ResetSession()
+    {
+        // Rollback first: the others derive ticks from it
+        NetworkRollback?.ResetSession();
+        NetworkHistoryServer?.ResetSession();
+        NetworkSynchronizationServer?.ResetSession();
+        RollbackSimulationServer?.ResetSession();
+        RollbackLivenessServer?.ResetSession();
+        NetworkIdentityServer?.ResetSession();
+
+        SessionReset?.Invoke();
+    }
+
+    /// <summary>
     /// The context <paramref name="node"/> belongs to: the nearest <see cref="NetfoxContextRoot"/> above it, or
     /// <see cref="Default"/>. Nodes resolve this once, when they enter the tree.
     /// </summary>

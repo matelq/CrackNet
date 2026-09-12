@@ -203,6 +203,13 @@ public partial class RollbackSimulationServer : Node
         return false;
     }
 
+    /// <summary>Forgets which ticks were simulated, keeping registered nodes and their input graph.</summary>
+    internal void ResetSession()
+    {
+        _simulatedTicks.Clear();
+        _predictedNodes.Clear();
+    }
+
     private bool IsTickFreshFor(Node node, int tick)
         => !_simulatedTicks.TryGetValue(node, out var ticks) || !ticks.Contains(tick);
 

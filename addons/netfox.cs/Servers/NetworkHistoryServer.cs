@@ -89,6 +89,18 @@ public partial class NetworkHistoryServer : Node
 
     public void FlushIgnores() => _ignoredSubjects.Clear();
 
+    /// <summary>Drops every recorded tick, keeping which properties are registered. Called on session reset.</summary>
+    internal void ResetSession()
+    {
+        _rbInputHistory.Clear();
+        _rbStateHistory.Clear();
+        _syncHistory.Clear();
+        _rbInputSnapshots.Clear();
+        _rbStateSnapshots.Clear();
+        _syncStateSnapshots.Clear();
+        _ignoredSubjects.Clear();
+    }
+
     /// <summary>Latest tick at or before <paramref name="tick"/> where any of the subjects has rollback state, or -1.</summary>
     public int GetLatestStateTickFor(IEnumerable<Node> subjects, int tick) => GetLatestFor(subjects, tick, _rbStateHistory);
 

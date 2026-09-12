@@ -235,6 +235,13 @@ public partial class RollbackSynchronizer : BaseSynchronizer
         return Context.RollbackLivenessServer.IsAlive(_livenessNodes[0], tick ?? Context.NetworkRollback.Tick);
     }
 
+    protected override void OnSessionReset()
+    {
+        // The spawn tick belongs to the session that ended; as far as the new one is concerned, these nodes spawn now
+        SpawnTick = Context.NetworkRollback.Tick + 1;
+        base.OnSessionReset();
+    }
+
     public override void _Ready()
     {
         if (Engine.IsEditorHint()) return;

@@ -187,6 +187,78 @@ public partial class LoopbackHarnessTests : TestSuite
             $"{packets} state packets for {ticks} host ticks: state is being re-sent for resimulated ticks");
     }
 
+    [Test]
+    public async Task ASecondSessionOnTheSameServersWorks()
+    {
+        var hostPlayers = SpawnPlayers(_host);
+        var clientPlayers = SpawnPlayers(_client);
+        Expect.True(await WaitUntil(() => clientPlayers[1].Position.X > 0.3f, 5), "first session never replicated");
+
+        // Run past the history limit, so the tick indexed buffers hold ticks the next session will never reach
+        var historyLimit = NetfoxSettings.Instance.RollbackHistoryLimit;
+        Expect.True(await WaitUntil(() => _host.Context.NetworkTime.Tick > historyLimit + 20, 8),
+            $"first session only reached tick {_host.Context.NetworkTime.Tick}");
+
+        // Leave the lobby: peers go away and the level is torn down, but the servers live on
+        _host.Disconnect();
+        _client.Disconnect();
+        foreach (var player in hostPlayers.Values.Concat(clientPlayers.Values))
+        {
+            player.GetParent().RemoveChild(player);
+            player.Free();
+        }
+        await NextFrame();
+        await NextFrame();
+
+        // Join another lobby with the same stacks
+        _network = new LoopbackNetwork();
+        _host.Reconnect(_network, 1);
+        _client.Reconnect(_network, 2);
+        _network.Connect();
+        await NextFrame();
+
+        SpawnPlayers(_host);
+        var clientPlayers2 = SpawnPlayers(_client);
+
+        Expect.True(await WaitUntil(() => clientPlayers2[1].Position.X > 0.3f, 6),
+            $"second session did not replicate: client Player_1={clientPlayers2[1].Position}");
+    }
+
+    [Test]
+    public async Task ASecondSessionWithTheSameNodesWorks()
+    {
+        var hostPlayers = SpawnPlayers(_host);
+        var clientPlayers = SpawnPlayers(_client);
+        Expect.True(await WaitUntil(() => clientPlayers[1].Position.X > 0.3f, 5), "first session never replicated");
+
+        // Stand in for a long session: history ends up far above the tick the next session will start at
+        _host.Context.NetworkTime.SetTick(2000);
+        _client.Context.NetworkTime.SetTick(2000);
+        Expect.True(await WaitUntil(() => _host.Context.NetworkTime.Tick > 2010, 8),
+            $"first session only reached tick {_host.Context.NetworkTime.Tick}");
+
+        // Leave the lobby, but keep the scene: the nodes, their synchronizers and their history all survive
+        _host.Disconnect();
+        _client.Disconnect();
+        await NextFrame();
+        await NextFrame();
+
+        var restartFrom = clientPlayers[1].Position.X;
+
+        _network = new LoopbackNetwork();
+        _host.Reconnect(_network, 1);
+        _client.Reconnect(_network, 2);
+        _network.Connect();
+
+        var states = 0;
+        _client.Context.NetworkSynchronizationServer.OnState += _ => states++;
+
+        Expect.True(await WaitUntil(() => clientPlayers[1].Position.X > restartFrom + 0.3f, 8),
+            $"second session did not replicate with the same nodes: client Player_1={clientPlayers[1].Position}, " +
+            $"host Player_1={hostPlayers[1].Position}, host tick {_host.Context.NetworkTime.Tick}, states received {states}, " +
+            $"host owns {_host.Context.NetworkSynchronizationServer.OwnedRollbackStateProperties.Subjects.Count} subjects");
+    }
+
     private static Dictionary<int, HarnessPlayer> SpawnPlayers(NetfoxStack stack) => new()
     {
         [1] = HarnessPlayer.Spawn(stack, 1),
