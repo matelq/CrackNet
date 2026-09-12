@@ -262,34 +262,47 @@ public partial class LoopbackHarnessTests : TestSuite
     [Test]
     public async Task BandwidthAtPlayerScale()
     {
-        // One player per peer, which is what actually moves: a player whose input authority has no peer never gets
-        // input, so its state never changes and its diffs are empty
+        // Without latency the host simulates each tick once; with it, every late input makes it resimulate a range,
+        // which is where state traffic used to multiply (#29)
+        var idle = await MeasureBandwidth(0);
+        var lagging = await MeasureBandwidth(100);
+
+        GD.Print(FormattableString.Invariant(
+            $"BANDWIDTH 2 moving players, no latency: host {idle.HostKbps:F1}KB/s ({idle.PerPlayerTick:F0}B per player per tick), client {idle.ClientKbps:F1}KB/s"));
+        GD.Print(FormattableString.Invariant(
+            $"BANDWIDTH 2 moving players, 100ms latency: host {lagging.HostKbps:F1}KB/s ({lagging.PerPlayerTick:F0}B per player per tick), client {lagging.ClientKbps:F1}KB/s"));
+
+        // State is sent once per loop, so resimulating a range must not multiply what goes out
+        Expect.True(lagging.PerPlayerTick < idle.PerPlayerTick * 2,
+            $"latency should not multiply state traffic: {lagging.PerPlayerTick:F0}B per player per tick against {idle.PerPlayerTick:F0}B without latency");
+    }
+
+    private async Task<(double HostKbps, double ClientKbps, double PerPlayerTick)> MeasureBandwidth(int latencyMs)
+    {
+        foreach (var stack in _stacks)
+            foreach (var child in stack.GetChildren())
+                if (child is HarnessPlayer player)
+                {
+                    stack.RemoveChild(player);
+                    player.Free();
+                }
+
+        _network.LatencyMs = latencyMs;
         SpawnPlayers(_host);
         SpawnPlayers(_client);
-
         await WaitUntil(() => _client.Context.NetworkTime.IsInitialSyncDone(), 6);
 
         var firstTick = _host.Context.NetworkTime.Tick;
         _network.ResetTraffic();
         var start = Time.GetTicksMsec();
         await WaitUntil(() => _host.Context.NetworkTime.Tick - firstTick > 60, 8);
-        var seconds = (Time.GetTicksMsec() - start) / 1000.0;
 
-        var ticks = _host.Context.NetworkTime.Tick - firstTick;
+        var seconds = (Time.GetTicksMsec() - start) / 1000.0;
+        var ticks = Math.Max(1, _host.Context.NetworkTime.Tick - firstTick);
         var fromHost = _network.TrafficFrom(1);
         var fromClient = _network.TrafficFrom(2);
 
-        var header = FormattableString.Invariant($"BANDWIDTH 2 moving players over {ticks} ticks in {seconds:F1}s:");
-        var host = FormattableString.Invariant(
-            $"host out {fromHost.Bytes / seconds / 1024:F1}KB/s in {fromHost.Packets / seconds:F0} packets/s ({fromHost.Bytes / (double)Math.Max(1, fromHost.Packets):F0}B each)");
-        var client = FormattableString.Invariant(
-            $"client out {fromClient.Bytes / seconds / 1024:F1}KB/s in {fromClient.Packets / seconds:F0} packets/s ({fromClient.Bytes / (double)Math.Max(1, fromClient.Packets):F0}B each)");
-        GD.Print($"{header} {host}, {client}");
-
-        var perPlayerTick = fromHost.Bytes / (double)Math.Max(1, ticks) / 2;
-        GD.Print(FormattableString.Invariant($"BANDWIDTH host sends {perPlayerTick:F0}B per player per tick"));
-
-        Expect.True(fromHost.Bytes > 0 && fromClient.Bytes > 0, "both directions should carry traffic");
+        return (fromHost.Bytes / seconds / 1024, fromClient.Bytes / seconds / 1024, fromHost.Bytes / (double)ticks / 2);
     }
 
     private static Dictionary<int, HarnessPlayer> SpawnPlayers(NetfoxStack stack) => new()
