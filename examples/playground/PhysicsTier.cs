@@ -15,8 +15,13 @@ namespace Netfox.Examples.Playground;
 /// </para>
 /// <para>
 /// To turn it on: unzip godot-rapier-3d into <c>addons/godot-rapier3d</c> and set
-/// <c>physics/3d/physics_engine="Rapier3D"</c>. Its single build per dimension is already cross platform
-/// deterministic - there is no determinism option to find.
+/// <c>physics/3d/physics_engine="Rapier3D"</c>, or run <c>sh tools/install-extensions.sh rapier --enable-rapier</c>.
+/// </para>
+/// <para>
+/// Rapier is <i>locally</i> deterministic - the same build on the same machine reproduces a run exactly - which is
+/// all netfox asks of it: it replicates state rather than replaying inputs, so peers never have to agree bit for bit
+/// on what physics produced. Cross platform determinism is a separate claim, needs Rapier's
+/// <c>enhanced-determinism</c> feature, and a downloaded binary does not carry it.
 /// </para>
 /// </summary>
 public partial class PhysicsTier : Node

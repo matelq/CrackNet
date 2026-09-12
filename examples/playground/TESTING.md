@@ -184,8 +184,10 @@ Godot afterwards - an extension is only loaded at startup. By hand instead, if y
 The status line now says `physics rapier`, and three crates appear that you can shove around. They are rolled back
 and resimulated like everything else.
 
-There is no determinism option to hunt for: Rapier ships one build per dimension and it is already cross-platform
-deterministic.
+Rapier is **locally** deterministic - the same build on the same machine reproduces a run exactly - and that is all
+netfox needs, because it replicates state rather than replaying inputs. It is not cross-platform deterministic unless
+it is built with its `enhanced-determinism` feature, which a downloaded binary is not. Do not build a lockstep game
+on top of it without checking that first.
 
 A caveat worth knowing: a rewind steps the *entire physics space* again for every tick of its range, so this is far
 more expensive than kinematic rollback. With high latency and many bodies you will feel it. The sample uses one

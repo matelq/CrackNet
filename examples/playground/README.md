@@ -112,8 +112,10 @@ Godot's physics server only steps in `_PhysicsProcess` - there is no way to step
 ([PR 76462](https://github.com/godotengine/godot/pull/76462) is not in a release). Rapier exposes manual stepping and
 whole-space snapshots, so crates get rewound and resimulated like anything else.
 
-Two things worth knowing. Rapier's single build per dimension is already cross platform deterministic - there is no
-determinism option to hunt for. And a rewind steps the whole space again for every tick of the range, so it is much
+Two things worth knowing. Rapier is **locally** deterministic - same build, same machine, same run - which is all
+netfox asks of it, since it replicates state rather than replaying inputs. Cross platform determinism is a different
+claim and needs its `enhanced-determinism` feature, which a downloaded binary does not carry. And a rewind steps the
+whole space again for every tick of the range, so it is much
 more expensive than kinematic rollback: the tier uses one physics step per tick rather than the driver's default two,
 and a long resimulation with many bodies will make itself felt.
 
