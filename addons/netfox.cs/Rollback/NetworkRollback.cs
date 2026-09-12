@@ -189,7 +189,8 @@ public partial class NetworkRollback : Node
     private HashSet<Node>? TakeRememberedMutations(int tick)
     {
         var previous = _mutationHistory.GetAt(tick);
-        _mutationHistory.SetAt(tick, new HashSet<Node>(ReferenceEqualityComparer.Instance));
+        // Left empty on purpose: a set is only allocated if something actually mutates during this pass
+        _mutationHistory.SetAt(tick, null!);
         return previous;
     }
 
@@ -225,6 +226,7 @@ public partial class NetworkRollback : Node
         _earliestInput = -1;
         _earliestState = -1;
         _mutatedNodes.Clear();
+        _mutationHistory.Clear();
         _simulatedNodes.Clear();
         _isRollback = false;
     }

@@ -150,6 +150,9 @@ public partial class TestRunner : Node
 
                 try
                 {
+                    // Cases share the autoload servers, so a case that ran ticks would leave the history buffers
+                    // ahead of where the next case starts, and its writes would be dropped as out of window
+                    NetfoxContext.Default.ResetSession();
                     await suite.BeforeCase();
                     var result = test.Invoke(suite, null);
                     if (result is Task task) await task;

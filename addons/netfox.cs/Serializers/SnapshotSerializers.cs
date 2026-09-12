@@ -15,8 +15,25 @@ public abstract class BaseSnapshotSerializer
 
     public int MaxPacketSize { get; set; } = 1440;
 
+    // Reused across calls: a serializer writes for one peer at a time, on the main loop, and never nests
+    protected readonly ByteWriter FrameBuffer = new();
+    protected readonly ByteWriter NodeBuffer = new();
+    private readonly PacketBuffer _packets = new();
+    private readonly Action<ByteWriter> _writeTickHeader;
+    private int _packetTick;
+
+    /// <summary>The shared packet buffer, set up to prefix each packet with <paramref name="tick"/>.</summary>
+    protected PacketBuffer PacketsFor(int tick)
+    {
+        _packetTick = tick;
+        _packets.MaxPacketSize = MaxPacketSize;
+        _packets.PacketSetup = _writeTickHeader;
+        return _packets;
+    }
+
     protected BaseSnapshotSerializer(string name, NetworkSchema schemas, NetworkIdentityServer? identityServer)
     {
+        _writeTickHeader = packet => packet.PutU32((uint)_packetTick);
         Logger = NetfoxLogger.ForNetfox(name);
         // Intentionally storing the reference so it can be modified from the outside
         Schemas = schemas;
@@ -77,9 +94,9 @@ public sealed class DenseSnapshotSerializer : BaseSnapshotSerializer
 
     public List<byte[]> WriteFor(int peer, Snapshot snapshot, PropertyPool properties, Func<Node, bool>? filter = null)
     {
-        var packetBuffer = new PacketBuffer(MaxPacketSize) { PacketSetup = packet => packet.PutU32((uint)snapshot.Tick) };
-        var frameBuffer = new ByteWriter();
-        var nodeBuffer = new ByteWriter();
+        var packetBuffer = PacketsFor(snapshot.Tick);
+        var frameBuffer = FrameBuffer;
+        var nodeBuffer = NodeBuffer;
 
         foreach (var node in properties.Subjects)
         {
@@ -141,9 +158,9 @@ public sealed class SparseSnapshotSerializer : BaseSnapshotSerializer
 
     public List<byte[]> WriteFor(int peer, Snapshot snapshot, PropertyPool properties, Func<Node, bool>? filter = null)
     {
-        var packetBuffer = new PacketBuffer(MaxPacketSize) { PacketSetup = packet => packet.PutU32((uint)snapshot.Tick) };
-        var frameBuffer = new ByteWriter();
-        var nodeBuffer = new ByteWriter();
+        var packetBuffer = PacketsFor(snapshot.Tick);
+        var frameBuffer = FrameBuffer;
+        var nodeBuffer = NodeBuffer;
 
         foreach (var node in properties.Subjects)
         {

@@ -11,7 +11,10 @@ public sealed class PacketBuffer
     private static readonly NetfoxLogger Logger = NetfoxLogger.ForNetfox("PacketBuffer");
 
     private readonly List<byte[]> _packets = new();
-    private ByteWriter? _buffer;
+
+    // One writer for the whole life of the buffer: finished packets are copied out, so it can be refilled
+    private readonly ByteWriter _buffer = new();
+    private bool _started;
 
     public int MaxPacketSize { get; set; }
 
@@ -27,20 +30,23 @@ public sealed class PacketBuffer
     {
         if (NeedsNewPacket(data.Length))
         {
-            if (_buffer is { Size: > 0 })
+            if (_started && _buffer.Size > 0)
                 _packets.Add(_buffer.ToArray());
-            _buffer = new ByteWriter();
+
+            _buffer.Clear();
+            _started = true;
             PacketSetup?.Invoke(_buffer);
         }
 
-        _buffer!.PutData(data);
+        _buffer.PutData(data);
     }
 
     public List<byte[]> Finish()
     {
-        if (_buffer is { Size: > 0 })
+        if (_started && _buffer.Size > 0)
             _packets.Add(_buffer.ToArray());
-        _buffer = null;
+        _started = false;
+        _buffer.Clear();
 
         var result = new List<byte[]>(_packets);
         _packets.Clear();
@@ -49,7 +55,7 @@ public sealed class PacketBuffer
 
     private bool NeedsNewPacket(int incoming)
     {
-        if (_buffer is null) return true;
+        if (!_started) return true;
         if (MaxPacketSize <= 0) return false;
         if (incoming > MaxPacketSize)
         {

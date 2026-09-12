@@ -174,6 +174,6 @@ public partial class MutationTests : TestSuite
         }
 
         Expect.True(messages.Any(message => message.Contains("was not reproduced while resimulating")),
-            "the dropped mutation should leave a trace line to debug with");
+            $"the dropped mutation should leave a trace line to debug with; captured {messages.Count} lines");
     }
 }
