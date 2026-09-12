@@ -80,6 +80,7 @@ public partial class NetworkTime : Node
     /// <summary>Seconds without frames before the game is considered stalled and catch-up ticks are skipped.</summary>
     public double StallThreshold => _clock.StallThreshold;
 
+    // Upstream still ships these as @deprecated (network-time.gd:129-199), so they stay here too; they go when it drops them
     [Obsolete("Returns the same as Tick")] public int RemoteTick => Tick;
     [Obsolete("Returns the same as Time")] public double RemoteTime => Time;
     [Obsolete("Returns the same as Tick")] public int LocalTick => Tick;

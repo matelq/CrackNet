@@ -22,7 +22,6 @@ public partial class PhysicsDriver : Node
     [Export] public bool RollbackPhysicsSpace { get; set; } = true;
 
     protected Rid PhysicsSpace;
-    protected readonly SortedDictionary<int, object> Snapshots = new();
 
     public override void _EnterTree()
     {
@@ -68,12 +67,7 @@ public partial class PhysicsDriver : Node
 
     private void OnProcessTick(int tick) => StepPhysics(Context.NetworkTime.Ticktime, tick);
 
-    private void AfterTickLoop()
-    {
-        var historyStart = Context.NetworkRollback.HistoryStart;
-        foreach (var tick in Snapshots.Keys.Where(t => t < historyStart).ToList())
-            Snapshots.Remove(tick);
-    }
+    private void AfterTickLoop() => TrimSnapshots(Context.NetworkRollback.HistoryStart);
 
     /// <summary>Steps physics for one tick, split into PhysicsFactor sub-steps, ticking NetworkRigidBody nodes in between.</summary>
     public void StepPhysics(double delta, int tick)
@@ -94,6 +88,24 @@ public partial class PhysicsDriver : Node
     protected virtual void PhysicsStep(double delta) { }
     protected virtual void SnapshotSpace(int tick) { }
     protected virtual void RollbackSpace(int tick) { }
+
+    /// <summary>Drops snapshots older than the rollback history. Drivers whose engine keeps its own cache do nothing.</summary>
+    protected virtual void TrimSnapshots(int historyStart) { }
+}
+
+/// <summary>
+/// A driver that keeps the snapshots itself, as body states per Rid per tick. The Rapier drivers do not: the extension
+/// holds its own rolling cache, which is why the snapshot storage lives here and not in <see cref="PhysicsDriver"/>.
+/// </summary>
+public abstract partial class BodyStatePhysicsDriver : PhysicsDriver
+{
+    protected readonly SortedDictionary<int, Dictionary<Rid, Godot.Collections.Array>> Snapshots = new();
+
+    protected override void TrimSnapshots(int historyStart)
+    {
+        foreach (var tick in Snapshots.Keys.Where(tick => tick < historyStart).ToList())
+            Snapshots.Remove(tick);
+    }
 }
 
 /// <summary>Physics bodies driven by a PhysicsDriver during rollback.</summary>

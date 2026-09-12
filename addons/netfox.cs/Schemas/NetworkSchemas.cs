@@ -13,7 +13,14 @@ public abstract class NetworkSchemaSerializer
     public abstract Variant Decode(ByteReader buffer);
 }
 
-/// <summary>Factory of schema serializers. Port of schemas/network-schemas.gd; naming follows the original (uint16, vec3f32, ...).</summary>
+/// <summary>
+/// Factory of schema serializers. Port of schemas/network-schemas.gd; naming follows the original (uint16, vec3f32, ...).
+/// <para>
+/// <see cref="Variant"/> and <see cref="String"/> read like the types of the same name on purpose: they are kept as
+/// upstream names them, so the upstream schema documentation applies here unchanged. C# resolves the two without
+/// ambiguity, and renaming them would cost that mapping for a cosmetic gain.
+/// </para>
+/// </summary>
 public static class NetworkSchemas
 {
     /// <summary>Any type supported by GD.VarToBytes; size depends on the value.</summary>

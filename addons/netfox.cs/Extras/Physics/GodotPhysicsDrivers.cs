@@ -8,7 +8,7 @@ namespace Netfox.Extras;
 /// Snapshots every PhysicsBody per tick. Port of netfox.extras/physics/godot_driver_3d.gd.
 /// </summary>
 [GlobalClass]
-public partial class GodotPhysicsDriver3D : PhysicsDriver
+public partial class GodotPhysicsDriver3D : BodyStatePhysicsDriver
 {
     public static bool IsAvailable => PhysicsServer3D.Singleton.HasMethod("space_step");
 
@@ -37,7 +37,7 @@ public partial class GodotPhysicsDriver3D : PhysicsDriver
 
     protected override void SnapshotSpace(int tick)
     {
-        var states = new System.Collections.Generic.Dictionary<Rid, Array>();
+        var states = new Dictionary<Rid, Array>();
         foreach (var body in _bodies)
             if (GodotObject.IsInstanceValid(body))
                 states[body.GetRid()] = GetBodyStates(body.GetRid());
@@ -47,7 +47,7 @@ public partial class GodotPhysicsDriver3D : PhysicsDriver
     protected override void RollbackSpace(int tick)
     {
         if (!Snapshots.TryGetValue(tick, out var snapshot)) return;
-        foreach (var (rid, state) in (System.Collections.Generic.Dictionary<Rid, Array>)snapshot)
+        foreach (var (rid, state) in snapshot)
             SetBodyStates(rid, state);
 
         foreach (var body in _bodies)
@@ -96,7 +96,7 @@ public partial class GodotPhysicsDriver3D : PhysicsDriver
 
 /// <summary>2D counterpart of GodotPhysicsDriver3D. Port of netfox.extras/physics/godot_driver_2d.gd.</summary>
 [GlobalClass]
-public partial class GodotPhysicsDriver2D : PhysicsDriver
+public partial class GodotPhysicsDriver2D : BodyStatePhysicsDriver
 {
     public static bool IsAvailable => PhysicsServer2D.Singleton.HasMethod("space_step");
 
@@ -125,7 +125,7 @@ public partial class GodotPhysicsDriver2D : PhysicsDriver
 
     protected override void SnapshotSpace(int tick)
     {
-        var states = new System.Collections.Generic.Dictionary<Rid, Array>();
+        var states = new Dictionary<Rid, Array>();
         foreach (var body in _bodies)
         {
             if (!GodotObject.IsInstanceValid(body)) continue;
@@ -138,7 +138,7 @@ public partial class GodotPhysicsDriver2D : PhysicsDriver
     protected override void RollbackSpace(int tick)
     {
         if (!Snapshots.TryGetValue(tick, out var snapshot)) return;
-        foreach (var (rid, state) in (System.Collections.Generic.Dictionary<Rid, Array>)snapshot)
+        foreach (var (rid, state) in snapshot)
             SetBodyStates(rid, state);
 
         foreach (var body in _bodies)
