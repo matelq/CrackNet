@@ -1,7 +1,7 @@
 # netfox-net
 
 Native C# port of netfox (GDScript rollback netcode for Godot). Reference GDScript lives in `netfox/` (read-only, `.gdignore`,
-excluded from git via `.git/info/exclude`; clone foxssake/netfox there if missing). Roadmap: `TODO.md`.
+excluded from git via `.git/info/exclude`; clone foxssake/netfox there if missing). Roadmap lives in GitHub issues.
 Rule: 1:1 semantics and public API with the original, idiomatic C# inside. When in doubt, read the matching `.gd` file first.
 
 ## Layout

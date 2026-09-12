@@ -5,7 +5,7 @@ rollback with client-side prediction and server reconciliation, state synchroniz
 netfox.extras toolbox. No GDScript, no interop layer. The addon folder is `addons/netfox.cs`.
 
 Status: functional and code parity with upstream, verified by 77 core tests, 90 Godot-side tests and a two-process
-ENet run. Steam transport is wired but not yet tested against a live Steam client. Roadmap in [TODO.md](TODO.md).
+ENet run. Steam transport is wired but not yet tested against a live Steam client. Roadmap: [issues](https://github.com/matelq/netfox-net/issues).
 
 ## Layout
 
