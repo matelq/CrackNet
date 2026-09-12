@@ -39,6 +39,10 @@ Thumbs.db
 /addons/godot-rapier2d/
 /addons/godot-rapier3d/
 
+# GodotSteam GDExtension and its app id, installed by hand for the playground Steam tier
+/addons/godotsteam/
+steam_appid.txt
+
 # Claude Code local instructions
 CLAUDE.local.md
 .claude/settings.local.json
