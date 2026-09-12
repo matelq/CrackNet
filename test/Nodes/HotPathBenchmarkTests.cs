@@ -132,6 +132,40 @@ public partial class HotPathBenchmarkTests : TestSuite
         return (GC.GetAllocatedBytesForCurrentThread() - before) / (double)iterations;
     }
 
+    [Test]
+    public async Task TickCostAtPlayerScale()
+    {
+        // Eight players, four state properties and one input each: a plausible small session
+        for (var player = 0; player < 8; player++)
+        {
+            var subject = new Node3D { Name = $"Player{player}" };
+            subject.AddChild(new StateNode { Name = "Input" });
+            subject.AddChild(new RollbackSynchronizer
+            {
+                Name = "RBS",
+                Root = subject,
+                StateProperties = [":position", ":rotation", ":scale", ":visible"],
+                InputProperties = ["Input:TrackedValue"],
+            });
+            await Mount(subject);
+        }
+        await NextFrame();
+
+        NetworkTime.Instance.SetTick(0);
+        NetworkRollback.Instance.SetTick(0);
+        for (var i = 0; i < 20; i++) RunOneTick();
+
+        const int ticks = 100;
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var stopwatch = Stopwatch.StartNew();
+        for (var i = 0; i < ticks; i++) RunOneTick();
+        var elapsed = stopwatch.Elapsed.TotalMilliseconds;
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        GD.Print(FormattableString.Invariant(
+            $"TICK COST 8 players x 4 state + 1 input: {elapsed / ticks:F3}ms per tick, {allocated / (double)ticks / 1024:F1}KB per tick"));
+    }
+
     private static void RunOneTick()
     {
         var tick = NetworkTime.Instance.Tick;
