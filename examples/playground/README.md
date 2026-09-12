@@ -8,6 +8,8 @@ prediction, and a platform to ride.
 ```
 
 Run two instances (Debug > Customize Run Instances in the editor), press **Host** in one and **Join** in the other.
+Never done this before? **[TESTING.md](TESTING.md)** walks through it from nothing, including how to make it misbehave
+on purpose so you can see rollback working.
 Arrows or WASD to move, Space to jump twice, Enter to shoot. The status line at the top shows the tick and the range the last
 rollback covered.
 

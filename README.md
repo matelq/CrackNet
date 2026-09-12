@@ -73,8 +73,11 @@ godot --path . res://examples/playground/playground.tscn
 
 Two instances, Host in one and Join in the other. It shows movement through a rewindable state machine, prediction,
 interpolation, a weapon on the request-and-accept model, replication without rollback, and visibility filtering — and
-lights up rigid body rollback and Steam hosting when those are installed. Its
-[README](examples/playground/README.md) points at the parts worth reading.
+lights up rigid body rollback and Steam hosting when those are installed.
+
+**[TESTING.md](examples/playground/TESTING.md)** walks through it from nothing - installing Godot, running two
+instances, adding latency until things visibly break, and reading what the status line is telling you. Its
+[README](examples/playground/README.md) points at the parts of the code worth reading.
 
 ## Checks
 

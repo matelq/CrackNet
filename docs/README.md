@@ -32,7 +32,8 @@ Then, as you need them:
 
 `examples/playground` is a small complete game built out of scenes: host or join by address, a few players, movement
 with rollback and prediction, and a platform to ride. Its [README](../examples/playground/README.md) points at the
-parts worth reading.
+parts worth reading, and [TESTING.md](../examples/playground/TESTING.md) walks through running and breaking it from
+scratch - the fastest way to see what rollback actually does.
 
 ```
 <godot> --path . res://examples/playground/playground.tscn

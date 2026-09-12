@@ -1,6 +1,10 @@
 ; Engine configuration file.
 ; It's best edited using the editor UI and not directly,
 ; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
 
 config_version=5
 
@@ -27,13 +31,13 @@ InterpolationServer="*res://addons/netfox.cs/Servers/InterpolationServer.cs"
 WindowTiler="*res://addons/netfox.cs/Extras/WindowTiler.cs"
 NetworkSimulator="*res://addons/netfox.cs/Extras/NetworkSimulator.cs"
 
-[editor_plugins]
-
-enabled=PackedStringArray("res://addons/netfox.cs/plugin.cfg")
-
 [dotnet]
 
 project/assembly_name="Netfox"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/netfox.cs/plugin.cfg")
 
 [netfox]
 
