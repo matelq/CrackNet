@@ -18,6 +18,13 @@ public sealed class LoopbackNetwork
     private readonly Random _rng = new(20260912);
     private readonly Dictionary<int, LoopbackMultiplayerPeer> _peers = new();
 
+    /// <summary>Bytes and packets that were handed to the network, per sending peer. Counted before loss is applied.</summary>
+    public Dictionary<int, (long Bytes, long Packets)> Traffic { get; } = new();
+
+    public void ResetTraffic() => Traffic.Clear();
+
+    public (long Bytes, long Packets) TrafficFrom(int peer) => Traffic.GetValueOrDefault(peer);
+
     public LoopbackMultiplayerPeer CreatePeer(int id)
     {
         var peer = new LoopbackMultiplayerPeer(this, id);
@@ -56,6 +63,9 @@ public sealed class LoopbackNetwork
 
     internal void Send(int from, int to, byte[] data, MultiplayerPeer.TransferModeEnum mode, int channel)
     {
+        var counted = Traffic.GetValueOrDefault(from);
+        Traffic[from] = (counted.Bytes + data.Length, counted.Packets + 1);
+
         foreach (var (id, peer) in _peers)
         {
             if (id == from) continue;

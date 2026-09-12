@@ -259,6 +259,39 @@ public partial class LoopbackHarnessTests : TestSuite
             $"host owns {_host.Context.NetworkSynchronizationServer.OwnedRollbackStateProperties.Subjects.Count} subjects");
     }
 
+    [Test]
+    public async Task BandwidthAtPlayerScale()
+    {
+        // One player per peer, which is what actually moves: a player whose input authority has no peer never gets
+        // input, so its state never changes and its diffs are empty
+        SpawnPlayers(_host);
+        SpawnPlayers(_client);
+
+        await WaitUntil(() => _client.Context.NetworkTime.IsInitialSyncDone(), 6);
+
+        var firstTick = _host.Context.NetworkTime.Tick;
+        _network.ResetTraffic();
+        var start = Time.GetTicksMsec();
+        await WaitUntil(() => _host.Context.NetworkTime.Tick - firstTick > 60, 8);
+        var seconds = (Time.GetTicksMsec() - start) / 1000.0;
+
+        var ticks = _host.Context.NetworkTime.Tick - firstTick;
+        var fromHost = _network.TrafficFrom(1);
+        var fromClient = _network.TrafficFrom(2);
+
+        var header = FormattableString.Invariant($"BANDWIDTH 2 moving players over {ticks} ticks in {seconds:F1}s:");
+        var host = FormattableString.Invariant(
+            $"host out {fromHost.Bytes / seconds / 1024:F1}KB/s in {fromHost.Packets / seconds:F0} packets/s ({fromHost.Bytes / (double)Math.Max(1, fromHost.Packets):F0}B each)");
+        var client = FormattableString.Invariant(
+            $"client out {fromClient.Bytes / seconds / 1024:F1}KB/s in {fromClient.Packets / seconds:F0} packets/s ({fromClient.Bytes / (double)Math.Max(1, fromClient.Packets):F0}B each)");
+        GD.Print($"{header} {host}, {client}");
+
+        var perPlayerTick = fromHost.Bytes / (double)Math.Max(1, ticks) / 2;
+        GD.Print(FormattableString.Invariant($"BANDWIDTH host sends {perPlayerTick:F0}B per player per tick"));
+
+        Expect.True(fromHost.Bytes > 0 && fromClient.Bytes > 0, "both directions should carry traffic");
+    }
+
     private static Dictionary<int, HarnessPlayer> SpawnPlayers(NetfoxStack stack) => new()
     {
         [1] = HarnessPlayer.Spawn(stack, 1),
