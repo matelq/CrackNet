@@ -15,6 +15,7 @@ public partial class Playground : Node3D
 {
     [Export] public PackedScene PlayerScene { get; set; } = null!;
     [Export] public Node3D SpawnRoot { get; set; } = null!;
+    [Export] public Node3D ProjectileRoot { get; set; } = null!;
     [Export] public int Port { get; set; } = 9999;
 
     private LineEdit _address = null!;
@@ -118,6 +119,9 @@ public partial class Playground : Node3D
 
         SpawnRoot.AddChild(player);
         _players[peer] = player;
+
+        // Projectiles live in the world, not under the player, or they would ride along with whoever fired them
+        player.GetNode<PlayerWeapon>("Weapon").SpawnRoot = ProjectileRoot;
 
         if (peer == Multiplayer.GetUniqueId())
             GetNode<PlaygroundCamera>("Camera3D").Follow(player);

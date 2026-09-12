@@ -18,9 +18,16 @@ public partial class PlayerInput : BaseNetInput
 
     [RollbackInput] public bool Jump { get; set; }
 
+    /// <summary>
+    /// Firing is not rollback input in the way movement is - the weapon toolkit is request-and-accept, not rollback -
+    /// but gathering it here keeps all the player's input in one place, and on the peer that owns it.
+    /// </summary>
+    public bool Fire { get; private set; }
+
     protected override void Gather()
     {
         Movement = Godot.Input.GetVector("ui_left", "ui_right", "ui_up", "ui_down");
         Jump = Godot.Input.IsActionPressed("ui_accept");
+        Fire = Godot.Input.IsActionPressed("ui_select");
     }
 }

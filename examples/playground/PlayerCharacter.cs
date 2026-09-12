@@ -40,6 +40,7 @@ public partial class PlayerCharacter : CharacterBody3D
     public bool IsLocal => Input.IsMultiplayerAuthority();
 
     public PlayerInput Input { get; private set; } = null!;
+    public PlayerWeapon Weapon { get; private set; } = null!;
     public RollbackSynchronizer Synchronizer { get; private set; } = null!;
     public RewindableStateMachine StateMachine { get; private set; } = null!;
 
@@ -50,6 +51,7 @@ public partial class PlayerCharacter : CharacterBody3D
         Input = GetNode<PlayerInput>("Input");
         Synchronizer = GetNode<RollbackSynchronizer>("RollbackSynchronizer");
         StateMachine = GetNode<RewindableStateMachine>("RewindableStateMachine");
+        Weapon = GetNode<PlayerWeapon>("Weapon");
         Gravity = (float)(double)ProjectSettings.GetSetting("physics/3d/default_gravity", 9.8);
         JumpsLeft = MaxJumps;
 
@@ -57,6 +59,21 @@ public partial class PlayerCharacter : CharacterBody3D
         // after a scene sets the node's own properties, so a State written into the .tscn would find nothing
         StateMachine.State = "Airborne";
     }
+
+    /// <summary>
+    /// Firing happens here rather than in a rollback tick, and only on the peer that owns the input. The weapon sends
+    /// an RPC, and a rollback tick runs again for every resimulated tick - which would fire again each time.
+    /// </summary>
+    public override void _Process(double delta)
+    {
+        if (!IsLocal) return;
+
+        var justPressed = Input.Fire && !_fireHeld;
+        _fireHeld = Input.Fire;
+        if (justPressed) Weapon.Fire();
+    }
+
+    private bool _fireHeld;
 
     /// <summary>Horizontal movement from this tick's input, keeping the vertical component it was handed.</summary>
     public Vector3 WithInput(Vector3 velocity)

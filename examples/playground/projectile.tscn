@@ -1,0 +1,13 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://examples/playground/Projectile.cs" id="1_iqqh5"]
+
+[sub_resource type="SphereMesh" id="SphereMesh_j1p2e"]
+radius = 0.12
+height = 0.24
+
+[node name="Projectile" type="Node3D" unique_id=771586588]
+script = ExtResource("1_iqqh5")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=23888961]
+mesh = SubResource("SphereMesh_j1p2e")

@@ -8,7 +8,7 @@ prediction, and a platform to ride.
 ```
 
 Run two instances (Debug > Customize Run Instances in the editor), press **Host** in one and **Join** in the other.
-Arrows or WASD to move, Space to jump twice. The status line at the top shows the tick and the range the last
+Arrows or WASD to move, Space to jump twice, Enter to shoot. The status line at the top shows the tick and the range the last
 rollback covered.
 
 ## What to look at
@@ -32,6 +32,15 @@ correction.
 machine's current state is in the synchronizer's state properties - so a rewind puts the player back in the state it
 was in for that tick and replays the transitions from there. An ordinary state machine would keep whatever state the
 mispredicted future left it in, which is the whole reason this one exists.
+
+**Shooting is not rollback, and that is deliberate.** `PlayerWeapon` is a `NetworkWeapon3D`: the shooter spawns a
+projectile the moment it fires, and the authority independently spawns its own and compares the two spawn transforms.
+Close enough and the shot stands; too far apart and the shooter's copy is taken back. That is the cheap answer to "I
+want shooting" - full rollback of projectiles is the expensive one, and netfox does not do it. The toolkit also never
+despawns projectiles, so `Projectile` gives up after a fixed number of ticks by itself.
+
+Note where the firing happens: in `_Process`, on the peer that owns the input, and not in a rollback tick. The weapon
+sends an RPC, and a rollback tick runs again for every resimulated tick - which would fire again each time.
 
 **The platform is what makes misprediction visible.** `MovingPlatform` computes its position from the tick rather
 than from an accumulator, so a resimulated tick puts it exactly where the first pass did. Change it to accumulate

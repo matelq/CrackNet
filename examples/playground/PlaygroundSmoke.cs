@@ -49,6 +49,11 @@ public partial class PlaygroundSmoke : Node
         await ToSignal(GetTree().CreateTimer(2.0), Godot.Timer.SignalName.Timeout);
         Godot.Input.ParseInputEvent(new InputEventAction { Action = "ui_right", Pressed = false });
 
+        // One shot, so the weapon's request and accept round trip is exercised too
+        Godot.Input.ParseInputEvent(new InputEventAction { Action = "ui_select", Pressed = true });
+        await ToSignal(GetTree().CreateTimer(0.3), Godot.Timer.SignalName.Timeout);
+        Godot.Input.ParseInputEvent(new InputEventAction { Action = "ui_select", Pressed = false });
+
         await ToSignal(GetTree().CreateTimer(_seconds), Godot.Timer.SignalName.Timeout);
         Report();
     }
@@ -69,6 +74,9 @@ public partial class PlaygroundSmoke : Node
                  && self.JumpsLeft == self.MaxJumps
                  // Started Airborne and fell: reaching Grounded means the rewindable state machine transitioned
                  && self.StateMachine.State == "Grounded"
+                 // Each peer fires its own player, and the shot has to have been accepted. Whether the other peer's
+                 // shot is seen depends on who was connected when - the host fires before the client has joined.
+                 && self.Weapon.Shots > 0
                  // The platform is simulated from the tick, so it is somewhere other than where it started
                  && Mathf.Abs(platform.Position.X) > 0.1f;
 
@@ -76,7 +84,7 @@ public partial class PlaygroundSmoke : Node
         var head = $"PLAYGROUND role={(_isHost ? "host" : "client")} ok={ok} peer=#{Multiplayer.GetUniqueId()} " +
                    $"tick={NetworkTime.Instance.Tick} synced={NetworkTime.Instance.IsInitialSyncDone()}";
         var tail = FormattableString.Invariant(
-            $"players=[{names}] peak={_maxPlayers} state={self?.StateMachine.State} platform_x={platform.Position.X:F2} own_pos={self?.Position} jumps={self?.JumpsLeft}");
+            $"players=[{names}] peak={_maxPlayers} state={self?.StateMachine.State} shots={string.Join("/", players.Select(p => p.Weapon.Shots))} platform_x={platform.Position.X:F2} own_pos={self?.Position} jumps={self?.JumpsLeft}");
         GD.Print($"{head} {tail}");
 
         GetTree().Quit(ok ? 0 : 1);
