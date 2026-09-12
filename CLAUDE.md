@@ -35,6 +35,13 @@ Performance claims come from tests that print their numbers (`PropertyAccessBenc
 and the bandwidth case in the harness) and fail on regression. Tick-level timings swing by ±60% between runs on the
 same build, so measure in isolation and take allocations and byte counts, which are stable, over wall clock.
 
+## Releasing
+
+Bump `version` in `addons/netfox.cs/plugin.cfg`, then tag `vX.Y.Z`. The release workflow refuses a tag that disagrees
+with plugin.cfg. It packages `addons/netfox.cs` with the `Netfox.Core` sources copied into `addons/netfox.cs/Core`, so
+a consumer drops in one folder and needs no project reference, and it builds that layout on its own before zipping.
+The addon needs `ImplicitUsings` and `Nullable` enabled in the consuming project.
+
 ## Conventions
 
 - Signals → C# `event`. Events are NOT auto-disconnected when a node is freed: store the delegate and unsubscribe in `_ExitTree`. For the three synchronizers that lives in `BaseSynchronizer` (reworked).
