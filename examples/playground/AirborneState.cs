@@ -11,6 +11,7 @@ public partial class AirborneState : PlayerState
     {
         Player.RefreshIsOnFloor();
         Player.RideFloor(tick);
+        Player.Carry(tick);
 
         var velocity = Player.Velocity;
         velocity.Y -= Player.Gravity * (float)delta;

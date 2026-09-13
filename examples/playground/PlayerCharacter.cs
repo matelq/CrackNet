@@ -36,6 +36,30 @@ public partial class PlayerCharacter : CharacterBody3D
     /// </summary>
     [RollbackState] public bool JumpHeld { get; set; }
 
+    /// <summary>
+    /// Which crate this player is carrying, as its index under World/Crates, or -1. An index rather than a node
+    /// reference because it has to go over the wire and come back out of history; every peer orders the crates the
+    /// same way, so the index means the same crate everywhere.
+    /// </summary>
+    [RollbackState] public int HeldCrate { get; set; } = -1;
+
+    /// <summary>Last direction walked in, for where a throw goes. Rollback state: a throw is a function of the tick.</summary>
+    [RollbackState] public Vector3 Facing { get; set; } = Vector3.Forward;
+
+    /// <summary>How far a crate may be to pick it up, and where it rides.</summary>
+    [Export] public float GrabReach { get; set; } = 1.6f;
+    [Export] public Vector3 CarryOffset { get; set; } = new(0, 1.3f, 0);
+    [Export] public float ThrowSpeed { get; set; } = 7.0f;
+
+    /// <summary>
+    /// The two events of carrying. Peers predict them in their rollback tick; the authority broadcasts what really
+    /// happened and predictions get confirmed or cancelled - a cancelled pickup rolls the crate back to free.
+    /// Created here rather than in the scene: both peers run this code, so both get nodes with these names and the
+    /// paths line up, and the .tscn does not have to be touched.
+    /// </summary>
+    public RewindableAction GrabAction { get; private set; } = null!;
+    public RewindableAction ThrowAction { get; private set; } = null!;
+
     /// <summary>True on the peer that owns this player's input, which is the one the camera follows.</summary>
     public bool IsLocal => Input.IsMultiplayerAuthority();
 
@@ -59,6 +83,11 @@ public partial class PlayerCharacter : CharacterBody3D
         // RideFloor. Zero means no layer counts as a moving platform, so MoveAndSlide only ever moves this body by
         // its own velocity.
         PlatformFloorLayers = 0;
+
+        GrabAction = new RewindableAction { Name = "GrabAction" };
+        ThrowAction = new RewindableAction { Name = "ThrowAction" };
+        AddChild(GrabAction);
+        AddChild(ThrowAction);
 
         ApplySchema();
 
@@ -103,9 +132,100 @@ public partial class PlayerCharacter : CharacterBody3D
         [":velocity"] = NetworkSchemas.Vec3F32(),
         [":JumpsLeft"] = NetworkSchemas.Uint8(),
         [":JumpHeld"] = NetworkSchemas.Bool8(),
+        [":HeldCrate"] = NetworkSchemas.Int8(),
+        [":Facing"] = NetworkSchemas.Vec3F32(),
         ["Input:Movement"] = NetworkSchemas.Vec2F16(),
         ["Input:Jump"] = NetworkSchemas.Bool8(),
+        ["Input:Grab"] = NetworkSchemas.Bool8(),
+        ["Input:Throw"] = NetworkSchemas.Bool8(),
     });
+
+    /// <summary>
+    /// Picking up, carrying and throwing a crate, once per tick from both states.
+    /// <para>
+    /// While held the crate is not simulated: it is frozen and placed relative to this player every tick, so the
+    /// player's own prediction carries it for free and no round trip is involved. The two transitions are
+    /// <see cref="RewindableAction"/>s, because they have to happen on one and the same tick on every peer and only
+    /// the authority can say which - and the crate is <see cref="NetworkRollback.Mutate"/>d on each, because it has
+    /// no input of its own and nothing else would make it resimulate the tick it changed hands.
+    /// </para>
+    /// <para>
+    /// A client only calls SetActive from ticks that have its real input - a prediction set as an action would be
+    /// taken as a claim. The authority calls it on every tick, predicted or not, because its verdict is the truth by
+    /// definition and a tick it never rules on is a tick nobody gets a verdict for: a remote input lost on the wire
+    /// leaves that tick predicted on the authority for good, and a client that predicted a pickup there would carry
+    /// the crate forever with nobody ever having confirmed it. That happened, under 10% loss, on the third run.
+    /// </para>
+    /// </summary>
+    public void Carry(int tick)
+    {
+        if (Input.Movement.LengthSquared() > 0.01f) Facing = new Vector3(Input.Movement.X, 0, Input.Movement.Y).Normalized();
+
+        var crates = Crates();
+        var predicting = Synchronizer.IsPredicting();
+
+        if (!predicting || IsMultiplayerAuthority())
+        {
+            var wanted = HeldCrate < 0 && Input.Grab ? NearestCrate(crates) : -1;
+            GrabAction.SetActive(wanted >= 0);
+            if (wanted >= 0) GrabAction.SetContext(wanted);
+            ThrowAction.SetActive(HeldCrate >= 0 && Input.Throw);
+        }
+
+        // State is applied on Confirming AND Active: a resimulated tick restores HeldCrate to what it was before
+        // the grab and then runs this again, and the grab has to happen again. Only the side effect that must not
+        // repeat - marking the crate for resimulation - is Confirming-only. Cancelling is the authority saying the
+        // grab did not happen on this tick: the state it would have set is simply not set.
+        var grab = GrabAction.GetStatus();
+        if (grab is RewindableAction.Status.Confirming or RewindableAction.Status.Active
+            && HeldCrate < 0 && GrabAction.GetContext<int>() is var index && index >= 0 && index < crates.Count)
+        {
+            HeldCrate = index;
+            if (grab == RewindableAction.Status.Confirming) NetworkRollback.Instance.Mutate(crates[index]);
+        }
+        else if (grab == RewindableAction.Status.Cancelling && HeldCrate >= 0 && HeldCrate < crates.Count)
+        {
+            NetworkRollback.Instance.Mutate(crates[HeldCrate]);
+            HeldCrate = -1;
+        }
+
+        var thrown = ThrowAction.GetStatus();
+        if (thrown is RewindableAction.Status.Confirming or RewindableAction.Status.Active && HeldCrate >= 0 && HeldCrate < crates.Count)
+        {
+            var crate = crates[HeldCrate];
+            if (thrown == RewindableAction.Status.Confirming) NetworkRollback.Instance.Mutate(crate);
+            crate.Freeze = false;
+            crate.LinearVelocity = Facing * ThrowSpeed + Vector3.Up * 2;
+            crate.AngularVelocity = Vector3.Zero;
+            HeldCrate = -1;
+        }
+
+        // Where it rides. Whether it is frozen is not decided here - PhysicsTier derives that from every player's
+        // HeldCrate after each restore, because Freeze is not rollback state and a crate left frozen by a prediction
+        // the authority refused would ignore every correction sent to it afterwards.
+        if (HeldCrate >= 0 && HeldCrate < crates.Count)
+            crates[HeldCrate].GlobalPosition = GlobalPosition + CarryOffset + Facing * 0.5f;
+    }
+
+    private int NearestCrate(List<RigidBody3D> crates)
+    {
+        var best = -1;
+        var bestDistance = GrabReach;
+        for (var i = 0; i < crates.Count; i++)
+        {
+            if (crates[i].Freeze) continue; // somebody else has it
+            var distance = GlobalPosition.DistanceTo(crates[i].GlobalPosition);
+            if (distance >= bestDistance) continue;
+            best = i;
+            bestDistance = distance;
+        }
+        return best;
+    }
+
+    /// <summary>The crates in the same order on every peer: sorted by name under World/Crates.</summary>
+    private List<RigidBody3D> Crates()
+        => GetTree().Root.FindChild("Crates", recursive: true, owned: false)?.GetChildren().OfType<RigidBody3D>()
+            .OrderBy(crate => crate.Name.ToString(), StringComparer.Ordinal).ToList() ?? new List<RigidBody3D>();
 
     /// <summary>Horizontal movement from this tick's input, keeping the vertical component it was handed.</summary>
     public Vector3 WithInput(Vector3 velocity)

@@ -18,6 +18,12 @@ public partial class PlayerInput : BaseNetInput
 
     [RollbackInput] public bool Jump { get; set; }
 
+    /// <summary>Pick up the nearest crate. Tab, because the sample sticks to Godot's built-in ui_* actions.</summary>
+    [RollbackInput] public bool Grab { get; set; }
+
+    /// <summary>Throw whatever is held. Shift+Tab.</summary>
+    [RollbackInput] public bool Throw { get; set; }
+
     /// <summary>
     /// Firing is not rollback input in the way movement is - the weapon toolkit is request-and-accept, not rollback -
     /// but gathering it here keeps all the player's input in one place, and on the peer that owns it.
@@ -28,6 +34,8 @@ public partial class PlayerInput : BaseNetInput
     {
         Movement = Godot.Input.GetVector("ui_left", "ui_right", "ui_up", "ui_down");
         Jump = Godot.Input.IsActionPressed("ui_accept");
+        Grab = Godot.Input.IsActionPressed("ui_focus_next");
+        Throw = Godot.Input.IsActionPressed("ui_focus_prev");
         Fire = Godot.Input.IsActionPressed("ui_select");
     }
 }

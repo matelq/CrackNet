@@ -35,8 +35,8 @@ script = ExtResource("2_gf4vq")
 script = ExtResource("3_5l22w")
 Root = NodePath("..")
 EnablePrediction = true
-StateProperties = PackedStringArray(":position", ":velocity", "RewindableStateMachine:State", ":JumpHeld", ":JumpsLeft")
-InputProperties = PackedStringArray("Input:Jump", "Input:Movement")
+StateProperties = PackedStringArray(":position", ":velocity", "RewindableStateMachine:State", ":JumpHeld", ":JumpsLeft", ":HeldCrate", ":Facing")
+InputProperties = PackedStringArray("Input:Jump", "Input:Movement", "Input:Grab", "Input:Throw")
 
 [node name="PeerVisibilityFilter" type="Node" parent="RollbackSynchronizer" unique_id=1793727379]
 script = ExtResource("4_732g0")

@@ -77,6 +77,12 @@ public partial class ConvergenceSmoke : Node
     /// </summary>
     private NetworkSimulator.Profile? _profile;
 
+    /// <summary>Each player picks up the crate it was steered to, carries it, throws it. netfox-net#56.</summary>
+    private bool _pickup;
+
+    /// <summary>Ticks on which this peer believed somebody was carrying a crate, so a pickup run that never picked up cannot pass as one that did.</summary>
+    private int _heldTicks;
+
     /// <summary>The proxy, on the host only, so the report can say what the link actually did rather than what it was asked to do.</summary>
     private NetworkSimulator? _proxy;
     private Playground _playground = null!;
@@ -116,6 +122,7 @@ public partial class ConvergenceSmoke : Node
             else if (arg.StartsWith("--peers=")) _peers = Math.Max(2, (int)Parse(arg, "--peers="));
             else if (arg == "--profile=realistic") _profile = NetworkSimulator.Profile.Realistic;
             else if (arg == "--profile=hostile") _profile = NetworkSimulator.Profile.Hostile;
+            else if (arg == "--pickup") _pickup = true;
         }
 
         // A trace left by an earlier run has a different random peer id in it, and a client that reads one compares
@@ -179,7 +186,23 @@ public partial class ConvergenceSmoke : Node
         await Wait(0.3);
         Godot.Input.ParseInputEvent(new InputEventAction { Action = "ui_select", Pressed = false });
 
-        await Wait(10.0);
+        if (_pickup)
+        {
+            // Walk up, grab, carry for a while, throw. Held down rather than tapped: the action is edge-free by
+            // construction, since SetActive only fires while nothing is held yet.
+            await Wait(4.0);
+            Hold("ui_focus_next", true);
+            await Wait(3.0);
+            Hold("ui_focus_next", false);
+            Hold("ui_focus_prev", true);
+            await Wait(0.5);
+            Hold("ui_focus_prev", false);
+            await Wait(2.5);
+        }
+        else
+        {
+            await Wait(10.0);
+        }
         _steerTo = null;
         Release();
         _quietFrom = NetworkTime.Instance.Tick;
@@ -251,6 +274,7 @@ public partial class ConvergenceSmoke : Node
     {
         var tick = NetworkTime.Instance.Tick;
         var beliefs = Ordered().ToDictionary(player => player.Name.ToString(), Settle);
+        if (beliefs.Values.Any(belief => belief.JumpsLeft >= 0 && belief.State != "crate") && _pickup) _heldTicks++;
 
         // Crates too, by name like the players. They are the one thing here that rolls a real physics space back,
         // and until this line nothing compared what two peers believed about them - a crate in two places on two
@@ -284,7 +308,7 @@ public partial class ConvergenceSmoke : Node
             .OrderBy(crate => crate.Name.ToString(), StringComparer.Ordinal).ToList();
 
     private static SettledPlayer Settle(PlayerCharacter player)
-        => new(player.Position, player.StateMachine.State.ToString(), player.JumpsLeft);
+        => new(player.Position, player.StateMachine.State.ToString(), player.HeldCrate);
 
     /// <summary>
     /// Players in the same order on every peer. Node names carry the peer id and every peer knows them all, so
@@ -333,7 +357,7 @@ public partial class ConvergenceSmoke : Node
 
     private static void Release()
     {
-        foreach (var action in new[] { "ui_right", "ui_left", "ui_down", "ui_up", "ui_accept" }) Hold(action, false);
+        foreach (var action in new[] { "ui_right", "ui_left", "ui_down", "ui_up", "ui_accept", "ui_focus_next", "ui_focus_prev" }) Hold(action, false);
     }
 
     private static void Hold(string action, bool pressed)
@@ -345,6 +369,9 @@ public partial class ConvergenceSmoke : Node
     private void Report(bool reached, string failure)
     {
         var ok = reached && _final.Count(entry => entry.Value.State != "crate") >= _peers && _captureTick >= 0;
+
+        // A pickup run has to have carried something, or it tested the crates being shoved and nothing else
+        if (_pickup) ok &= _heldTicks > 10;
 
         // The players have to have actually met, or the run proves nothing about collisions. Two capsules of radius
         // 0.4 resting against each other are 0.8 apart.
@@ -394,6 +421,11 @@ public partial class ConvergenceSmoke : Node
                 .ToList();
             if (_finalShots != host.Shots) disagreements.Add($"score({_finalShots}!={host.Shots})");
 
+            // Both peers have to have seen roughly the same amount of carrying. A client that predicted a pickup the
+            // host never ruled on carried a crate for a hundred ticks nobody confirmed - and the quiet window, which
+            // starts after release, cannot see that. Two round trips of slack for the prediction being ahead.
+            if (_pickup && Math.Abs(_heldTicks - host.Held) > 20) disagreements.Add($"held({_heldTicks}!={host.Held})");
+
             // Everything here is replicated from its authority every tick, and by now nobody has pressed anything
             // for seconds. A gap that is still there is a peer that took the authority's state and walked away from
             // it, and one tick of it is one tick too many.
@@ -410,7 +442,7 @@ public partial class ConvergenceSmoke : Node
         var head = FormattableString.Invariant(
             $"CONVERGENCE role={(_isHost ? "host" : "client")} ok={ok} peer=#{Multiplayer.GetUniqueId()} at_tick={_captureTick}");
         var tail = FormattableString.Invariant(
-            $"mode={(_onPlatform ? "platform" : "ground")} players={_final.Count(entry => entry.Value.State != "crate")} crates={_final.Count(entry => entry.Value.State == "crate")} collided={collided} closest={_closestApproach:F3} shots={_finalShots}{comparison} {beliefs} {failure}");
+            $"mode={(_onPlatform ? "platform" : "ground")} players={_final.Count(entry => entry.Value.State != "crate")} crates={_final.Count(entry => entry.Value.State == "crate")} held_ticks={_heldTicks} collided={collided} closest={_closestApproach:F3} shots={_finalShots}{comparison} {beliefs} {failure}");
         GD.Print($"{head} {tail}");
 
         // What the link did, not what it was asked to do. A configured burst that never fires reads exactly like a
@@ -480,7 +512,7 @@ public partial class ConvergenceSmoke : Node
             return;
         }
 
-        file.StoreLine(FormattableString.Invariant($"#window,{_quietFrom},{_captureTick},{_finalShots}"));
+        file.StoreLine(FormattableString.Invariant($"#window,{_quietFrom},{_captureTick},{_finalShots},{_heldTicks}"));
         for (var tick = _quietFrom; tick <= _captureTick; tick++)
         {
             if (!_history.TryGetValue(tick, out var beliefs)) continue;
@@ -489,24 +521,26 @@ public partial class ConvergenceSmoke : Node
         }
     }
 
-    private static (Dictionary<int, Dictionary<string, SettledPlayer>> Ticks, int From, int To, int Shots) ReadTrace()
+    private static (Dictionary<int, Dictionary<string, SettledPlayer>> Ticks, int From, int To, int Shots, int Held) ReadTrace()
     {
         var ticks = new Dictionary<int, Dictionary<string, SettledPlayer>>();
         var from = -1;
         var to = -1;
         var shots = -1;
+        var held = -1;
 
         using var file = FileAccess.Open(TracePath, FileAccess.ModeFlags.Read);
-        if (file is null) return (ticks, from, to, shots);
+        if (file is null) return (ticks, from, to, shots, held);
 
         while (!file.EofReached())
         {
             var parts = file.GetLine().Split(',');
-            if (parts is ["#window", var f, var t, var s])
+            if (parts is ["#window", var f, var t, var s, var h])
             {
                 int.TryParse(f, CultureInfo.InvariantCulture, out from);
                 int.TryParse(t, CultureInfo.InvariantCulture, out to);
                 int.TryParse(s, CultureInfo.InvariantCulture, out shots);
+                int.TryParse(h, CultureInfo.InvariantCulture, out held);
                 continue;
             }
 
@@ -517,6 +551,6 @@ public partial class ConvergenceSmoke : Node
             if (!ticks.TryGetValue(tick, out var beliefs)) ticks[tick] = beliefs = new Dictionary<string, SettledPlayer>();
             beliefs[parts[1]] = settled;
         }
-        return (ticks, from, to, shots);
+        return (ticks, from, to, shots, held);
     }
 }

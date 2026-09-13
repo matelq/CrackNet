@@ -60,6 +60,7 @@ public partial class PhysicsTier : Node
         }
 
         AddChild(new RapierPhysicsDriver3D { Name = "RapierPhysicsDriver3D", PhysicsFactor = PhysicsFactor });
+        NetworkRollback.Instance.AfterPrepareTick += FreezeHeldCrates;
         SpawnCrates();
         Active = true;
     }
@@ -76,6 +77,35 @@ public partial class PhysicsTier : Node
             crate.Name = $"Crate_{i}";
             crate.Position = new Vector3(-3 + i * 2, 1.5f, 4);
             CrateRoot.AddChild(crate);
+        }
+    }
+
+    public override void _ExitTree()
+    {
+        // C# events are not disconnected when a node is freed the way signals are
+        if (NetworkRollback.Instance is { } rollback) rollback.AfterPrepareTick -= FreezeHeldCrates;
+    }
+
+    /// <summary>
+    /// A crate is frozen exactly while some player's HeldCrate names it, decided after every restore from every
+    /// player's replicated state. Freeze is not part of the crate's PhysicsState, so it cannot be rolled back;
+    /// deriving it from state that is rolled back is the next best thing - and the only thing that unfreezes a crate
+    /// on a client whose predicted grab the authority refused.
+    /// </summary>
+    private void FreezeHeldCrates(int tick)
+    {
+        var players = CrateRoot.GetParent().GetNodeOrNull("Players");
+        if (players is null) return;
+
+        var held = new HashSet<int>();
+        foreach (var child in players.GetChildren())
+            if (child is PlayerCharacter { HeldCrate: >= 0 } player) held.Add(player.HeldCrate);
+
+        var index = 0;
+        foreach (var child in CrateRoot.GetChildren().OfType<RigidBody3D>().OrderBy(crate => crate.Name.ToString(), StringComparer.Ordinal))
+        {
+            var frozen = held.Contains(index++);
+            if (child.Freeze != frozen) child.Freeze = frozen;
         }
     }
 }

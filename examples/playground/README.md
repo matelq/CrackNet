@@ -99,6 +99,16 @@ host-simulated and never predicted, so the expectation is the tight one, and it 
 players alike. Walking into a crate pushes it because `PlayerCharacter.Move` applies an impulse on contact, inside the
 tick and from this tick's velocity only - `MoveAndSlide` on its own never moves another body.
 
+**Picking up a crate, carrying it and throwing it** is the generic "take a thing" mechanic, and the sample's first
+real use of `RewindableAction`. Tab grabs the nearest crate, Shift+Tab throws it. While held the crate is not
+simulated at all - it is frozen and placed relative to the player every tick, so the player's own prediction carries
+it and no round trip is involved. The two transitions are `RewindableAction`s created in `PlayerCharacter._Ready`:
+peers predict them in their rollback tick, the host broadcasts what really happened, and a cancelled pickup rolls the
+crate back to free. `HeldCrate` is rollback state (an index, not a node reference), the crate is
+`NetworkRollback.Mutate`d on each transition because it has no input of its own, and the throw velocity comes from
+`Facing` - also rollback state - so a throw is a function of the tick. `ConvergenceSmoke --pickup` does the whole
+thing on both peers and reports `held_ticks`, so a run that never actually grabbed cannot pass as one that did.
+
 `--peers=3` waits for three players before starting, and is then given to all three processes. Two peers is the one
 count at which every player is either your own or the host's, so nothing has to be relayed on anyone else's behalf -
 which is why a third process finds things the second never could. `--on-platform` puts everyone on the moving

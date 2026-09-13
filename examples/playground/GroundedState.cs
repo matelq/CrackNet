@@ -11,6 +11,7 @@ public partial class GroundedState : PlayerState
     {
         Player.RefreshIsOnFloor();
         Player.RideFloor(tick);
+        Player.Carry(tick);
 
         var velocity = Player.Velocity;
         Player.JumpsLeft = Player.MaxJumps;
