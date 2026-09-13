@@ -75,7 +75,16 @@ public partial class RapierCheck : Node3D
         NetworkTime.Instance.Start();
     }
 
-    private void RecordHeight(int tick) => _heights[tick] = _body.Position.Y;
+    /// <summary>Ticks the resimulation actually ran, so a rollback that never happened cannot pass as one that reproduced.</summary>
+    private int _resimulated;
+
+    private void RequestRollback() => NetworkRollback.Instance.NotifyResimulationStart(RollbackTo);
+
+    private void RecordHeight(int tick)
+    {
+        if (_done) _resimulated++;
+        _heights[tick] = _body.Position.Y;
+    }
 
     private void CheckDone()
     {
@@ -84,18 +93,26 @@ public partial class RapierCheck : Node3D
 
         var fell = _heights.Count > 0 && _heights[_heights.Keys.Max()] < 4.0f - 0.1f;
 
-        // A rollback has to put the body back where it was: the driver reloads the whole space from Rapier's cache
+        // A rollback has to put the body back where it was: the driver reloads the whole space from Rapier's cache.
+        // The request goes in from BeforeLoop, because Rollback() resets the range before asking - a request made
+        // before the loop was overwritten, nothing was resimulated, and this check read its own stale value back as
+        // "reproduced" for as long as it existed (netfox-net#62).
         var before = _heights.GetValueOrDefault(RollbackTo, float.NaN);
-        NetworkRollback.Instance.NotifyResimulationStart(RollbackTo);
+        var resting = _heights[_heights.Keys.Max()];
+        NetworkRollback.Instance.BeforeLoop += RequestRollback;
         NetworkTime.Instance.RunAfterTickLoop();
+        NetworkRollback.Instance.BeforeLoop -= RequestRollback;
         var after = _heights.GetValueOrDefault(RollbackTo, float.NaN);
 
-        var reproduced = Mathf.Abs(before - after) < 1e-3f;
+        // Reproduced means the body was put back and fell the same way again - not that it was left resting on the
+        // ground while the tick counter ran, which is what a loop over a space that was never rewound looks like
+        var ranTheRange = _resimulated >= Ticks - RollbackTo;
+        var reproduced = ranTheRange && Mathf.Abs(before - after) < 1e-3f && Mathf.Abs(after - resting) > 0.1f;
 
         var summary = FormattableString.Invariant(
             $"RAPIER CHECK skipped=False ticks={_heights.Count} fell={fell} height={_heights[_heights.Keys.Max()]:F3}");
         var rollbackSummary = FormattableString.Invariant(
-            $"resim@{RollbackTo} before={before:F4} after={after:F4} reproduced={reproduced}");
+            $"resim@{RollbackTo} ticks_resimulated={_resimulated} before={before:F4} after={after:F4} reproduced={reproduced}");
         GD.Print($"{summary} {rollbackSummary}");
 
         GetTree().Quit(fell && reproduced ? 0 : 1);

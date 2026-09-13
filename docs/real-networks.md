@@ -20,9 +20,15 @@ So a listen server is simply "every state node has authority 1", and one player 
 
 Why you would ever change it: to decide where the truth about **one object** lives. A pickup whose position should
 follow whoever holds it does not need this - derive its position from the holder's and the holder's prediction
-covers it for free. A thrown object does not either - its whole flight is a function of the release tick. What
-does need it is an object a client should touch with zero delay while it is still simulating freely, and in a
-co-op game that is allowed. Changing it at runtime works: the synchronization server re-sorts what it owns against
+covers it for free. Derive it *for display*, every frame, from replicated state alone - who holds what - and take
+the body out of the world while it is held. The sample first moved the crate's node inside the tick instead, and
+the body stayed at the pickup spot with its collision while the mesh rode along; and on the holder's own client the
+crate snapped hands, floor, hands, because the crate was host-authoritative and the host's "still on the floor"
+arrived for a round trip after the client had predicted the grab (netfox-net#59). Nothing about the crate's position
+is a fact anyone should replicate while it is held. A thrown object does not need an authority change either - its
+whole flight is a function of the release tick, and the body re-enters the world at the hand with the throw's
+velocity on that tick. What does need it is an object a client should touch with zero delay while it is still
+simulating freely, and in a co-op game that is allowed. Changing it at runtime works: the synchronization server re-sorts what it owns against
 live authority once a tick (it used to read authority only at registration, and the peer that gained a node
 recorded its state as real without ever sending it).
 
@@ -134,7 +140,25 @@ different past and produces a different future.
 `PhysicsDriver` snapshots and rewinds the **whole space** and steps it on demand. Stock Godot has no way to step a
 space, so `GodotPhysicsDriver3D` reports itself unavailable; `RapierPhysicsDriver3D` works against the
 [Rapier](https://github.com/appsinacup/godot-rapier-physics) extension, and this repository's own project runs on it.
-Measured: a rigid body rolled back ten ticks and resimulated comes out at exactly the same height.
+Measured: a rigid body rolled back thirty ticks and resimulated comes out at the same height, 3.34m, where a space
+that is stepped again without being rewound leaves it resting on the ground at -3.00m.
+
+That second number is worth a paragraph, because for a while it was the one this repository had. The driver ported
+from upstream's disabled `.off` file addressed Rapier's snapshot cache by age behind a counter nothing incremented,
+so it returned before loading anything - and the check that was supposed to catch it asked for its rollback at the
+wrong moment, resimulated nothing, and compared a stale value with itself (netfox-net#62). The space was never rolled
+back and physics was stepped twice per tick, and every crate check passed, because the crates sat still. A check
+that cannot fail is not a check; the one there now counts the ticks it resimulated and refuses a "reproduced" that
+equals the resting height.
+
+Two things follow from rewinding the whole space that a kinematic-only setup never meets. Kinematic bodies are in
+the space too, so a rewind moves them to where the snapshot had them, while netfox restores their nodes from its own
+history a moment later - and a node only pushes its transform to its body when the value changes, so a player
+standing still against another was left with its body in one place and its node in another. The driver now tells
+every kinematic body where its node is on every resimulated tick. And Rapier applies a transform on the next step,
+where `MoveAndSlide` is a query against the space as it is now: the second player to move in a tick tested against
+where the first one *was*, and two players walking into each other ended 3cm apart instead of 80. A kinematic body
+calls `PhysicsDriver.Active?.FlushQueries()` after it has moved.
 
 Two things Rapier does not give you. It does not resolve contact between kinematic bodies - `MoveAndSlide` never
 pushes another body whatever solver is underneath, so the wedging above is unchanged with the engine switched. And it

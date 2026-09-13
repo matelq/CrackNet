@@ -287,6 +287,7 @@ Synchronizes rollback input, rollback state and synchronized state over the netw
 | method | `InputWindowFor(System.Int32,System.Int32,Netfox.NetworkHistoryServer)` | The input ticks to send one peer: everything it has not acknowledged, floored at the configured redundancy and capped so the packet still fits. A fixed count is generous against independent loss and worth nothing against a burst - three in a row go missing 0.1% of the time at 10% loss, but a burst takes all three every time, and the authority is left predicting for the length of the outage. Sending what has not been acknowledged instead is what Deterministic Lockstep does, and it is smaller in the ordinary case as well as larger in the bad one: the floor only applies because an acknowledgement can itself be lost. |
 | method | `MakePeerSnapshot(Netfox.Core.Data.Snapshot{Godot.Node,Godot.NodePath,Godot.Variant},System.Int32,Netfox.Core.Data.PropertyPool{Godot.Node,Godot.NodePath},System.Func{Godot.Node,System.Boolean})` | Snapshot to send to `peer`: only visible subjects and their auth properties. |
 | method | `Quantize(Godot.Node,Godot.NodePath,Godot.Variant)` | The value as this property's schema will deliver it, so what a peer records for itself is what every other peer will be told. Properties with no schema of their own are returned untouched, which is nearly all of them. |
+| method | `ReconcileAuthority` | Re-sorts every registered property into or out of the owned pools by what its node's authority is now. Called once per tick before anything is sent. Registration sorted by authority once, and Godot has no signal for it changing, so a SetMultiplayerAuthority after that point left the pools describing the past: the peer that gained authority recorded state as real - the history server reads authority live - but never sent it, and the peer that lost it kept sending. Two servers disagreeing about one node, quietly. Anything that hands an object over at runtime hits this: a respawn onto another peer, possessing a character, a pickup whose truth should live with whoever holds it. A dozen dictionary lookups a tick for a room of four. Upstream has the same shape and the same gap (network-synchronization-server.gd:73), so this is inherited, and the fix lives here rather than in a helper callers would have to remember - the point is that nobody has to (netfox-net#45). |
 | method | `ResetSession` | Drops what was sent to whom, keeping registrations, schemas and visibility filters. |
 | method | `SynchronizeStateRange(System.Int32,System.Int32)` | Sends every subject at the newest tick of the range it is authoritative for, rather than all of them at the newest tick of the range. The distinction is the difference between working and not. State is only sent for subjects the sender is authoritative for, and a node driven by a remote peer's input is predicted at the newest tick - that peer's input for it is still a round trip away - so it is not authoritative there and nothing goes out for it. Sending only the newest tick therefore sent such a node nothing at all, ever, and the peer driving it never converged (netfox-net#35). Upstream sends every tick of the range instead (network-rollback.gd:429), which is correct but multiplies state traffic by the length of the range, every frame (#29). One tick per distinct answer is both: two, in a session where the host drives its own player and one remote player. |
 | method | `WithoutUnacknowledgedSubjects(Netfox.Core.Data.Snapshot{Godot.Node,Godot.NodePath,Godot.Variant},System.Int32)` | The diff baseline minus the subjects `peer` cannot resolve yet, so those go out in full. A peer acks a subject by sending back an id for it, which it can only do once it has resolved that subject's name - that is, once the node exists on its side. Until then it drops our frames, and diffing against a baseline it never received would leave it with a node missing every property that happens not to change, until the next full state. Upstream has no such guard (foxssake/netfox#563). |
@@ -449,6 +450,7 @@ Configures rollback for a node tree: which properties are state, which are input
 | property | `Root` | Node the property paths are relative to; defaults to the parent. |
 | property | `SpawnTick` | Tick the managed nodes came to life. Defaults to the tick after entering the tree. |
 | property | `StateProperties` | State property paths in "Node:property" form, relative to Root. |
+| property | `UnlistedAttributeProperties` | Attribute properties under Root that this synchronizer does not replicate, as "Node:property" paths. Empty when the scene lists everything the code declares. |
 | property | `VisibilityFilter` | Controls which peers receive state. Added as a child automatically, under its own name so that it reads as itself in a saved scene rather than as a generated one. |
 | method | `AddInput(System.Object,System.String)` | Add an input property at runtime. Node may be a string, NodePath or Node relative to Root. |
 | method | `AddState(System.Object,System.String)` | Add a state property at runtime. Node may be a string, NodePath or Node relative to Root. |
@@ -462,6 +464,7 @@ Configures rollback for a node tree: which properties are state, which are input
 | method | `ResolveRoot` | Re-reads the configuration and registers nodes for simulation, liveness, identity and visibility. |
 | method | `SetSchema(System.Collections.Generic.IReadOnlyDictionary{System.String,Netfox.NetworkSchemaSerializer})` | Replace the serialization schema: property path to serializer. |
 | method | `Spawn(System.Nullable{System.Int32})` | Mark the managed nodes as spawned at `tick` and seed their state. |
+| method | `WarnAboutUnlistedAttributes(Godot.Node)` | A [RollbackState] or [RollbackInput] attribute is gathered into StateProperties/InputProperties by the editor plugin when the scene is saved - and at no other time. Headless, or with a scene saved before the property existed, the attribute is decoration: the property is never registered and nothing says so. That cost a day once (netfox-net#58): a new input never left the machine that pressed it, and a check passed anyway. So the same gather runs here at runtime, and every declared path the lists do not carry gets a warning naming it. The lists stay the source of truth; this only refuses to be quiet about the difference. |
 
 ### SparseSnapshotSerializer
 
@@ -786,9 +789,12 @@ Steps physics in time with netfox ticks and snapshots the physics space so it ca
 
 | | Member | Summary |
 |---|---|---|
+| property | `Active` | The driver stepping this process's space, for code that has to ask it something mid-tick - see `FlushQueries`. One per process in practice; a second one replaces it. |
 | property | `Context` | The netfox stack this node uses; resolved when it enters the tree. |
 | property | `PhysicsFactor` | Physics steps per network tick. |
 | property | `RollbackPhysicsSpace` | Snapshot and roll back the entire physics space. |
+| method | `AfterPrepareTick(System.Int32)` | Rolling the space back also moves every kinematic body in it to where the snapshot had it - but their nodes are restored by netfox from its own history, a moment later, and a node only pushes its transform to the body when the value changes. A player standing still against another was left with its body where the snapshot put it and its node where history did, and the other player walked into the node. And a push is applied on the next step, so a snapshot taken right after a tick has the kinematic bodies one tick behind their nodes. So on every resimulated tick, once history has been restored, every body that is not rolled back by state of its own is told where its node is. |
+| method | `FlushQueries` | Makes every transform written since the last step visible to queries. Rapier applies a body's new transform on the next step, and `MoveAndSlide` is a query: the second player to move in a tick tests against where the first one was, and two players walking into each other pass through instead of stopping (measured: 3cm apart instead of 80). A kinematic body calls this after it has moved. Nothing to do on an engine that applies transforms as they are written. |
 | method | `StepPhysics(System.Double,System.Int32)` | Steps physics for one tick, split into PhysicsFactor sub-steps, ticking NetworkRigidBody nodes in between. |
 | method | `TrimSnapshots(System.Int32)` | Drops snapshots older than the rollback history. Drivers whose engine keeps its own cache do nothing. |
 
@@ -799,6 +805,14 @@ Steps physics in time with netfox ticks and snapshots the physics space so it ca
 ### RapierPhysicsDriver3D
 
 Physics driver for the Rapier GDExtension (appsinacup/godot-rapier-physics): manual space stepping plus its StateManager for whole-world snapshots. The extension has no C# bindings, so it is driven through ClassDB. Port of netfox.extras/physics/rapier_driver_3d.gd.
+
+### RapierStateManager
+
+The Rapier extension's StateManager2D/3D, driven through ClassDB. Snapshots are tagged with the tick they were taken for and found again by that tag, through `ordered_cache_tags`. Upstream's `.off` driver addressed the cache by age instead - "offset 0 is the newest" - behind a counter of stored states that nothing ever incremented, so it returned before loading anything, every time. This port reproduced that faithfully, and RapierCheck passed anyway because it never actually rolled back (netfox-net#62).
+
+| | Member | Summary |
+|---|---|---|
+| method | `Rollback(Godot.Node,Godot.Rid,System.Int32)` | Restores the space to the snapshot taken for `tick`, and drops everything cached after it: the resimulation that follows takes those snapshots again, and a cache that kept both copies would hand back the stale one on the next rollback. Returns false when no snapshot for that tick exists. |
 
 ### RewindableRandomNumberGenerator
 

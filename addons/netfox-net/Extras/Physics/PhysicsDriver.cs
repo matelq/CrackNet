@@ -23,20 +23,32 @@ public partial class PhysicsDriver : Node
 
     protected Rid PhysicsSpace;
 
+    /// <summary>
+    /// The driver stepping this process's space, for code that has to ask it something mid-tick - see
+    /// <see cref="FlushQueries"/>. One per process in practice; a second one replaces it.
+    /// </summary>
+    public static PhysicsDriver? Active { get; private set; }
+
     public override void _EnterTree()
     {
+        Active = this;
         Context = NetfoxContext.For(this);
         var time = Context.NetworkTime;
         time.BeforeTick += BeforeTick;
         time.AfterTickLoop += AfterTickLoop;
 
         var rollback = Context.NetworkRollback;
-        if (RollbackPhysicsSpace) rollback.OnPrepareTick += OnPrepareTick;
+        if (RollbackPhysicsSpace)
+        {
+            rollback.OnPrepareTick += OnPrepareTick;
+            rollback.AfterPrepareTick += AfterPrepareTick;
+        }
         rollback.OnProcessTick += OnProcessTick;
     }
 
     public override void _ExitTree()
     {
+        if (Active == this) Active = null;
         if (Context.NetworkTime is { } time)
         {
             time.BeforeTick -= BeforeTick;
@@ -45,6 +57,7 @@ public partial class PhysicsDriver : Node
         if (Context.NetworkRollback is { } rollback)
         {
             rollback.OnPrepareTick -= OnPrepareTick;
+            rollback.AfterPrepareTick -= AfterPrepareTick;
             rollback.OnProcessTick -= OnProcessTick;
         }
     }
@@ -65,6 +78,27 @@ public partial class PhysicsDriver : Node
             SnapshotSpace(tick); // Subsequent ticks rewrite history
     }
 
+    /// <summary>
+    /// Rolling the space back also moves every kinematic body in it to where the snapshot had it - but their nodes
+    /// are restored by netfox from its own history, a moment later, and a node only pushes its transform to the body
+    /// when the value changes. A player standing still against another was left with its body where the snapshot
+    /// put it and its node where history did, and the other player walked into the node. And a push is applied on
+    /// the next step, so a snapshot taken right after a tick has the kinematic bodies one tick behind their nodes.
+    /// So on every resimulated tick, once history has been restored, every body that is not rolled back by state
+    /// of its own is told where its node is.
+    /// </summary>
+    private void AfterPrepareTick(int tick) => PushNodeTransforms(GetTree().Root);
+
+    // ponytail: a tree walk per resimulated tick; a group of kinematic bodies if the tree ever gets big
+    protected virtual void PushNodeTransforms(Node node)
+    {
+        if (node is PhysicsBody3D body3D and not RigidBody3D)
+            PhysicsServer3D.BodySetState(body3D.GetRid(), PhysicsServer3D.BodyState.Transform, body3D.GlobalTransform);
+        else if (node is PhysicsBody2D body2D and not RigidBody2D)
+            PhysicsServer2D.BodySetState(body2D.GetRid(), PhysicsServer2D.BodyState.Transform, body2D.GlobalTransform);
+        foreach (var child in node.GetChildren()) PushNodeTransforms(child);
+    }
+
     private void OnProcessTick(int tick) => StepPhysics(Context.NetworkTime.Ticktime, tick);
 
     private void AfterTickLoop() => TrimSnapshots(Context.NetworkRollback.HistoryStart);
@@ -83,6 +117,15 @@ public partial class PhysicsDriver : Node
             PhysicsStep(fracDelta);
         }
     }
+
+    /// <summary>
+    /// Makes every transform written since the last step visible to queries. Rapier applies a body's new transform
+    /// on the next step, and <c>MoveAndSlide</c> is a query: the second player to move in a tick tests against
+    /// where the first one <i>was</i>, and two players walking into each other pass through instead of stopping
+    /// (measured: 3cm apart instead of 80). A kinematic body calls this after it has moved. Nothing to do on an
+    /// engine that applies transforms as they are written.
+    /// </summary>
+    public virtual void FlushQueries() { }
 
     protected virtual void InitPhysicsSpace() { }
     protected virtual void PhysicsStep(double delta) { }

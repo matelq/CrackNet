@@ -17,7 +17,6 @@ public partial class RapierPhysicsDriver3D : PhysicsDriver
     public static bool IsAvailable => ClassDB.ClassExists(ServerClass) && ClassDB.ClassExists(StateManagerClass);
 
     private Node? _stateManager;
-    private int _storedStates;
 
     protected override void InitPhysicsSpace()
     {
@@ -41,11 +40,20 @@ public partial class RapierPhysicsDriver3D : PhysicsDriver
         ClassDB.ClassCallStatic(ServerClass, "space_flush_queries", PhysicsSpace);
     }
 
-    protected override void SnapshotSpace(int tick) => _stateManager?.Call("cache_state", PhysicsSpace, tick);
+    public override void FlushQueries()
+    {
+        if (_stateManager is not null) ClassDB.ClassCallStatic(ServerClass, "space_flush_queries", PhysicsSpace);
+    }
+
+    protected override void SnapshotSpace(int tick)
+    {
+        if (_stateManager is not null) RapierStateManager.Snapshot(_stateManager, PhysicsSpace, tick);
+    }
 
     protected override void RollbackSpace(int tick)
     {
         if (_stateManager is null) return;
-        RapierStateManager.Rollback(_stateManager, PhysicsSpace, Context.NetworkTime.Tick - tick, ref _storedStates);
+        if (!RapierStateManager.Rollback(_stateManager, PhysicsSpace, tick))
+            Logger.Warning("No physics snapshot for tick {0}, the space was not rolled back", tick);
     }
 }

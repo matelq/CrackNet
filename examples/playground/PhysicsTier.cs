@@ -61,6 +61,10 @@ public partial class PhysicsTier : Node
 
         AddChild(new RapierPhysicsDriver3D { Name = "RapierPhysicsDriver3D", PhysicsFactor = PhysicsFactor });
         NetworkRollback.Instance.AfterPrepareTick += FreezeHeldCrates;
+
+        // After NetworkTime's _Process, which is where interpolation writes the players' displayed positions: a
+        // held crate is drawn from its holder's displayed position, so it has to go last
+        ProcessPriority = 100;
         SpawnCrates();
         Active = true;
     }
@@ -94,18 +98,50 @@ public partial class PhysicsTier : Node
     /// </summary>
     private void FreezeHeldCrates(int tick)
     {
-        var players = CrateRoot.GetParent().GetNodeOrNull("Players");
-        if (players is null) return;
-
         var held = new HashSet<int>();
-        foreach (var child in players.GetChildren())
-            if (child is PlayerCharacter { HeldCrate: >= 0 } player) held.Add(player.HeldCrate);
+        foreach (var player in Players()) if (player.HeldCrate >= 0) held.Add(player.HeldCrate);
 
         var index = 0;
-        foreach (var child in CrateRoot.GetChildren().OfType<RigidBody3D>().OrderBy(crate => crate.Name.ToString(), StringComparer.Ordinal))
-        {
-            var frozen = held.Contains(index++);
-            if (child.Freeze != frozen) child.Freeze = frozen;
-        }
+        foreach (var crate in CrateBodies()) Carried(crate, held.Contains(index++));
     }
+
+    /// <summary>
+    /// A held crate is out of the physics world: frozen, and on no collision layer, so nothing is left standing
+    /// where it was picked up. The body itself is not moved while held - its position is not a fact anyone
+    /// replicates, and it re-enters the world where the throw puts it.
+    /// </summary>
+    public static void Carried(RigidBody3D crate, bool held)
+    {
+        var layer = held ? 0u : 1u;
+        crate.Freeze = held;
+        crate.CollisionLayer = layer;
+        crate.CollisionMask = layer;
+
+        // The node's setters skip a value that has not changed, and the body's may have: a whole-space rollback
+        // restores the body's mode and layers from the snapshot as well, behind the node's back
+        PhysicsServer3D.BodySetMode(crate.GetRid(), held ? PhysicsServer3D.BodyMode.Static : PhysicsServer3D.BodyMode.Rigid);
+        PhysicsServer3D.BodySetCollisionLayer(crate.GetRid(), layer);
+        PhysicsServer3D.BodySetCollisionMask(crate.GetRid(), layer);
+    }
+
+    /// <summary>
+    /// Draws every held crate at its holder's hand, every frame, after interpolation has placed the holder. This is
+    /// what a peer sees, and it comes from replicated state alone - who holds what - never from the crate's own
+    /// position, which while held is stale by a round trip on everyone but the host and used to snap the crate to
+    /// the floor and back on the holder's own screen (netfox-net#59).
+    /// </summary>
+    public override void _Process(double delta)
+    {
+        if (!Active) return;
+        var crates = CrateBodies();
+        foreach (var player in Players())
+            if (player.HeldCrate >= 0 && player.HeldCrate < crates.Count)
+                crates[player.HeldCrate].GlobalPosition = player.Hand;
+    }
+
+    private IEnumerable<PlayerCharacter> Players()
+        => CrateRoot.GetParent().GetNodeOrNull("Players")?.GetChildren().OfType<PlayerCharacter>() ?? [];
+
+    private List<RigidBody3D> CrateBodies()
+        => CrateRoot.GetChildren().OfType<RigidBody3D>().OrderBy(crate => crate.Name.ToString(), StringComparer.Ordinal).ToList();
 }

@@ -100,14 +100,21 @@ players alike. Walking into a crate pushes it because `PlayerCharacter.Move` app
 tick and from this tick's velocity only - `MoveAndSlide` on its own never moves another body.
 
 **Picking up a crate, carrying it and throwing it** is the generic "take a thing" mechanic, and the sample's first
-real use of `RewindableAction`. Tab grabs the nearest crate, Shift+Tab throws it. While held the crate is not
-simulated at all - it is frozen and placed relative to the player every tick, so the player's own prediction carries
-it and no round trip is involved. The two transitions are `RewindableAction`s created in `PlayerCharacter._Ready`:
+real use of `RewindableAction`. Tab grabs the nearest crate, Shift+Tab throws it. While held the crate is out of the
+world - frozen, on no collision layer - and its position is not a replicated fact at all: `PhysicsTier` draws it at
+the holder's `Hand` every frame, after interpolation, from `HeldCrate` alone, so the holder's own prediction carries
+it and no round trip is involved. On the throw tick the body re-enters the world at the hand with the throw's
+velocity, through the same `PhysicsState` property history restores it by. The first version moved the crate's node
+inside the tick instead, and the body stayed at the pickup spot with its collision while the mesh rode along; on the
+holder's client it snapped hands, floor, hands as the host's older state landed (netfox-net#59). The two transitions are `RewindableAction`s created in `PlayerCharacter._Ready`:
 peers predict them in their rollback tick, the host broadcasts what really happened, and a cancelled pickup rolls the
 crate back to free. `HeldCrate` is rollback state (an index, not a node reference), the crate is
 `NetworkRollback.Mutate`d on each transition because it has no input of its own, and the throw velocity comes from
 `Facing` - also rollback state - so a throw is a function of the tick. `ConvergenceSmoke --pickup` does the whole
-thing on both peers and reports `held_ticks`, so a run that never actually grabbed cannot pass as one that did.
+thing on both peers and reports `held_ticks`, so a run that never actually grabbed cannot pass as one that did - and
+it measures **during the carry**, not only after everything has settled: `held_crate_collidable_ticks` asks the space
+whether the held body can still be walked into, `carry_drop_frames` counts the frames the crate was drawn away from
+the hand, and `thrown_from_gap` is how far from the hand it left. The quiet-window comparison saw none of the above.
 
 **The NPC** (`Npc.cs`, one `Npc_0` under `World/Npcs`) is the thing nobody controls: it wanders and runs from players
 who come close. Its "AI" is a steering function in `RollbackTick` - a pure function of state, so the host can roll
@@ -150,6 +157,14 @@ claim and needs its `enhanced-determinism` feature, which a downloaded binary do
 whole space again for every tick of the range, so it is much
 more expensive than kinematic rollback: the tier uses one physics step per tick rather than the driver's default two,
 and a long resimulation with many bodies will make itself felt.
+
+Two more, learned when the rewind started actually happening (netfox-net#62 - the driver ported from upstream's
+disabled file never loaded a snapshot, and stepped physics twice per tick instead). A whole-space rewind moves the
+**kinematic** bodies too, and netfox restores their nodes from its own history a moment later, so the driver pushes
+every kinematic node's transform back to its body on each resimulated tick. And Rapier applies a transform on the
+next step, so `PlayerCharacter.Move` calls `PhysicsDriver.Active?.FlushQueries()` after `MoveAndSlide` - without it
+the second player to move in a tick tests against where the first one *was*, and two players walking into each other
+end up 3cm apart instead of 80.
 
 ### Steam: hosting through a lobby
 

@@ -58,7 +58,12 @@ rapier` unpacks the pinned release into `addons/godot-rapier3d` (gitignored); `-
 strips the section name from its keys. The same script installs GodotSteam with `steam`. Stock Godot has no
 `space_step`, so `GodotPhysicsDriver2D/3D` report themselves unavailable and only work on a build carrying
 godotengine/godot PR 76462. Rolling a `RigidBody` back means re-stepping the physics space several times inside one
-frame, which is why the driver exists at all; a kinematic body needs none of it.
+frame, which is why the driver exists at all; a kinematic body needs none of it. Two Rapier facts the driver encodes
+(netfox-net#62): a whole-space rewind moves kinematic bodies too, so the driver pushes every kinematic node's transform
+to its body on each resimulated tick; and Rapier applies transforms on the next step, so a body that moved inside a
+tick calls `PhysicsDriver.Active?.FlushQueries()` before the next body's `MoveAndSlide` tests against it. A held
+pickup is out of the world (no collision layer, frozen) and drawn from its holder every frame after interpolation,
+never moved inside the tick (netfox-net#59).
 
 Two-process checks: give the host a longer head start than feels necessary. The GDExtension loads slower than stock
 Godot, and a client that starts first simply never connects - `ConvergenceSmoke` then reports `players=0`, which reads

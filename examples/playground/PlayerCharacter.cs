@@ -51,6 +51,11 @@ public partial class PlayerCharacter : CharacterBody3D
     [Export] public Vector3 CarryOffset { get; set; } = new(0, 1.3f, 0);
     [Export] public float ThrowSpeed { get; set; } = 7.0f;
 
+    /// <summary>Where a held crate is: a function of this player's state, so every peer derives the same spot.</summary>
+    // A metre ahead: the capsule has radius 0.4 and the crate a half-width of 0.5, and a crate released inside the
+    // capsule is thrown by the solver, two metres in a random direction, before the throw velocity gets a say
+    public Vector3 Hand => GlobalPosition + CarryOffset + Facing * 1.0f;
+
     /// <summary>
     /// The two events of carrying. Peers predict them in their rollback tick; the authority broadcasts what really
     /// happened and predictions get confirmed or cancelled - a cancelled pickup rolls the crate back to free.
@@ -182,6 +187,7 @@ public partial class PlayerCharacter : CharacterBody3D
         {
             HeldCrate = index;
             if (grab == RewindableAction.Status.Confirming) NetworkRollback.Instance.Mutate(crates[index]);
+            PhysicsTier.Carried(crates[index], true); // out of the world from this tick on, not from the next restore
         }
         else if (grab == RewindableAction.Status.Cancelling && HeldCrate >= 0 && HeldCrate < crates.Count)
         {
@@ -194,17 +200,24 @@ public partial class PlayerCharacter : CharacterBody3D
         {
             var crate = crates[HeldCrate];
             if (thrown == RewindableAction.Status.Confirming) NetworkRollback.Instance.Mutate(crate);
-            crate.Freeze = false;
-            crate.LinearVelocity = Facing * ThrowSpeed + Vector3.Up * 2;
-            crate.AngularVelocity = Vector3.Zero;
             HeldCrate = -1;
+
+            // The body re-enters the world here, at the hand and with the throw's velocity, through the same state
+            // property history restores it by. While it was held nothing moved the body - see PhysicsTier - so
+            // this is the one place the body learns where the carry took it. Setting the node's position instead
+            // did not move the body under Rapier: the crate flew from where it had been picked up (netfox-net#59).
+            // Back into the world first, then placed: the mode change is what re-creates the body on the engine
+            // side, and a transform written before it does not survive it
+            PhysicsTier.Carried(crate, false);
+            if (crate is NetworkRigidBody3D networkCrate)
+                networkCrate.PhysicsState = [Hand, Quaternion.Identity, Facing * ThrowSpeed + Vector3.Up * 2, Vector3.Zero, false];
         }
 
-        // Where it rides. Whether it is frozen is not decided here - PhysicsTier derives that from every player's
-        // HeldCrate after each restore, because Freeze is not rollback state and a crate left frozen by a prediction
-        // the authority refused would ignore every correction sent to it afterwards.
-        if (HeldCrate >= 0 && HeldCrate < crates.Count)
-            crates[HeldCrate].GlobalPosition = GlobalPosition + CarryOffset + Facing * 0.5f;
+        // Where a held crate is drawn is not decided here either. Its position is not a replicated fact while it
+        // is held - only who holds it is - and PhysicsTier places it from the holder every frame, after
+        // interpolation, on every peer. Whether it is frozen and collides is derived there too, after each restore,
+        // because neither is rollback state and a crate left frozen by a prediction the authority refused would
+        // ignore every correction sent to it afterwards.
     }
 
     private int NearestCrate(List<RigidBody3D> crates)
@@ -253,6 +266,8 @@ public partial class PlayerCharacter : CharacterBody3D
         Velocity = velocity * factor;
         MoveAndSlide();
         Velocity /= factor;
+        // So that the next body to move this tick collides with where this one is now, not where it was
+        PhysicsDriver.Active?.FlushQueries();
         ShoveWhatWasHit(velocity);
     }
 

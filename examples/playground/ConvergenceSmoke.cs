@@ -86,6 +86,28 @@ public partial class ConvergenceSmoke : Node
     /// <summary>A client ran the NPC's rule. It must not: the NPC is told where it is, and that is all.</summary>
     private bool _clientRanNpcRule;
 
+    /// <summary>
+    /// Ticks on which a held crate's <i>physics body</i> could still be walked into, wherever it was. The quiet
+    /// window cannot see this: by then the crate has been thrown and the body has caught up with the node. What it
+    /// missed was a body sitting at the pickup spot with its collision, for the whole carry (netfox-net#59).
+    /// </summary>
+    private int _heldCrateCollidableTicks;
+
+    /// <summary>
+    /// Frames on which a held crate was <i>drawn</i> away from the hand, and the worst of them. Per frame rather than
+    /// per tick because that is what a player sees: the crate in hand, then on the floor, then in hand again.
+    /// </summary>
+    private int _carryDropFrames;
+    private float _carryDisplayGap;
+
+    /// <summary>Worst distance between a player's node and its physics body, per tick: the body is what the other player collides with.</summary>
+    private float _playerBodyGap;
+
+    /// <summary>How far from the thrower's hand the crate was on the tick after it left it, worst case (netfox-net#59: it left from the pickup spot).</summary>
+    private float _thrownFromGap;
+    private readonly Dictionary<string, int> _heldLastTick = new();
+    private const float HandTolerance = 0.5f;
+
     /// <summary>The proxy, on the host only, so the report can say what the link actually did rather than what it was asked to do.</summary>
     private NetworkSimulator? _proxy;
     private Playground _playground = null!;
@@ -114,6 +136,9 @@ public partial class ConvergenceSmoke : Node
 
     public override async void _Ready()
     {
+        // After PhysicsTier has drawn the held crates for this frame, so what is measured is what is on screen
+        ProcessPriority = 200;
+
         foreach (var arg in OS.GetCmdlineUserArgs())
         {
             if (arg == "--host") _isHost = true;
@@ -263,9 +288,43 @@ public partial class ConvergenceSmoke : Node
         // On the platform the target moves, and getting up there needs the jump: its top is 1.2m above the ground,
         // which is one jump with nothing to spare
         var target = _onPlatform ? _platform.GlobalPosition : _steerTo.Value;
+
+        // Walking into a crate shoves it - so while nobody holds it, walk to where it is now, not where it was. With
+        // physics actually rolled back (netfox-net#62) the crate ends up two metres from where it started, out of
+        // reach of a player standing on the spot it spawned at
+        // Only until the first grab: after the throw the crate slides on for metres, and two players chasing a moving
+        // host-simulated body collide with a copy that is a tick stale on the client - a transient 6-9cm disagreement
+        // that heals, of the netfox-net#51 family, and not what this run is about
+        if (_pickup && !_onPlatform && _heldTicks == 0 && Crates().Count > 1) target = Crates()[1].GlobalPosition with { Y = 0 };
+
+        // And once somebody has it, the other player steps aside. A crate released into a body standing a metre
+        // away is inside that body's capsule for one step, and the solver throws it out - 2.5m, in one tick, in
+        // whichever direction it found first. That is what a thrown crate does to a teammate in the way; it is not
+        // what this run measures
+        if (_pickup && !_onPlatform && Carried().Any() && !Carried().Any(pair => pair.Holder.IsLocal)) target += Vector3.Right * 2.5f;
         Steer(target);
         if (_onPlatform) Climb(delta, target);
+
+        // Every frame, not every tick: a crate that is in the hand on every tick and on the floor in between is a
+        // crate the player saw on the floor
+        foreach (var (holder, crate) in Carried())
+        {
+            var gap = crate.GlobalPosition.DistanceTo(Hand(holder));
+            _carryDisplayGap = Mathf.Max(_carryDisplayGap, gap);
+            if (gap > HandTolerance) _carryDropFrames++;
+        }
     }
+
+    /// <summary>Every crate somebody on this peer believes they are carrying, with who.</summary>
+    private IEnumerable<(PlayerCharacter Holder, NetworkRigidBody3D Crate)> Carried()
+    {
+        var crates = Crates();
+        foreach (var player in Ordered())
+            if (player.HeldCrate >= 0 && player.HeldCrate < crates.Count && crates[player.HeldCrate] is NetworkRigidBody3D crate)
+                yield return (player, crate);
+    }
+
+    private static Vector3 Hand(PlayerCharacter holder) => holder.Hand;
 
     /// <summary>
     /// How far apart two players are on the floor, ignoring height. Straight line distance answers the wrong
@@ -287,6 +346,37 @@ public partial class ConvergenceSmoke : Node
         // screens passed. They are host-simulated and never predicted, so the expectation is the tight one.
         foreach (var crate in Crates())
             beliefs[crate.Name.ToString()] = new SettledPlayer(crate.Position, "crate", 0);
+
+        // The body, not the node: the node is what gets drawn, the body is what gets collided with and thrown, and
+        // nothing forces them to agree while the crate is frozen and carried by hand
+        foreach (var (holder, crate) in Carried())
+        {
+            // Not on the tick it was grabbed: the layer change written inside that tick reaches queries on the next step
+            if (_heldLastTick.GetValueOrDefault(holder.Name.ToString(), -1) != holder.HeldCrate) continue;
+            var body = PhysicsServer3D.BodyGetState(crate.GetRid(), PhysicsServer3D.BodyState.Transform).AsTransform3D().Origin;
+            var hits = crate.GetWorld3D().DirectSpaceState.IntersectPoint(new PhysicsPointQueryParameters3D { Position = body, CollisionMask = 1 });
+            if (hits.Any(hit => hit["rid"].AsRid() == crate.GetRid())) _heldCrateCollidableTicks++;
+        }
+
+        foreach (var player in Ordered())
+        {
+            var body = PhysicsServer3D.BodyGetState(player.GetRid(), PhysicsServer3D.BodyState.Transform).AsTransform3D().Origin;
+            _playerBodyGap = Mathf.Max(_playerBodyGap, body.DistanceTo(player.GlobalPosition));
+        }
+
+        // A throw starts at the hand: on the tick the crate leaves it, its body is within reach of the thrower. On
+        // the host only - the throw happens there; a client's copy of the crate is a round trip behind by design
+        var allCrates = Crates();
+        foreach (var player in Ordered())
+        {
+            if (!_isHost) break;
+            var name = player.Name.ToString();
+            var was = _heldLastTick.GetValueOrDefault(name, -1);
+            _heldLastTick[name] = player.HeldCrate;
+            if (was < 0 || player.HeldCrate >= 0 || was >= allCrates.Count || allCrates[was] is not RigidBody3D thrownCrate) continue;
+            var body = PhysicsServer3D.BodyGetState(thrownCrate.GetRid(), PhysicsServer3D.BodyState.Transform).AsTransform3D().Origin;
+            _thrownFromGap = Mathf.Max(_thrownFromGap, body.DistanceTo(Hand(player)));
+        }
 
         // And the NPC: the one root nobody drives. Host-simulated and never predicted, so the same tight expectation
         foreach (var npc in _playground.GetNode("World/Npcs").GetChildren().OfType<Npc>())
@@ -395,6 +485,12 @@ public partial class ConvergenceSmoke : Node
         // A pickup run has to have carried something, or it tested the crates being shoved and nothing else
         if (_pickup) ok &= _heldTicks > 10;
 
+        // And while it was carried, the crate has to have been in the hand - the body on every tick, the drawing on
+        // every frame (netfox-net#59)
+        if (_pickup && _heldCrateCollidableTicks > 0) { failure += $" held-crate-collidable({_heldCrateCollidableTicks}ticks)"; ok = false; }
+        if (_pickup && _thrownFromGap > 1.5f) { failure += FormattableString.Invariant($" thrown-from-elsewhere({_thrownFromGap:F2}m)"); ok = false; }
+        if (_pickup && _carryDropFrames > 0) { failure += FormattableString.Invariant($" crate-drawn-off-hand({_carryDropFrames}frames,{_carryDisplayGap:F2}m)"); ok = false; }
+
         // The players have to have actually met, or the run proves nothing about collisions. Two capsules of radius
         // 0.4 resting against each other are 0.8 apart.
         var collided = _closestApproach < 1.2f;
@@ -464,7 +560,7 @@ public partial class ConvergenceSmoke : Node
         var head = FormattableString.Invariant(
             $"CONVERGENCE role={(_isHost ? "host" : "client")} ok={ok} peer=#{Multiplayer.GetUniqueId()} at_tick={_captureTick}");
         var tail = FormattableString.Invariant(
-            $"mode={(_onPlatform ? "platform" : "ground")} players={_final.Count(entry => IsPlayer(entry.Value))} crates={_final.Count(entry => entry.Value.State == "crate")} npcs={_final.Count(entry => entry.Value.State == "npc")} held_ticks={_heldTicks} collided={collided} closest={_closestApproach:F3} shots={_finalShots}{comparison} {beliefs} {failure}");
+            $"mode={(_onPlatform ? "platform" : "ground")} players={_final.Count(entry => IsPlayer(entry.Value))} crates={_final.Count(entry => entry.Value.State == "crate")} npcs={_final.Count(entry => entry.Value.State == "npc")} held_ticks={_heldTicks} held_crate_collidable_ticks={_heldCrateCollidableTicks} carry_drop_frames={_carryDropFrames} thrown_from_gap={_thrownFromGap:F3} player_body_gap={_playerBodyGap:F3} collided={collided} closest={_closestApproach:F3} shots={_finalShots}{comparison} {beliefs} {failure}");
         GD.Print($"{head} {tail}");
 
         // What the link did, not what it was asked to do. A configured burst that never fires reads exactly like a
