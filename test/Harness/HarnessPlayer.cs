@@ -3,16 +3,33 @@ using Netfox.Extras;
 
 namespace Netfox.Tests;
 
-/// <summary>Deterministic input: each peer pushes its own player along a fixed axis, so the two are distinguishable.</summary>
+/// <summary>Deterministic input: each peer pushes its own player along a fixed axis, so they stay distinguishable.</summary>
 public partial class HarnessInput : BaseNetInput
 {
     [Export] public Vector3 Movement { get; set; }
 
+    /// <summary>
+    /// Where this player walks while held. Only the owning peer ever reads it, since only the owner gathers - but
+    /// every stack sets the same value for the same peer, so a trace stays readable from any of them.
+    /// </summary>
+    public Vector3 Direction { get; set; } = Vector3.Right;
+
     /// <summary>Stands in for a held button: clearing it is what "the player let go" looks like to the netcode.</summary>
     public bool Held { get; set; } = true;
 
-    protected override void Gather()
-        => Movement = !Held ? Vector3.Zero : GetMultiplayerAuthority() == 1 ? Vector3.Right : Vector3.Back;
+    /// <summary>
+    /// A distinct axis per peer, so a position says on its own whose player it is. Peers 1 and 2 keep the directions
+    /// they had when the harness was two peers wide.
+    /// </summary>
+    public static Vector3 DirectionFor(int peer) => (peer % 4) switch
+    {
+        1 => Vector3.Right,
+        2 => Vector3.Back,
+        3 => Vector3.Left,
+        _ => Vector3.Forward,
+    };
+
+    protected override void Gather() => Movement = Held ? Direction : Vector3.Zero;
 }
 
 /// <summary>
@@ -38,7 +55,7 @@ public partial class HarnessPlayer : Node3D, IRollbackTick
         var player = new HarnessPlayer { Name = $"Player_{ownerPeer}" };
         player.SetMultiplayerAuthority(1);
 
-        player.Input = new HarnessInput { Name = "Input" };
+        player.Input = new HarnessInput { Name = "Input", Direction = HarnessInput.DirectionFor(ownerPeer) };
         player.Input.SetMultiplayerAuthority(ownerPeer);
         player.AddChild(player.Input);
 

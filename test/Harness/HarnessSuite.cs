@@ -4,7 +4,12 @@ namespace Netfox.Tests;
 
 /// <summary>
 /// A host and a client in one SceneTree, talking over a <see cref="LoopbackNetwork"/>. Each gets its own
-/// <see cref="NetfoxContext"/> and its own MultiplayerAPI, so the two stacks are as separate as two processes.
+/// <see cref="NetfoxContext"/> and its own MultiplayerAPI, so the stacks are as separate as separate processes.
+/// <para>
+/// Two of them are always there, because most cases only need a host and a client. A case that needs more calls
+/// <see cref="AddPeer"/>: three is the first count at which a peer has to deal with a player that is neither its own
+/// nor the authority's, and two peers can never show that.
+/// </para>
 /// </summary>
 public abstract partial class HarnessSuite : TestSuite
 {
@@ -49,6 +54,17 @@ public abstract partial class HarnessSuite : TestSuite
     {
         var stack = NetfoxStack.Create(this, name, Network, peerId);
         _stacks.Add(stack);
+        return stack;
+    }
+
+    /// <summary>
+    /// Adds one more peer to the session, connected to everyone already in it. Its stack is named after its id, and
+    /// it joins after the first two, exactly the way a third player does.
+    /// </summary>
+    protected NetfoxStack AddPeer(int peerId)
+    {
+        var stack = CreateStack($"Peer_{peerId}", peerId);
+        Network.ConnectLate(stack.Peer);
         return stack;
     }
 

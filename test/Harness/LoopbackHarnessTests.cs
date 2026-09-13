@@ -418,9 +418,86 @@ public partial class LoopbackHarnessTests : HarnessSuite
                 $"client sees {clientPlayer.Position.Z:F3}, host {hostPlayer.Position.Z:F3}, state age {stateAge}"));
     }
 
-    private static Dictionary<int, HarnessPlayer> SpawnPlayers(NetfoxStack stack, bool enablePrediction = false) => new()
+    /// <summary>
+    /// Three peers, every one of them owning a player. The case two peers cannot express: on peer 3, player 2 is
+    /// neither its own nor the authority's, and the only way it hears about that player is the host relaying state
+    /// the host itself simulated from input it received. If that path is broken, two peers never notice.
+    /// </summary>
+    [Test]
+    public async Task EveryPeerAgreesAboutEveryPlayer()
     {
-        [1] = HarnessPlayer.Spawn(stack, 1, enablePrediction),
-        [2] = HarnessPlayer.Spawn(stack, 2, enablePrediction),
-    };
+        Network.LatencyMs = 20;
+        var third = AddPeer(3);
+
+        var players = new Dictionary<NetfoxStack, Dictionary<int, HarnessPlayer>>
+        {
+            [Host] = SpawnPlayers(Host, peers: 3),
+            [Client] = SpawnPlayers(Client, peers: 3),
+            [third] = SpawnPlayers(third, peers: 3),
+        };
+
+        // Each peer's own player is driven from that peer, so all three have to be moving before anything is compared
+        var moving = await WaitUntil(() => players.Keys.All(stack =>
+            players[stack].Values.All(player => player.Position.Length() > 0.5f)), 8);
+        Expect.True(moving, Describe(players));
+
+        // The host simulates all three, and no client simulates a player it does not own
+        Expect.Equal(0, players[Client][3].SimulatedTicks);
+        Expect.Equal(0, players[third][2].SimulatedTicks);
+
+        var perTick = HarnessPlayer.Speed / Host.Context.NetworkTime.Tickrate;
+        foreach (var owner in new[] { 1, 2, 3 })
+        {
+            var authoritative = players[Host][owner].Position;
+            foreach (var stack in players.Keys)
+            {
+                var drift = (players[stack][owner].Position - authoritative).Length();
+                Expect.True(drift < perTick * 12,
+                    FormattableString.Invariant($"Player_{owner} drifts {drift:F3} on {stack.Name}: {Describe(players)}"));
+            }
+        }
+    }
+
+    /// <summary>
+    /// One peer on a bad line must stay that peer's problem. Latency used to be a property of the whole network, so
+    /// this could not be asked at all: slowing one peer slowed everyone, which is the answer the test is looking for.
+    /// </summary>
+    [Test]
+    public async Task OnePeerOnASlowLinkDoesNotHoldTheOthersBack()
+    {
+        var third = AddPeer(3);
+        Network.SetLink(1, 3, latencyMs: 150, packetLoss: 0.1);
+        Network.SetLink(2, 3, latencyMs: 150, packetLoss: 0.1);
+
+        var hostPlayers = SpawnPlayers(Host, peers: 3);
+        var clientPlayers = SpawnPlayers(Client, peers: 3);
+        var thirdPlayers = SpawnPlayers(third, peers: 3);
+
+        var moving = await WaitUntil(() =>
+            hostPlayers.Values.All(player => player.Position.Length() > 0.5f) &&
+            clientPlayers[1].Position.Length() > 0.5f && thirdPlayers[3].Position.Length() > 0.5f, 10);
+        Expect.True(moving, $"host={Positions(hostPlayers)} client={Positions(clientPlayers)} third={Positions(thirdPlayers)}");
+
+        // The client's link to the host is untouched, so its view of the host player is as tight as it would be
+        // with no third peer at all
+        var perTick = HarnessPlayer.Speed / Host.Context.NetworkTime.Tickrate;
+        var drift = (clientPlayers[1].Position - hostPlayers[1].Position).Length();
+        Expect.True(drift < perTick * 8,
+            FormattableString.Invariant($"the slow peer cost the fast one {drift:F3}: client={Positions(clientPlayers)} host={Positions(hostPlayers)}"));
+
+        // And the slow peer is still in the session, only further behind - which is also what proves the link
+        // override took effect at all, rather than the test passing on a network where nobody is slow
+        var slowDrift = (thirdPlayers[1].Position - hostPlayers[1].Position).Length();
+        Expect.True(slowDrift > drift + perTick,
+            FormattableString.Invariant($"the slow link cost nothing: fast={drift:F3} slow={slowDrift:F3} per tick {perTick:F3}"));
+    }
+
+    private static string Describe(Dictionary<NetfoxStack, Dictionary<int, HarnessPlayer>> players)
+        => string.Join(" ", players.Select(entry => $"{entry.Key.Name}={Positions(entry.Value)}"));
+
+    private static string Positions(Dictionary<int, HarnessPlayer> players)
+        => string.Join(",", players.OrderBy(entry => entry.Key).Select(entry => $"{entry.Key}:{entry.Value.Position}"));
+
+    private static Dictionary<int, HarnessPlayer> SpawnPlayers(NetfoxStack stack, bool enablePrediction = false, int peers = 2)
+        => Enumerable.Range(1, peers).ToDictionary(peer => peer, peer => HarnessPlayer.Spawn(stack, peer, enablePrediction));
 }

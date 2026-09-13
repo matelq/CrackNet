@@ -3,17 +3,33 @@ using Godot;
 namespace Netfox.Tests;
 
 /// <summary>
-/// Routes packets between <see cref="LoopbackMultiplayerPeer"/> instances inside one process, so two netfox stacks can
-/// talk to each other without a socket. Latency and packet loss are optional; loss only ever drops unreliable packets,
+/// Routes packets between <see cref="LoopbackMultiplayerPeer"/> instances inside one process, so any number of netfox
+/// stacks can talk to each other without a socket. Every peer is announced to every other, so this is a mesh: what
+/// makes peer 1 the server is netfox asking the peer, not the routing. Latency and packet loss are optional; loss only ever drops unreliable packets,
 /// the way a real transport retransmits reliable ones.
 /// </summary>
 public sealed class LoopbackNetwork
 {
-    /// <summary>One-way delay applied to every packet, in milliseconds.</summary>
+    /// <summary>One-way delay applied to every packet, in milliseconds. A link set with <see cref="SetLink"/> wins.</summary>
     public int LatencyMs { get; set; }
 
-    /// <summary>Chance to drop an unreliable packet, 0 to 1.</summary>
+    /// <summary>Chance to drop an unreliable packet, 0 to 1. A link set with <see cref="SetLink"/> wins.</summary>
     public double PacketLoss { get; set; }
+
+    private readonly Dictionary<(int, int), (int LatencyMs, double PacketLoss)> _links = new();
+
+    /// <summary>
+    /// Gives one link its own latency and loss, in both directions, instead of the network-wide values. Real peers do
+    /// not share a connection: one player on a bad line is the normal case, and it must not be modelled by making
+    /// everyone's line bad.
+    /// </summary>
+    public void SetLink(int a, int b, int latencyMs, double packetLoss = 0)
+        => _links[LinkKey(a, b)] = (latencyMs, packetLoss);
+
+    private (int LatencyMs, double PacketLoss) LinkBetween(int a, int b)
+        => _links.TryGetValue(LinkKey(a, b), out var link) ? link : (LatencyMs, PacketLoss);
+
+    private static (int, int) LinkKey(int a, int b) => a < b ? (a, b) : (b, a);
 
     private readonly Random _rng = new(20260912);
     private readonly Dictionary<int, LoopbackMultiplayerPeer> _peers = new();
@@ -71,9 +87,11 @@ public sealed class LoopbackNetwork
             if (id == from) continue;
             if (to > 0 && id != to) continue;
             if (to < 0 && id == -to) continue;
-            if (mode != MultiplayerPeer.TransferModeEnum.Reliable && PacketLoss > 0 && _rng.NextDouble() < PacketLoss) continue;
 
-            peer.Receive(new LoopbackPacket(from, data, mode, channel), LatencyMs);
+            var link = LinkBetween(from, id);
+            if (mode != MultiplayerPeer.TransferModeEnum.Reliable && link.PacketLoss > 0 && _rng.NextDouble() < link.PacketLoss) continue;
+
+            peer.Receive(new LoopbackPacket(from, data, mode, channel), link.LatencyMs);
         }
     }
 }
