@@ -93,8 +93,8 @@ A check that only compares state after the keys are released is blind to what a 
 floor between two ticks, a remote player snapping, a body left behind while its mesh moved. Measure during motion and
 on displayed positions (per frame, after interpolation) as well as at rest, and make the check fail on the reported
 symptom before fixing it - `ConvergenceSmoke --pickup` shows the pattern (netfox-net#59). And when a check passes on
-the first try, ask what it would take to make it fail; two checks here have passed for years-long reasons of
-measuring nothing (netfox-net#62).
+the first try, ask what it would take to make it fail; more than one check here has passed by measuring nothing
+(netfox-net#62).
 
 Performance claims come from tests that print their numbers (`PropertyAccessBenchmarkTests`, `HotPathBenchmarkTests`,
 and the bandwidth case in the harness) and fail on regression. Tick-level timings swing by ±60% between runs on the
