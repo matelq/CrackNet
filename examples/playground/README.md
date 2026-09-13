@@ -93,6 +93,12 @@ give, which no real network does either of. `realistic` is
 not the same thing as a check. The run prints what the link actually did (`forwarded`, `dropped`, `burst_dropped`), so
 a burst that never fired cannot be mistaken for a clean run.
 
+The crates are compared too, by name like the players, and the players are steered into the middle one so it gets
+shoved - that is the physics rollback being exercised by late input rather than merely present. A crate is
+host-simulated and never predicted, so the expectation is the tight one, and it holds: `unsettled=0` for crates and
+players alike. Walking into a crate pushes it because `PlayerCharacter.Move` applies an impulse on contact, inside the
+tick and from this tick's velocity only - `MoveAndSlide` on its own never moves another body.
+
 `--peers=3` waits for three players before starting, and is then given to all three processes. Two peers is the one
 count at which every player is either your own or the host's, so nothing has to be relayed on anyone else's behalf -
 which is why a third process finds things the second never could. `--on-platform` puts everyone on the moving

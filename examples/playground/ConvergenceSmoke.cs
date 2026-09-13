@@ -169,7 +169,9 @@ public partial class ConvergenceSmoke : Node
         // rather than a fixed direction because where a player spawns depends on its peer id, which is a random
         // number on a client - and placing them by hand is not an option: position is rollback state, so an
         // assignment from outside a tick is overwritten from the history on the next one.
-        _steerTo = Vector3.Zero;
+        // The middle crate's spot rather than the origin: the players press into each other there and shove the
+        // crate as they do, which is the physics rollback being exercised by late input and not merely present
+        _steerTo = Crates().Count > 1 ? Crates()[1].GlobalPosition with { Y = 0 } : Vector3.Zero;
 
         // One shot each along the way, so the weapon's request and accept round trip is part of the run and the
         // scoreboard has something to disagree about
@@ -248,7 +250,14 @@ public partial class ConvergenceSmoke : Node
     private void Record()
     {
         var tick = NetworkTime.Instance.Tick;
-        _history[tick] = Ordered().ToDictionary(player => player.Name.ToString(), Settle);
+        var beliefs = Ordered().ToDictionary(player => player.Name.ToString(), Settle);
+
+        // Crates too, by name like the players. They are the one thing here that rolls a real physics space back,
+        // and until this line nothing compared what two peers believed about them - a crate in two places on two
+        // screens passed. They are host-simulated and never predicted, so the expectation is the tight one.
+        foreach (var crate in Crates())
+            beliefs[crate.Name.ToString()] = new SettledPlayer(crate.Position, "crate", 0);
+        _history[tick] = beliefs;
         _shotsAt[tick] = _playground.GetNode<Scoreboard>("World/Scoreboard").Shots;
 
         var expired = tick - HistoryTicks;
@@ -269,6 +278,10 @@ public partial class ConvergenceSmoke : Node
             return;
         }
     }
+
+    private List<Node3D> Crates()
+        => _playground.GetNode("World/Crates").GetChildren().OfType<Node3D>()
+            .OrderBy(crate => crate.Name.ToString(), StringComparer.Ordinal).ToList();
 
     private static SettledPlayer Settle(PlayerCharacter player)
         => new(player.Position, player.StateMachine.State.ToString(), player.JumpsLeft);
@@ -331,7 +344,7 @@ public partial class ConvergenceSmoke : Node
 
     private void Report(bool reached, string failure)
     {
-        var ok = reached && _final.Count >= _peers && _captureTick >= 0;
+        var ok = reached && _final.Count(entry => entry.Value.State != "crate") >= _peers && _captureTick >= 0;
 
         // The players have to have actually met, or the run proves nothing about collisions. Two capsules of radius
         // 0.4 resting against each other are 0.8 apart.
@@ -397,7 +410,7 @@ public partial class ConvergenceSmoke : Node
         var head = FormattableString.Invariant(
             $"CONVERGENCE role={(_isHost ? "host" : "client")} ok={ok} peer=#{Multiplayer.GetUniqueId()} at_tick={_captureTick}");
         var tail = FormattableString.Invariant(
-            $"mode={(_onPlatform ? "platform" : "ground")} players={_final.Count} collided={collided} closest={_closestApproach:F3} shots={_finalShots}{comparison} {beliefs} {failure}");
+            $"mode={(_onPlatform ? "platform" : "ground")} players={_final.Count(entry => entry.Value.State != "crate")} crates={_final.Count(entry => entry.Value.State == "crate")} collided={collided} closest={_closestApproach:F3} shots={_finalShots}{comparison} {beliefs} {failure}");
         GD.Print($"{head} {tail}");
 
         // What the link did, not what it was asked to do. A configured burst that never fires reads exactly like a

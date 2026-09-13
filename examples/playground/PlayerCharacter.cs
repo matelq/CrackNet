@@ -133,6 +133,31 @@ public partial class PlayerCharacter : CharacterBody3D
         Velocity = velocity * factor;
         MoveAndSlide();
         Velocity /= factor;
+        ShoveWhatWasHit(velocity);
+    }
+
+    /// <summary>How hard walking into a rigid body pushes it. A knob, not a law: tune it to the crates you have.</summary>
+    [Export] public float ShoveImpulse { get; set; } = 0.35f;
+
+    /// <summary>
+    /// MoveAndSlide never moves another body - it slides this one around whatever it hits. So a crate a player walks
+    /// into has to be pushed explicitly. Done here, inside the tick, from this tick's velocity and the contact normal
+    /// and nothing else: a resimulated tick then shoves exactly as the first pass did, which is what lets the crate
+    /// be rolled back through the physics driver along with everything else.
+    /// </summary>
+    private void ShoveWhatWasHit(Vector3 velocity)
+    {
+        if (velocity.LengthSquared() < 0.01f) return;
+        for (var i = 0; i < GetSlideCollisionCount(); i++)
+        {
+            var collision = GetSlideCollision(i);
+            if (collision.GetCollider() is not RigidBody3D body) continue;
+
+            var push = -collision.GetNormal();
+            push.Y = 0;
+            if (push.LengthSquared() < 0.01f) continue;
+            body.ApplyImpulse(push.Normalized() * ShoveImpulse, collision.GetPosition() - body.GlobalPosition);
+        }
     }
 
     /// <summary>
