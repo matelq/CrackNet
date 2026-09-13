@@ -207,6 +207,42 @@ public partial class NetworkSynchronizationServer : Node
     internal PropertyPool OwnedRollbackStateProperties => _rbOwnedStateProperties;
 
     /// <summary>
+    /// Re-sorts every registered property into or out of the owned pools by what its node's authority is <i>now</i>.
+    /// Called once per tick before anything is sent.
+    /// <para>
+    /// Registration sorted by authority once, and Godot has no signal for it changing, so a SetMultiplayerAuthority
+    /// after that point left the pools describing the past: the peer that gained authority recorded state as real -
+    /// the history server reads authority live - but never sent it, and the peer that lost it kept sending. Two
+    /// servers disagreeing about one node, quietly. Anything that hands an object over at runtime hits this: a
+    /// respawn onto another peer, possessing a character, a pickup whose truth should live with whoever holds it.
+    /// </para>
+    /// <para>
+    /// A dozen dictionary lookups a tick for a room of four. Upstream has the same shape and the same gap
+    /// (network-synchronization-server.gd:73), so this is inherited, and the fix lives here rather than in a helper
+    /// callers would have to remember - the point is that nobody has to (netfox-net#45).
+    /// </para>
+    /// </summary>
+    internal void ReconcileAuthority()
+    {
+        Reconcile(_rbStateProperties, _rbOwnedStateProperties);
+        Reconcile(_rbInputProperties, _rbOwnedInputProperties);
+        Reconcile(_syncStateProperties, _syncOwnedStateProperties);
+
+        static void Reconcile(PropertyPool all, PropertyPool owned)
+        {
+            foreach (var subject in all.Subjects)
+            {
+                var isOwned = GodotObject.IsInstanceValid(subject) && subject.IsMultiplayerAuthority();
+                if (isOwned == owned.HasSubject(subject)) continue;
+
+                foreach (var property in all.GetPropertiesOf(subject))
+                    if (isOwned) owned.Add(subject, property);
+                    else owned.Erase(subject, property);
+            }
+        }
+    }
+
+    /// <summary>
     /// The value as this property's schema will deliver it, so what a peer records for itself is what every other
     /// peer will be told. Properties with no schema of their own are returned untouched, which is nearly all of them.
     /// </summary>

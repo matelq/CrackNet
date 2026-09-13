@@ -556,7 +556,7 @@ public partial class LoopbackHarnessTests : HarnessSuite
 
         var client = hostPlayers[2];
         // A round trip plus a margin back from the newest tick, so only ticks that had every chance to be corrected count
-        var (longest, endsAt) = client.LongestPredictedRunEndingAt(Host.Context.NetworkTime.Tick - 30);
+        var (longest, endsAt) = client.LongestPredictedRunBetween(first, Host.Context.NetworkTime.Tick - 30);
         GD.Print($"BURST longest_predicted_run={longest} ends_at={endsAt} first={first} predicted={client.PredictedTicks} ticks={Host.Context.NetworkTime.Tick - first} input_arrivals={arrivals} late_fills={lateFills}");
 
         // Measured both ways on this exact case: a fixed redundancy of three leaves a run of 7, every run, and the
@@ -620,6 +620,47 @@ public partial class LoopbackHarnessTests : HarnessSuite
             var snapshot = stack.Context.NetworkHistoryServer.GetRollbackInputSnapshot(tick);
             return snapshot is not null && snapshot.TryGetProperty(player.Input, "Movement", out var value) ? value : (Variant?)null;
         }
+    }
+
+    /// <summary>
+    /// Authority was read once at registration, so handing a node to another peer at runtime left the pools describing
+    /// the past: the new authority recorded its state as real but never sent it, and the old one kept sending. The
+    /// history server reads authority live, so the two servers disagreed about one node without a word (netfox-net#45).
+    /// <para>
+    /// Every peer has to agree on the change, the same way it agrees on a spawn - here both stacks flip together.
+    /// </para>
+    /// </summary>
+    [Test]
+    public async Task AuthorityHandedOverAtRuntimeIsSentByItsNewOwner()
+    {
+        var hostPlayers = SpawnPlayers(Host);
+        var clientPlayers = SpawnPlayers(Client);
+        Expect.True(await WaitUntil(() => clientPlayers[1].Position.X > 0.3f, 5), "session never got going");
+
+        // Hand the host's player over to the client: from here the client's simulation of it is the truth
+        hostPlayers[1].SetMultiplayerAuthority(2);
+        clientPlayers[1].SetMultiplayerAuthority(2);
+        hostPlayers[1].Input.SetMultiplayerAuthority(2);
+        clientPlayers[1].Input.SetMultiplayerAuthority(2);
+
+        var flippedAt = Host.Context.NetworkTime.Tick;
+        var fromClient = 0;
+        var fromHostAfterFlip = 0;
+        Host.Context.NetworkSynchronizationServer.OnState += snapshot =>
+        {
+            if (snapshot.TryGetProperty(hostPlayers[1], "position", out _)) fromClient++;
+        };
+        Client.Context.NetworkSynchronizationServer.OnState += snapshot =>
+        {
+            if (snapshot.Tick > flippedAt + 5 && snapshot.TryGetProperty(clientPlayers[1], "position", out _)) fromHostAfterFlip++;
+        };
+
+        Expect.True(await WaitUntil(() => fromClient > 5, 5),
+            $"the host received {fromClient} states for the player it handed over: the new authority is not sending it");
+
+        // And the old authority has let go - a few ticks of grace for packets already in flight
+        Expect.Equal(0, fromHostAfterFlip,
+            $"the host kept sending state for a player it no longer owns: {fromHostAfterFlip} snapshots after the flip");
     }
 
     private static string Describe(Dictionary<NetfoxStack, Dictionary<int, HarnessPlayer>> players)

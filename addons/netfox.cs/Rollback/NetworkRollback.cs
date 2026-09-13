@@ -337,6 +337,9 @@ public partial class NetworkRollback : Node
     /// <summary>Records and sends input for the tick. Called by NetworkTime after every tick.</summary>
     internal void AfterTick(int tick)
     {
+        // Before anything is recorded or sent for this tick, so a SetMultiplayerAuthority made during it takes effect
+        // on this tick's traffic rather than never
+        Context.NetworkSynchronizationServer.ReconcileAuthority();
         Context.NetworkHistoryServer.RecordRollbackInput(tick + InputDelay);
         Context.NetworkSynchronizationServer.SynchronizeInput(tick + InputDelay);
         Context.NetworkSynchronizationServer.AcknowledgeInput(tick);
