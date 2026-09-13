@@ -50,6 +50,17 @@ public sealed class NetfoxSettings
     public bool RollbackEnabled { get; set; } = true;
     public int RollbackHistoryLimit { get; set; } = 64;
     public int InputRedundancy { get; set; } = 3;
+
+    /// <summary>
+    /// The most input ticks one packet may carry. <see cref="InputRedundancy"/> is the floor and this is the ceiling:
+    /// in between, the window is whatever the receiving peer has not acknowledged yet.
+    /// <para>
+    /// It exists to bound the packet rather than the redundancy. A peer that has heard nothing for a long time would
+    /// otherwise try to send its whole history in one go, which does not fit and would be dropped whole - turning a
+    /// bad link into no link at all.
+    /// </para>
+    /// </summary>
+    public int MaxInputRedundancy { get; set; } = 32;
     public int DisplayOffset { get; set; }
     public int InputDelay { get; set; }
     public bool EnableInputBroadcast { get; set; }
@@ -108,6 +119,7 @@ public sealed class NetfoxSettings
         s.RollbackEnabled = Settings.GetBool("netfox/rollback/enabled", s.RollbackEnabled);
         s.RollbackHistoryLimit = Settings.GetInt("netfox/rollback/history_limit", s.RollbackHistoryLimit);
         s.InputRedundancy = Settings.GetInt("netfox/rollback/input_redundancy", s.InputRedundancy);
+        s.MaxInputRedundancy = Settings.GetInt("netfox/rollback/max_input_redundancy", s.MaxInputRedundancy);
         s.DisplayOffset = Settings.GetInt("netfox/rollback/display_offset", s.DisplayOffset);
         s.InputDelay = Settings.GetInt("netfox/rollback/input_delay", s.InputDelay);
         s.EnableInputBroadcast = Settings.GetBool("netfox/rollback/enable_input_broadcast", s.EnableInputBroadcast);

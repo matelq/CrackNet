@@ -36,6 +36,20 @@ public partial class NetworkSynchronizationServer : Node
     private readonly bool _rbEnableDiffs = NetfoxSettings.Instance.RollbackEnableDiffStates;
     private readonly IntervalScheduler _rbFullScheduler = new(NetfoxSettings.Instance.RollbackFullStateInterval);
     private readonly int _inputRedundancy = Math.Max(1, NetfoxSettings.Instance.InputRedundancy);
+    private readonly int _maxInputRedundancy = Math.Max(1, NetfoxSettings.Instance.MaxInputRedundancy);
+
+    /// <summary>What each sender has got through to us, so we can tell it what it no longer has to repeat.</summary>
+    private readonly Dictionary<int, InputFrontier> _inputReceived = new();
+
+    /// <summary>What each peer we send input to last told us it had. Absent means it has told us nothing yet.</summary>
+    private readonly Dictionary<int, int> _inputAcknowledged = new();
+
+    /// <summary>
+    /// Ticks between acknowledgements. One per tick per peer would be half as many packets again on the host for four
+    /// bytes each; a stale acknowledgement only costs a few repeated input ticks, which are patches against the
+    /// newest and nearly free.
+    /// </summary>
+    private const int AckInterval = 4;
     private readonly int _historyLimit = NetfoxSettings.Instance.RollbackHistoryLimit;
 
     private readonly Dictionary<int, HistoryBuffer<Snapshot>> _rbSentStateHistory = new();
@@ -56,6 +70,7 @@ public partial class NetworkSynchronizationServer : Node
     private NetworkCommandServer.Command _cmdFullState = null!;
     private NetworkCommandServer.Command _cmdDiffState = null!;
     private NetworkCommandServer.Command _cmdInput = null!;
+    private NetworkCommandServer.Command _cmdInputAck = null!;
     private NetworkCommandServer.Command _cmdFullSync = null!;
     private NetworkCommandServer.Command _cmdDiffSync = null!;
 
@@ -99,6 +114,7 @@ public partial class NetworkSynchronizationServer : Node
         _cmdFullState = _commandServer.RegisterCommandAt(CommandIds.FullState, HandleFullState, MultiplayerPeer.TransferModeEnum.Unreliable);
         _cmdDiffState = _commandServer.RegisterCommandAt(CommandIds.DiffState, HandleDiffState, MultiplayerPeer.TransferModeEnum.Unreliable);
         _cmdInput = _commandServer.RegisterCommandAt(CommandIds.Input, HandleInput, MultiplayerPeer.TransferModeEnum.Unreliable);
+        _cmdInputAck = _commandServer.RegisterCommandAt(CommandIds.InputAck, HandleInputAck, MultiplayerPeer.TransferModeEnum.Unreliable);
         _cmdFullSync = _commandServer.RegisterCommandAt(CommandIds.FullSyncState, HandleFullSync, MultiplayerPeer.TransferModeEnum.UnreliableOrdered);
         _cmdDiffSync = _commandServer.RegisterCommandAt(CommandIds.DiffSyncState, HandleDiffSync, MultiplayerPeer.TransferModeEnum.UnreliableOrdered);
 
@@ -172,12 +188,19 @@ public partial class NetworkSynchronizationServer : Node
     }
 
     /// <summary>Erase everything kept about <paramref name="peer"/>. Called by default when a peer leaves.</summary>
-    public void ErasePeer(int peer) => _rbSentStateHistory.Remove(peer);
+    public void ErasePeer(int peer)
+    {
+        _rbSentStateHistory.Remove(peer);
+        _inputReceived.Remove(peer);
+        _inputAcknowledged.Remove(peer);
+    }
 
     /// <summary>Drops what was sent to whom, keeping registrations, schemas and visibility filters.</summary>
     internal void ResetSession()
     {
         _rbSentStateHistory.Clear();
+        _inputReceived.Clear();
+        _inputAcknowledged.Clear();
         _lastSyncStateSent = new Snapshot(0);
     }
 
@@ -296,21 +319,69 @@ public partial class NetworkSynchronizationServer : Node
 
         notifiedPeers.Remove(Multiplayer.GetUniqueId());
 
-        var snapshots = new List<Snapshot>();
-        for (var offset = 0; offset < _inputRedundancy; offset++)
+        Logger.Trace("Submitting input to peers: {0}", string.Join(", ", notifiedPeers));
+        foreach (var peer in notifiedPeers)
+        {
+            var snapshots = InputWindowFor(peer, tick, history);
+            if (snapshots.Count == 0) continue;
+
+            var data = _redundantSerializer.WriteFor(peer, snapshots, _rbOwnedInputProperties);
+            _cmdInput.Send(data, peer);
+        }
+    }
+
+    /// <summary>
+    /// The input ticks to send one peer: everything it has not acknowledged, floored at the configured redundancy and
+    /// capped so the packet still fits.
+    /// <para>
+    /// A fixed count is generous against independent loss and worth nothing against a burst - three in a row go
+    /// missing 0.1% of the time at 10% loss, but a burst takes all three every time, and the authority is left
+    /// predicting for the length of the outage. Sending what has not been acknowledged instead is what
+    /// <a href="https://gafferongames.com/post/deterministic_lockstep/">Deterministic Lockstep</a> does, and it is
+    /// smaller in the ordinary case as well as larger in the bad one: the floor only applies because an
+    /// acknowledgement can itself be lost.
+    /// </para>
+    /// </summary>
+    private List<Snapshot> InputWindowFor(int peer, int tick, NetworkHistoryServer history)
+    {
+        var count = _inputAcknowledged.TryGetValue(peer, out var acknowledged)
+            ? Math.Clamp(tick - acknowledged, _inputRedundancy, _maxInputRedundancy)
+            : _inputRedundancy;
+
+        var snapshots = new List<Snapshot>(count);
+        for (var offset = 0; offset < count; offset++)
         {
             var snapshot = history.GetRollbackInputSnapshot(tick - offset);
             if (snapshot is null) break;
             Logger.Trace("Submitting input: {0}", snapshot);
             snapshots.Add(snapshot);
         }
+        return snapshots;
+    }
 
-        Logger.Trace("Submitting input to peers: {0}", string.Join(", ", notifiedPeers));
-        foreach (var peer in notifiedPeers)
+    /// <summary>
+    /// Tells every peer that has sent us input how far it has got through, so it can stop repeating what we already
+    /// have. Called once per tick alongside <see cref="SynchronizeInput"/>, and rate limited from there.
+    /// </summary>
+    internal void AcknowledgeInput(int tick)
+    {
+        if (_inputReceived.Count == 0 || tick % AckInterval != 0) return;
+
+        foreach (var (peer, frontier) in _inputReceived)
         {
-            var data = _redundantSerializer.WriteFor(peer, snapshots, _rbOwnedInputProperties);
-            _cmdInput.Send(data, peer);
+            if (frontier.Tick < 0) continue;
+            _cmdInputAck.Send(BitConverter.GetBytes(frontier.Tick), peer);
         }
+    }
+
+    private void HandleInputAck(int sender, byte[] data)
+    {
+        if (data.Length < sizeof(int)) return;
+        var acknowledged = BitConverter.ToInt32(data);
+
+        // Acknowledgements are unreliable and so can arrive out of order; an older one must never shrink the window
+        if (!_inputAcknowledged.TryGetValue(sender, out var known) || acknowledged > known)
+            _inputAcknowledged[sender] = acknowledged;
     }
 
     /// <summary>
@@ -437,12 +508,49 @@ public partial class NetworkSynchronizationServer : Node
     private void HandleInput(int sender, byte[] data)
     {
         var history = _historyServer ?? Context.NetworkHistoryServer;
+        if (!_inputReceived.TryGetValue(sender, out var frontier))
+            _inputReceived[sender] = frontier = new InputFrontier();
+
         foreach (var snapshot in _redundantSerializer.ReadFrom(sender, _rbInputProperties, new ByteReader(data), isAuth: true))
         {
             snapshot.Sanitize(sender);
             Logger.Trace("Ingesting input: {0}", snapshot);
+            frontier.Receive(snapshot.Tick, _historyLimit);
             if (history.MergeRollbackInput(snapshot))
                 OnInput?.Invoke(snapshot);
+        }
+    }
+
+    /// <summary>
+    /// The newest input tick from one sender below which nothing is missing, and the ticks seen above it.
+    /// <para>
+    /// The frontier is what gets acknowledged rather than the newest tick received, and the difference matters: if
+    /// ticks 10, 11 and 13 arrive, acknowledging 13 tells the sender to stop repeating 12, which never came. An
+    /// acknowledgement may be late, but it must never be wrong.
+    /// </para>
+    /// </summary>
+    private sealed class InputFrontier
+    {
+        public int Tick { get; private set; } = -1;
+
+        private readonly HashSet<int> _ahead = new();
+
+        public void Receive(int tick, int historyLimit)
+        {
+            // The first input from a peer decides where counting starts: it joined mid-session and everything before
+            // that tick was never owed to us
+            if (Tick < 0) Tick = tick - 1;
+            if (tick <= Tick) return;
+
+            _ahead.Add(tick);
+            while (_ahead.Remove(Tick + 1)) Tick++;
+
+            // A tick that never arrives would hold the frontier back for good. Past the history limit the sender
+            // could not resend it anyway, so it is gone rather than pending, and holding the window open for it only
+            // costs bandwidth.
+            if (tick - Tick <= historyLimit) return;
+            Tick = tick - historyLimit;
+            _ahead.RemoveWhere(at => at <= Tick);
         }
     }
 

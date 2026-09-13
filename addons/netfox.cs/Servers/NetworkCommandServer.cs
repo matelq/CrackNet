@@ -19,6 +19,9 @@ public static class CommandIds
     public const int DiffSyncState = 8;
     public const int Identities = 9;
 
+    /// <summary>Reworked only: the newest input tick a peer has, below which nothing is missing. See netfox-net#40.</summary>
+    public const int InputAck = 10;
+
     /// <summary>First id handed out by RegisterCommand for user commands.</summary>
     public const int FirstUserCommand = 32;
 }
@@ -91,9 +94,25 @@ public partial class NetworkCommandServer : Node
 
     public virtual void SendCommand(int idx, byte[] data, int targetPeer = 0, MultiplayerPeer.TransferModeEnum mode = MultiplayerPeer.TransferModeEnum.Reliable, int channel = 0)
     {
+        var counted = _sent.GetValueOrDefault(idx);
+        _sent[idx] = (counted.Bytes + data.Length, counted.Packets + 1);
+
         if (_useRaw) _packetTransport.Send(idx, data, targetPeer, mode, channel);
         else _rpcTransport.Send(idx, data, targetPeer, mode, channel);
     }
+
+    /// <summary>
+    /// Payload bytes and packets sent per command id since the last <see cref="ResetSentCounts"/>. Transport framing
+    /// is not included, so this says what netfox asked for rather than what went on the wire.
+    /// <para>
+    /// It exists because a total cannot answer the question that matters when something grows: which command grew.
+    /// </para>
+    /// </summary>
+    public IReadOnlyDictionary<int, (long Bytes, long Packets)> SentCounts => _sent;
+
+    public void ResetSentCounts() => _sent.Clear();
+
+    private readonly Dictionary<int, (long Bytes, long Packets)> _sent = new();
 
     /// <summary>True if <paramref name="packet"/> is a command packet. Always true when commands go over RPC.</summary>
     public bool IsCommandPacket(ReadOnlySpan<byte> packet) => !_useRaw || PacketCommandTransport.IsCommandPacket(PacketPrefix, packet);

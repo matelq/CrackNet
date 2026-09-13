@@ -1,4 +1,5 @@
 using Godot;
+using Netfox.Extras;
 
 namespace Netfox.Tests;
 
@@ -15,6 +16,12 @@ public sealed class LoopbackNetwork
 
     /// <summary>Chance to drop an unreliable packet, 0 to 1. A link set with <see cref="SetLink"/> wins.</summary>
     public double PacketLoss { get; set; }
+
+    /// <summary>
+    /// Outages on top of the steady loss, on every link at once. The same shape and the same function as the UDP
+    /// proxy's, so a burst means the same thing in the harness as it does in a two-process run.
+    /// </summary>
+    public NetworkSimulator.Profile? Bursts { get; set; }
 
     private readonly Dictionary<(int, int), (int LatencyMs, double PacketLoss)> _links = new();
 
@@ -89,7 +96,9 @@ public sealed class LoopbackNetwork
             if (to < 0 && id == -to) continue;
 
             var link = LinkBetween(from, id);
-            if (mode != MultiplayerPeer.TransferModeEnum.Reliable && link.PacketLoss > 0 && _rng.NextDouble() < link.PacketLoss) continue;
+            if (mode == MultiplayerPeer.TransferModeEnum.Reliable) { peer.Receive(new LoopbackPacket(from, data, mode, channel), link.LatencyMs); continue; }
+            if (link.PacketLoss > 0 && _rng.NextDouble() < link.PacketLoss) continue;
+            if (Bursts is { } bursts && NetworkSimulator.InLossBurst(bursts, Time.GetTicksMsec())) continue;
 
             peer.Receive(new LoopbackPacket(from, data, mode, channel), link.LatencyMs);
         }

@@ -1,4 +1,5 @@
 using Godot;
+using Netfox.Extras;
 
 namespace Netfox.Tests;
 
@@ -273,13 +274,20 @@ public partial class LoopbackHarnessTests : HarnessSuite
         Report("no latency", idle);
         Report("100ms latency", lagging);
 
-        static void Report(string label, (double HostKbps, double ClientKbps, double PerPlayerTick, double HostPps, double HostPacket, double ClientPps, double ClientPacket) m)
+        // Input is the half netfox-net#40 changed, so it is the half that has to be watched: the acknowledged window
+        // is smaller than a fixed three when everything is arriving, and only grows when something is not
+        Expect.True(idle.InputBytes <= lagging.InputBytes,
+            $"input traffic should not shrink under latency: {idle.InputBytes:F0}B idle against {lagging.InputBytes:F0}B lagging");
+
+        static void Report(string label, (double HostKbps, double ClientKbps, double PerPlayerTick, double HostPps, double HostPacket, double ClientPps, double ClientPacket, double InputBytes, double AckBytes, double StateBytes) m)
         {
             var host = FormattableString.Invariant(
                 $"host {m.HostKbps:F1}KB/s = {m.HostPps:F0} packets/s x {m.HostPacket:F0}B ({m.PerPlayerTick:F0}B per player per tick)");
             var client = FormattableString.Invariant(
                 $"client {m.ClientKbps:F1}KB/s = {m.ClientPps:F0} packets/s x {m.ClientPacket:F0}B");
-            GD.Print($"BANDWIDTH {PlayerScale} moving players, {label}: {host}, {client}");
+            var split = FormattableString.Invariant(
+                $"input {m.InputBytes:F0}B/tick, state {m.StateBytes:F0}B/tick, input acks {m.AckBytes:F0}B/tick");
+            GD.Print($"BANDWIDTH {PlayerScale} moving players, {label}: {host}, {client}, {split}");
         }
 
         // State is sent once per loop, so resimulating a range must not multiply what goes out
@@ -290,7 +298,7 @@ public partial class LoopbackHarnessTests : HarnessSuite
     /// <summary>Players in the bandwidth case, and so peers: the target game is four.</summary>
     private const int PlayerScale = 4;
 
-    private async Task<(double HostKbps, double ClientKbps, double PerPlayerTick, double HostPps, double HostPacket, double ClientPps, double ClientPacket)> MeasureBandwidth(NetfoxStack[] stacks, int latencyMs)
+    private async Task<(double HostKbps, double ClientKbps, double PerPlayerTick, double HostPps, double HostPacket, double ClientPps, double ClientPacket, double InputBytes, double AckBytes, double StateBytes)> MeasureBandwidth(NetfoxStack[] stacks, int latencyMs)
     {
         foreach (var stack in stacks)
             foreach (var child in stack.GetChildren())
@@ -306,6 +314,7 @@ public partial class LoopbackHarnessTests : HarnessSuite
 
         var firstTick = Host.Context.NetworkTime.Tick;
         Network.ResetTraffic();
+        foreach (var stack in stacks) stack.Context.NetworkCommandServer.ResetSentCounts();
         var start = Time.GetTicksMsec();
         await WaitUntil(() => Host.Context.NetworkTime.Tick - firstTick > 60, 8);
 
@@ -314,10 +323,17 @@ public partial class LoopbackHarnessTests : HarnessSuite
         var fromHost = Network.TrafficFrom(1);
         var fromClient = Network.TrafficFrom(2);
 
+        // Across every stack, so "how much input is on this wire" is one number rather than one per sender
+        var sent = stacks.Select(stack => stack.Context.NetworkCommandServer.SentCounts).ToArray();
+        double PerTick(params int[] commands) =>
+            sent.Sum(counts => commands.Sum(id => (double)counts.GetValueOrDefault(id).Bytes)) / ticks;
+
         return (fromHost.Bytes / seconds / 1024, fromClient.Bytes / seconds / 1024,
             fromHost.Bytes / (double)ticks / PlayerScale,
             fromHost.Packets / seconds, fromHost.Bytes / (double)Math.Max(1, fromHost.Packets),
-            fromClient.Packets / seconds, fromClient.Bytes / (double)Math.Max(1, fromClient.Packets));
+            fromClient.Packets / seconds, fromClient.Bytes / (double)Math.Max(1, fromClient.Packets),
+            PerTick(CommandIds.Input), PerTick(CommandIds.InputAck),
+            PerTick(CommandIds.FullState, CommandIds.DiffState));
     }
 
     /// <summary>
@@ -500,6 +516,50 @@ public partial class LoopbackHarnessTests : HarnessSuite
         var slowDrift = (thirdPlayers[1].Position - hostPlayers[1].Position).Length();
         Expect.True(slowDrift > drift + perTick,
             FormattableString.Invariant($"the slow link cost nothing: fast={drift:F3} slow={slowDrift:F3} per tick {perTick:F3}"));
+    }
+
+    /// <summary>
+    /// A loss burst takes every copy of an input at once, which is what a fixed redundancy cannot survive: three in a
+    /// row go missing 0.1% of the time at 10% independent loss, and 100% of the time in a 300ms outage.
+    /// <para>
+    /// What is measured is the authority's side - the host drives the client's player from input the client sends,
+    /// and any tick that input never arrives for is a tick the host has to guess. Sending everything the host has not
+    /// acknowledged means the whole outage is made good in one packet the moment the link comes back, so the ticks
+    /// nobody ever resolved should be few and never in a long row (netfox-net#40).
+    /// </para>
+    /// </summary>
+    [Test]
+    public async Task ALossBurstDoesNotLeaveTheAuthorityGuessingForLong()
+    {
+        Network.LatencyMs = 30;
+        Network.Bursts = new NetworkSimulator.Profile(BurstLossMs: 300, BurstIntervalSeconds: 2);
+
+        var hostPlayers = SpawnPlayers(Host, enablePrediction: true);
+        SpawnPlayers(Client, enablePrediction: true);
+
+        var newestSeen = -1; var lateFills = 0; var arrivals = 0;
+        Host.Context.NetworkSynchronizationServer.OnInput += snapshot =>
+        {
+            arrivals++;
+            if (snapshot.Tick < newestSeen) lateFills++;
+            newestSeen = Math.Max(newestSeen, snapshot.Tick);
+        };
+
+        // Long enough to sit through several outages: 300ms out of every 2s, at 30 ticks a second
+        var first = Host.Context.NetworkTime.Tick;
+        var ran = await WaitUntil(() => Host.Context.NetworkTime.Tick - first > 200, 12);
+        Expect.True(ran, $"only reached tick {Host.Context.NetworkTime.Tick} from {first}");
+
+        var client = hostPlayers[2];
+        // A round trip plus a margin back from the newest tick, so only ticks that had every chance to be corrected count
+        var longest = client.LongestPredictedRun(Host.Context.NetworkTime.Tick - 30);
+        GD.Print($"BURST longest_predicted_run={longest} predicted={client.PredictedTicks} ticks={Host.Context.NetworkTime.Tick - first} input_arrivals={arrivals} late_fills={lateFills}");
+
+        // Measured both ways on this exact case: a fixed redundancy of three leaves a run of 7, every run, and the
+        // acknowledged window leaves 0. Three is margin, not a guess.
+        Expect.True(longest < 3,
+            $"the host guessed {longest} ticks in a row for the client's player and never found out otherwise. " +
+            $"{lateFills} of {arrivals} input arrivals filled a gap; a fixed window of three manages 6 and leaves a run of 7");
     }
 
     private static string Describe(Dictionary<NetfoxStack, Dictionary<int, HarnessPlayer>> players)

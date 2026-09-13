@@ -43,6 +43,7 @@ public partial class NetfoxPlugin : EditorPlugin
         new("netfox/rollback/enabled", true, Variant.Type.Bool),
         new("netfox/rollback/history_limit", 64, Variant.Type.Int),
         new("netfox/rollback/input_redundancy", 3, Variant.Type.Int),
+        new("netfox/rollback/max_input_redundancy", 32, Variant.Type.Int),
         new("netfox/rollback/display_offset", 0, Variant.Type.Int, PropertyHint.Range, "0,4,or_greater"),
         new("netfox/rollback/input_delay", 0, Variant.Type.Int, PropertyHint.Range, "0,4,or_greater"),
         new("netfox/rollback/enable_input_broadcast", false, Variant.Type.Bool),

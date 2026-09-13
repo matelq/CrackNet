@@ -47,6 +47,38 @@ public partial class HarnessPlayer : Node3D, IRollbackTick
     /// <summary>Ticks simulated without up to date input, so a test can tell whether prediction was in play at all.</summary>
     public int PredictedTicks { get; private set; }
 
+    /// <summary>
+    /// The longest run of consecutive ticks this peer never got the real input for, which is what a loss burst
+    /// leaves behind.
+    /// <para>
+    /// Counted from the last answer recorded for each tick rather than from each call, because a tick is simulated
+    /// again every time a correction lands: a tick that was predicted at first and then resimulated with the input
+    /// that finally arrived is not a tick anyone had to guess at in the end. A count of predicted simulations cannot
+    /// tell those apart, and it is the ones that never healed that matter.
+    /// </para>
+    /// </summary>
+    /// <param name="upToTick">
+    /// Ignore anything newer. The newest ticks of a node driven by a remote peer are always predicted - that peer's
+    /// input for them is still a round trip away - so counting them measures the tail of the run rather than
+    /// anything that went wrong, and it does so identically no matter what the netcode does.
+    /// </param>
+    public int LongestPredictedRun(int upToTick)
+    {
+        var longest = 0;
+        var run = 0;
+        var previous = int.MinValue;
+
+        foreach (var tick in _predictedAt.Keys.Where(at => at <= upToTick).Order())
+        {
+            run = _predictedAt[tick] ? (tick == previous + 1 ? run + 1 : 1) : 0;
+            longest = Math.Max(longest, run);
+            previous = tick;
+        }
+        return longest;
+    }
+
+    private readonly Dictionary<int, bool> _predictedAt = new();
+
     /// <summary>A second input node owned by the host, for upstream foxssake/netfox#236. Contributes no movement.</summary>
     public HarnessInput? Events { get; private set; }
 
@@ -86,6 +118,9 @@ public partial class HarnessPlayer : Node3D, IRollbackTick
     {
         Position += (Input.Movement + (Events?.Movement ?? Vector3.Zero)) * Speed * (float)delta;
         SimulatedTicks++;
-        if (Synchronizer.IsPredicting()) PredictedTicks++;
+
+        var predicting = Synchronizer.IsPredicting();
+        _predictedAt[tick] = predicting;
+        if (predicting) PredictedTicks++;
     }
 }

@@ -339,6 +339,7 @@ public partial class NetworkRollback : Node
     {
         Context.NetworkHistoryServer.RecordRollbackInput(tick + InputDelay);
         Context.NetworkSynchronizationServer.SynchronizeInput(tick + InputDelay);
+        Context.NetworkSynchronizationServer.AcknowledgeInput(tick);
     }
 
     private void HandleInput(Snapshot snapshot)
