@@ -17,6 +17,9 @@ peers, authority, RPCs - and not much else.
    input, authority, spawning and despawning.
 3. **[Rollback caveats](rollback-caveats.md)** - the Godot APIs that do not expect to be rewound, and what to do
    about each. Read this before debugging anything.
+4. **[Rollback on a real network](real-networks.md)** - what changes once two people play over a real connection:
+   where authority actually lives, the conditions on prediction, why a two-player LAN test proves nothing about
+   contact, and how to test under loss and jitter. Read this before your first playtest.
 
 Then, as you need them:
 
