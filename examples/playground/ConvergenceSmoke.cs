@@ -97,7 +97,7 @@ public partial class ConvergenceSmoke : Node
     /// Frames on which a held crate was <i>drawn</i> away from the hand, and the worst of them. Per frame rather than
     /// per tick because that is what a player sees: the crate in hand, then on the floor, then in hand again.
     /// </summary>
-    private int _carryDropFrames;
+    private int _carryDropFrames, _remoteCarryDropFrames;
     private float _carryDisplayGap;
 
     /// <summary>
@@ -340,7 +340,10 @@ public partial class ConvergenceSmoke : Node
         {
             var gap = crate.GlobalPosition.DistanceTo(Hand(holder));
             _carryDisplayGap = Mathf.Max(_carryDisplayGap, gap);
-            if (gap > HandTolerance) _carryDropFrames++;
+            if (gap <= HandTolerance) continue;
+            // Own hand: the netfox-net#59 bounce, gated. Someone else's hand: the holder's release and the crate's
+            // flight are two subjects in two packets and land in different frames (netfox-net#65) - counted, not gated
+            if (holder.IsLocal) _carryDropFrames++; else _remoteCarryDropFrames++;
         }
     }
 
@@ -679,7 +682,7 @@ public partial class ConvergenceSmoke : Node
         var head = FormattableString.Invariant(
             $"CONVERGENCE role={(_isHost ? "host" : "client")} ok={ok} peer=#{Multiplayer.GetUniqueId()} at_tick={_captureTick}");
         var tail = FormattableString.Invariant(
-            $"mode={(_onPlatform ? "platform" : "ground")} players={_final.Count(entry => IsPlayer(entry.Value))} crates={_final.Count(entry => entry.Value.State == "crate")} npcs={_final.Count(entry => entry.Value.State == "npc")} held_ticks={_heldTicks} held_crate_collidable_ticks={_heldCrateCollidableTicks} carry_drop_frames={_carryDropFrames} thrown_from_gap={_thrownFromGap:F3} player_body_gap={_playerBodyGap:F3}{_playerBodyGapAt} remote_reversals={_remoteReversals} remote_jumps={_remoteJumps} remote_moving_frames={_remoteFrames}/{_watchedFrames} local_reversals={_localReversals} collided={collided} closest={_closestApproach:F3}@{_closestAt} shots={_finalShots}{comparison} {beliefs} {failure}");
+            $"mode={(_onPlatform ? "platform" : "ground")} players={_final.Count(entry => IsPlayer(entry.Value))} crates={_final.Count(entry => entry.Value.State == "crate")} npcs={_final.Count(entry => entry.Value.State == "npc")} held_ticks={_heldTicks} held_crate_collidable_ticks={_heldCrateCollidableTicks} carry_drop_frames={_carryDropFrames} remote_carry_drop_frames={_remoteCarryDropFrames} thrown_from_gap={_thrownFromGap:F3} player_body_gap={_playerBodyGap:F3}{_playerBodyGapAt} remote_reversals={_remoteReversals} remote_jumps={_remoteJumps} remote_moving_frames={_remoteFrames}/{_watchedFrames} local_reversals={_localReversals} collided={collided} closest={_closestApproach:F3}@{_closestAt} shots={_finalShots}{comparison} {beliefs} {failure}");
         GD.Print($"{head} {tail}");
 
         // What the link did, not what it was asked to do. A configured burst that never fires reads exactly like a
