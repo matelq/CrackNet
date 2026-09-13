@@ -46,6 +46,13 @@ public partial class Npc : CharacterBody3D, IRollbackTick
         _gravity = (float)(double)ProjectSettings.GetSetting("physics/3d/default_gravity", 9.8);
         _players = GetTree().Root.FindChild("Players", recursive: true, owned: false);
         PlatformFloorLayers = 0;
+
+        // On no layer at all, so players pass through it: clients do not simulate it, so their copy is at least one
+        // tick stale even with no latency, and a predicted body that touches a stale one slides differently on each
+        // peer - 10cm apart for good, measured. An object that is told where it is must not be something predicted
+        // bodies collide with. The mask still has the ground, so it stands on it.
+        CollisionLayer = 0;
+        CollisionMask = 1;
         AddChild(new CollisionShape3D { Name = "CollisionShape3D", Shape = new CapsuleShape3D { Radius = 0.35f, Height = 1.2f } });
 
         Synchronizer = new RollbackSynchronizer

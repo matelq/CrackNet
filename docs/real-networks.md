@@ -56,7 +56,10 @@ a rule which needs no input can be run by anyone, and for a platform on a fixed 
 something that reacts to players - an NPC, prey - it means every client extrapolates it from its own predicted view
 of the players and is corrected each tick. If you want such an object replicated rather than guessed, gate its tick
 on `IsMultiplayerAuthority()`: clients then keep the state they were sent and interpolate it. The sample's `Npc` does
-this, and `ConvergenceSmoke` fails if a client ever ran its rule.
+this, and `ConvergenceSmoke` fails if a client ever ran its rule. One consequence: such an object **must not be
+something predicted bodies collide with**. A client's copy of it is at least one tick stale even with no latency, and
+a player who brushes it slides differently on each peer - 10cm apart for good, measured. The sample's NPC is on no
+collision layer for that reason.
 
 Whether remote players should be predicted at all, or shown a few ticks in the past with interpolation instead, is
 open in this repository (netfox-net#38). For an object nobody owns - prey, a ball - the honest choice is available
