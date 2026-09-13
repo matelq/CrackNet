@@ -62,16 +62,21 @@ public partial class HarnessPlayer : Node3D, IRollbackTick
     /// input for them is still a round trip away - so counting them measures the tail of the run rather than
     /// anything that went wrong, and it does so identically no matter what the netcode does.
     /// </param>
-    public int LongestPredictedRun(int upToTick) => LongestPredictedRunEndingAt(upToTick).Length;
+    public int LongestPredictedRun(int fromTick, int upToTick) => LongestPredictedRunBetween(fromTick, upToTick).Length;
 
-    /// <summary>The longest run and the tick it ends on, so a failure can say where it was rather than only how long.</summary>
-    public (int Length, int EndsAt) LongestPredictedRunEndingAt(int upToTick)
+    /// <summary>
+    /// The longest run within [fromTick, upToTick] and the tick it ends on, so a failure can say where it was rather
+    /// than only how long. Both bounds matter: the newest ticks are always predicted (see above), and the oldest ones
+    /// predate whatever the case set up - a run found at tick 9 in a case that began measuring at 41 was a real run
+    /// and not the case's business.
+    /// </summary>
+    public (int Length, int EndsAt) LongestPredictedRunBetween(int fromTick, int upToTick)
     {
         var longest = (Length: 0, EndsAt: -1);
         var run = 0;
         var previous = int.MinValue;
 
-        foreach (var tick in _predictedAt.Keys.Where(at => at <= upToTick).Order())
+        foreach (var tick in _predictedAt.Keys.Where(at => at >= fromTick && at <= upToTick).Order())
         {
             run = _predictedAt[tick] ? (tick == previous + 1 ? run + 1 : 1) : 0;
             if (run > longest.Length) longest = (run, tick);
