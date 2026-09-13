@@ -89,6 +89,13 @@ Run the whole CI set locally, not a subset: `dotnet format Netfox.slnx --verify-
 `dotnet build Netfox.csproj`, then the Godot runner. Building only the project you touched once let a broken
 `Netfox.csproj` through, because the Godot project compiles everything under the repo root that is not excluded.
 
+A check that only compares state after the keys are released is blind to what a player sees: a crate drawn on the
+floor between two ticks, a remote player snapping, a body left behind while its mesh moved. Measure during motion and
+on displayed positions (per frame, after interpolation) as well as at rest, and make the check fail on the reported
+symptom before fixing it - `ConvergenceSmoke --pickup` shows the pattern (netfox-net#59). And when a check passes on
+the first try, ask what it would take to make it fail; two checks here have passed for years-long reasons of
+measuring nothing (netfox-net#62).
+
 Performance claims come from tests that print their numbers (`PropertyAccessBenchmarkTests`, `HotPathBenchmarkTests`,
 and the bandwidth case in the harness) and fail on regression. Tick-level timings swing by ±60% between runs on the
 same build, so measure in isolation and take allocations and byte counts, which are stable, over wall clock.
