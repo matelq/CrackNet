@@ -150,6 +150,42 @@ public partial class RollbackSynchronizer : BaseSynchronizer
                 history.RegisterRollbackInput(node, property);
                 synchronization.RegisterRollbackInput(node, property);
             }
+
+        WarnAboutUnlistedAttributes(root);
+    }
+
+    /// <summary>
+    /// Attribute properties under Root that this synchronizer does not replicate, as "Node:property" paths. Empty
+    /// when the scene lists everything the code declares.
+    /// </summary>
+    public IReadOnlyList<string> UnlistedAttributeProperties => _unlisted;
+
+    private readonly List<string> _unlisted = new();
+
+    /// <summary>
+    /// A [RollbackState] or [RollbackInput] attribute is gathered into StateProperties/InputProperties by the editor
+    /// plugin when the scene is saved - and at no other time. Headless, or with a scene saved before the property
+    /// existed, the attribute is decoration: the property is never registered and nothing says so. That cost a day
+    /// once (netfox-net#58): a new input never left the machine that pressed it, and a check passed anyway. So the
+    /// same gather runs here at runtime, and every declared path the lists do not carry gets a warning naming it.
+    /// The lists stay the source of truth; this only refuses to be quiet about the difference.
+    /// </summary>
+    private void WarnAboutUnlistedAttributes(Node root)
+    {
+        _unlisted.Clear();
+        EditorUtils.GatherProperties<IRollbackStateProperties>(root, n => n.GetRollbackStateProperties(),
+            (node, property) => NoteIfUnlisted(root, node, property, StateProperties, "StateProperties"));
+        EditorUtils.GatherProperties<IRollbackInputProperties>(root, n => n.GetRollbackInputProperties(),
+            (node, property) => NoteIfUnlisted(root, node, property, InputProperties, "InputProperties"));
+    }
+
+    private void NoteIfUnlisted(Node root, Node node, string property, string[] listed, string listName)
+    {
+        var path = PropertyEntry.MakePath(root, node, property);
+        if (path.Length == 0 || listed.Contains(path)) return;
+        _unlisted.Add(path);
+        _logger.Warning("{0} declares a rollback attribute on \"{1}\" but {2} does not list it - it is not replicated. Add \"{1}\" to {2} in the scene, or save the scene in the editor.",
+            Name, path, listName);
     }
 
     /// <summary>Add a state property at runtime. Node may be a string, NodePath or Node relative to Root.</summary>

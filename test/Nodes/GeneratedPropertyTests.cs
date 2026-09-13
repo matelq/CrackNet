@@ -46,6 +46,34 @@ public partial class GeneratedPropertyTests : TestSuite
         Expect.SequenceEqual(["Alpha"], ((IInterpolatedProperties)node).GetInterpolatedProperties());
     }
 
+    /// <summary>
+    /// An attribute the scene does not list is not replicated - the editor gathers attributes into the lists on
+    /// save, and at no other time. That used to be silent (netfox-net#58). The synchronizer now says which paths it
+    /// was given attributes for and does not carry.
+    /// </summary>
+    [Test]
+    public async Task AnAttributeTheSceneDoesNotListIsNamed()
+    {
+        var node = await Mount(new AttributedNode { Name = "Unlisted" });
+        var synchronizer = new RollbackSynchronizer
+        {
+            Name = "RollbackSynchronizer",
+            Root = node,
+            StateProperties = [":Health"],   // Velocity declared, not listed
+            InputProperties = [],            // Movement declared, not listed
+        };
+        node.AddChild(synchronizer);
+        await NextFrame();
+
+        Expect.SequenceEqual([":Velocity", ":Movement"], synchronizer.UnlistedAttributeProperties);
+
+        // And nothing to say once the scene lists what the code declares
+        synchronizer.StateProperties = [":Health", ":Velocity"];
+        synchronizer.InputProperties = [":Movement"];
+        synchronizer.ProcessSettings();
+        Expect.Empty(synchronizer.UnlistedAttributeProperties);
+    }
+
     /// <summary>The generated paths have to be the ones a synchronizer can actually resolve, not just well formed.</summary>
     [Test]
     public async Task GeneratedPathsResolveToTheRealProperties()
