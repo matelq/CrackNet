@@ -119,10 +119,10 @@ jobs:
           grep -q "ok=True" pg-host.log && grep -q "ok=True" pg-client.log
       - name: Check two peers agree about each other after a collision
         run: |
-          "$GODOT" --headless --path . res://examples/playground/ConvergenceSmoke.tscn -- --host > cv-host.log 2>&1 &
+          "$GODOT" --headless --path . res://examples/playground/ConvergenceSmoke.tscn -- --host --dump > cv-host.log 2>&1 &
           host=$!
           sleep 6
-          "$GODOT" --headless --path . res://examples/playground/ConvergenceSmoke.tscn -- --join > cv-client.log 2>&1 || true
+          "$GODOT" --headless --path . res://examples/playground/ConvergenceSmoke.tscn -- --join --dump > cv-client.log 2>&1 || true
           wait $host || true
           echo "--- host"; cat cv-host.log
           echo "--- client"; cat cv-client.log

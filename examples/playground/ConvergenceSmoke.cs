@@ -102,6 +102,7 @@ public partial class ConvergenceSmoke : Node
 
     /// <summary>Worst distance between a player's node and its physics body, per tick: the body is what the other player collides with.</summary>
     private float _playerBodyGap;
+    private string _playerBodyGapAt = "";
 
     /// <summary>How far from the thrower's hand the crate was on the tick after it left it, worst case (netfox-net#59: it left from the pickup spot).</summary>
     private float _thrownFromGap;
@@ -114,8 +115,9 @@ public partial class ConvergenceSmoke : Node
     private Node _players = null!;
     private MovingPlatform _platform = null!;
 
-    /// <summary>Closest the two players ever got, so a run that never actually collided can say so.</summary>
+    /// <summary>Closest the two players ever got, so a run that never actually collided can say so - and when.</summary>
     private float _closestApproach = float.PositiveInfinity;
+    private int _closestAt = -1;
 
     /// <summary>Where this peer is steering its own player, or null once it has let go.</summary>
     private Vector3? _steerTo;
@@ -284,7 +286,12 @@ public partial class ConvergenceSmoke : Node
         var ordered = Ordered();
         for (var i = 0; i < ordered.Count; i++)
             for (var j = i + 1; j < ordered.Count; j++)
-                _closestApproach = Mathf.Min(_closestApproach, Horizontally(ordered[i], ordered[j]));
+            {
+                var apart = Horizontally(ordered[i], ordered[j]);
+                if (apart >= _closestApproach) continue;
+                _closestApproach = apart;
+                _closestAt = NetworkTime.Instance.Tick;
+            }
 
         // On the platform the target moves, and getting up there needs the jump: its top is 1.2m above the ground,
         // which is one jump with nothing to spare
@@ -359,11 +366,18 @@ public partial class ConvergenceSmoke : Node
             if (hits.Any(hit => hit["rid"].AsRid() == crate.GetRid())) _heldCrateCollidableTicks++;
         }
 
-        foreach (var player in Ordered())
-        {
-            var body = PhysicsServer3D.BodyGetState(player.GetRid(), PhysicsServer3D.BodyState.Transform).AsTransform3D().Origin;
-            _playerBodyGap = Mathf.Max(_playerBodyGap, body.DistanceTo(player.GlobalPosition));
-        }
+        // Only once steering has begun: a player that has just spawned is teleported by its first state, and the
+        // body catches up a tick later - that is the join, not the run
+        if (_steerTo is not null || _quietFrom >= 0)
+            foreach (var player in Ordered())
+            {
+                var body = PhysicsServer3D.BodyGetState(player.GetRid(), PhysicsServer3D.BodyState.Transform).AsTransform3D().Origin;
+                var gap = body.DistanceTo(player.GlobalPosition);
+                if (_dump) _received.Add(FormattableString.Invariant($"{tick},{player.Name},{body.X:F4},{body.Y:F4},{body.Z:F4},body,{NetworkRollback.Instance.RollbackFrom}"));
+                if (gap <= _playerBodyGap) continue;
+                _playerBodyGap = gap;
+                _playerBodyGapAt = $"@{tick}/{player.Name}";
+            }
 
         // A throw starts at the hand: on the tick the crate leaves it, its body is within reach of the thrower. On
         // the host only - the throw happens there; a client's copy of the crate is a round trip behind by design
@@ -561,7 +575,7 @@ public partial class ConvergenceSmoke : Node
         var head = FormattableString.Invariant(
             $"CONVERGENCE role={(_isHost ? "host" : "client")} ok={ok} peer=#{Multiplayer.GetUniqueId()} at_tick={_captureTick}");
         var tail = FormattableString.Invariant(
-            $"mode={(_onPlatform ? "platform" : "ground")} players={_final.Count(entry => IsPlayer(entry.Value))} crates={_final.Count(entry => entry.Value.State == "crate")} npcs={_final.Count(entry => entry.Value.State == "npc")} held_ticks={_heldTicks} held_crate_collidable_ticks={_heldCrateCollidableTicks} carry_drop_frames={_carryDropFrames} thrown_from_gap={_thrownFromGap:F3} player_body_gap={_playerBodyGap:F3} collided={collided} closest={_closestApproach:F3} shots={_finalShots}{comparison} {beliefs} {failure}");
+            $"mode={(_onPlatform ? "platform" : "ground")} players={_final.Count(entry => IsPlayer(entry.Value))} crates={_final.Count(entry => entry.Value.State == "crate")} npcs={_final.Count(entry => entry.Value.State == "npc")} held_ticks={_heldTicks} held_crate_collidable_ticks={_heldCrateCollidableTicks} carry_drop_frames={_carryDropFrames} thrown_from_gap={_thrownFromGap:F3} player_body_gap={_playerBodyGap:F3}{_playerBodyGapAt} collided={collided} closest={_closestApproach:F3}@{_closestAt} shots={_finalShots}{comparison} {beliefs} {failure}");
         GD.Print($"{head} {tail}");
 
         // What the link did, not what it was asked to do. A configured burst that never fires reads exactly like a
