@@ -35,8 +35,12 @@ public partial class MovingPlatform : AnimatableBody3D, IRollbackTick
         SyncToPhysics = false;
         AddToGroup(Group);
 
-        var shape = GetNode<CollisionShape3D>("CollisionShape3D").Shape as BoxShape3D;
-        _halfExtents = (shape?.Size ?? Vector3.One) / 2;
+        // By type rather than by name: AddChild without an explicit name gives a node something like
+        // "@CollisionShape3D@2", so a platform built in code would never be found by the name the scene uses - and
+        // the failure is quiet, leaving the carry box at zero size.
+        var shape = GetChildren().OfType<CollisionShape3D>().FirstOrDefault()?.Shape as BoxShape3D;
+        if (shape is null) GD.PushWarning($"{Name}: no BoxShape3D child, nothing will be carried");
+        _halfExtents = (shape?.Size ?? Vector3.Zero) / 2;
     }
 
     /// <summary>

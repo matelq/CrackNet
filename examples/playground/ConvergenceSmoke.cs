@@ -79,6 +79,9 @@ public partial class ConvergenceSmoke : Node
     private readonly Dictionary<int, Dictionary<string, SettledPlayer>> _history = new();
     private readonly Dictionary<int, int> _shotsAt = new();
 
+    /// <summary>First tick after everyone let go of the keys: from here on any disagreement is one that did not heal.</summary>
+    private int _quietFrom = -1;
+
     private int _captureTick = -1;
     private Dictionary<string, SettledPlayer> _final = new();
     private int _finalShots;
@@ -156,6 +159,7 @@ public partial class ConvergenceSmoke : Node
         await Wait(10.0);
         _steerTo = null;
         Release();
+        _quietFrom = NetworkTime.Instance.Tick;
 
         // Long enough for any correction still in flight to land
         await Wait(6.0);
@@ -177,9 +181,12 @@ public partial class ConvergenceSmoke : Node
         }
         else
         {
-            // The host picks the tick, because only one of the two can. Wait for the trace that has us in it.
-            await WaitFor(() => ReadTrace() is { Tick: >= 0 } trace && trace.Players.ContainsKey(_ownName), 12);
-            _captureTick = ReadTrace().Tick;
+            // The host picks the window, because only one of the two can. Wait for the trace that has us in it.
+            await WaitFor(() => ReadTrace() is { To: >= 0 } trace
+                && trace.Ticks.Values.Any(beliefs => beliefs.ContainsKey(_ownName)), 12);
+            var trace = ReadTrace();
+            _quietFrom = trace.From;
+            _captureTick = trace.To;
             Capture(_captureTick);
         }
 
@@ -306,28 +313,45 @@ public partial class ConvergenceSmoke : Node
             var host = ReadTrace();
             var worst = 0.0f;
             var compared = 0;
-            var disagreements = new List<string>();
+            var unsettled = 0;
+            var worstPerPlayer = new Dictionary<string, float>();
+            var mismatched = new HashSet<string>();
 
-            foreach (var (name, mine) in _final)
+            foreach (var (tick, theirs) in host.Ticks)
             {
-                if (!host.Players.TryGetValue(name, out var theirs)) continue;
+                if (!_history.TryGetValue(tick, out var mine)) continue;
                 compared++;
+                var bad = false;
 
-                var gap = mine.Position.DistanceTo(theirs.Position);
-                worst = Mathf.Max(worst, gap);
-                if (gap >= Tolerance) disagreements.Add(FormattableString.Invariant($"{name}:pos{gap:F3}"));
-                if (mine.State != theirs.State) disagreements.Add($"{name}:state({mine.State}!={theirs.State})");
-                if (mine.JumpsLeft != theirs.JumpsLeft) disagreements.Add($"{name}:jumps({mine.JumpsLeft}!={theirs.JumpsLeft})");
+                foreach (var (name, theirBelief) in theirs)
+                {
+                    if (!mine.TryGetValue(name, out var myBelief)) continue;
+
+                    var gap = myBelief.Position.DistanceTo(theirBelief.Position);
+                    worst = Mathf.Max(worst, gap);
+                    worstPerPlayer[name] = Mathf.Max(worstPerPlayer.GetValueOrDefault(name), gap);
+                    if (gap >= Tolerance) bad = true;
+
+                    if (myBelief.State != theirBelief.State) { mismatched.Add($"{name}:state"); bad = true; }
+                    if (myBelief.JumpsLeft != theirBelief.JumpsLeft) { mismatched.Add($"{name}:jumps"); bad = true; }
+                }
+
+                if (bad) unsettled++;
             }
 
+            var disagreements = worstPerPlayer
+                .Where(entry => entry.Value >= Tolerance)
+                .Select(entry => FormattableString.Invariant($"{entry.Key}:pos{entry.Value:F3}"))
+                .Concat(mismatched)
+                .ToList();
             if (_finalShots != host.Shots) disagreements.Add($"score({_finalShots}!={host.Shots})");
-            if (compared < 2) disagreements.Add($"only-compared-{compared}");
 
-            // The same tick on both sides, and everything here is replicated from its authority every tick, so
-            // agreement is not approximate. A gap is a client that took the host's state and walked away from it.
-            ok &= compared >= 2 && disagreements.Count == 0;
+            // Everything here is replicated from its authority every tick, and by now nobody has pressed anything
+            // for seconds. A gap that is still there is a peer that took the authority's state and walked away from
+            // it, and one tick of it is one tick too many.
+            ok &= compared >= 30 && unsettled == 0 && disagreements.Count == 0;
             comparison = FormattableString.Invariant(
-                $" compared={compared} worst_disagreement={worst:F4}/{Tolerance} disagreements=[{string.Join(" ", disagreements)}]");
+                $" window={compared}ticks unsettled={unsettled} worst_disagreement={worst:F4}/{Tolerance} disagreements=[{string.Join(" ", disagreements)}]");
         }
 
         var beliefs = string.Join(" ", _final.OrderBy(entry => entry.Key, StringComparer.Ordinal).Select(entry =>
@@ -381,6 +405,15 @@ public partial class ConvergenceSmoke : Node
         return condition();
     }
 
+    /// <summary>
+    /// The host's belief for every tick of the quiet window, not just for one of them.
+    /// <para>
+    /// A single tick is a coin toss. Whether two capsules happen to be deeply inside each other at the moment you
+    /// look swings the answer by a metre, so comparing one tick measures luck rather than the thing under test. The
+    /// whole quiet window - after the keys are released, once corrections have had seconds to land - is where an
+    /// unhealed disagreement has nowhere left to hide.
+    /// </para>
+    /// </summary>
     private void WriteTrace()
     {
         using var file = FileAccess.Open(TracePath, FileAccess.ModeFlags.Write);
@@ -390,31 +423,43 @@ public partial class ConvergenceSmoke : Node
             return;
         }
 
-        file.StoreLine(FormattableString.Invariant($"#tick,{_captureTick},{_finalShots}"));
-        foreach (var (name, settled) in _final)
-            file.StoreLine($"{name},{settled.Encode()}");
+        file.StoreLine(FormattableString.Invariant($"#window,{_quietFrom},{_captureTick},{_finalShots}"));
+        for (var tick = _quietFrom; tick <= _captureTick; tick++)
+        {
+            if (!_history.TryGetValue(tick, out var beliefs)) continue;
+            foreach (var (name, settled) in beliefs)
+                file.StoreLine(FormattableString.Invariant($"{tick},{name},{settled.Encode()}"));
+        }
     }
 
-    private static (Dictionary<string, SettledPlayer> Players, int Tick, int Shots) ReadTrace()
+    private static (Dictionary<int, Dictionary<string, SettledPlayer>> Ticks, int From, int To, int Shots) ReadTrace()
     {
-        var players = new Dictionary<string, SettledPlayer>();
-        var tick = -1;
+        var ticks = new Dictionary<int, Dictionary<string, SettledPlayer>>();
+        var from = -1;
+        var to = -1;
         var shots = -1;
 
         using var file = FileAccess.Open(TracePath, FileAccess.ModeFlags.Read);
-        if (file is null) return (players, tick, shots);
+        if (file is null) return (ticks, from, to, shots);
 
         while (!file.EofReached())
         {
             var parts = file.GetLine().Split(',');
-            if (parts is ["#tick", var t, var s])
+            if (parts is ["#window", var f, var t, var s])
             {
-                int.TryParse(t, CultureInfo.InvariantCulture, out tick);
+                int.TryParse(f, CultureInfo.InvariantCulture, out from);
+                int.TryParse(t, CultureInfo.InvariantCulture, out to);
                 int.TryParse(s, CultureInfo.InvariantCulture, out shots);
                 continue;
             }
-            if (SettledPlayer.TryDecode(parts, out var settled)) players[parts[0]] = settled;
+
+            if (parts.Length != 7) continue;
+            if (!int.TryParse(parts[0], CultureInfo.InvariantCulture, out var tick)) continue;
+            if (!SettledPlayer.TryDecode(parts[1..], out var settled)) continue;
+
+            if (!ticks.TryGetValue(tick, out var beliefs)) ticks[tick] = beliefs = new Dictionary<string, SettledPlayer>();
+            beliefs[parts[1]] = settled;
         }
-        return (players, tick, shots);
+        return (ticks, from, to, shots);
     }
 }
