@@ -179,9 +179,11 @@ public partial class ConvergenceSmoke : Node
         // rather than a fixed direction because where a player spawns depends on its peer id, which is a random
         // number on a client - and placing them by hand is not an option: position is rollback state, so an
         // assignment from outside a tick is overwritten from the history on the next one.
-        // The middle crate's spot rather than the origin: the players press into each other there and shove the
-        // crate as they do, which is the physics rollback being exercised by late input and not merely present
-        _steerTo = Crates().Count > 1 ? Crates()[1].GlobalPosition with { Y = 0 } : Vector3.Zero;
+        // A spot just short of the middle crate rather than the crate itself. Steering onto the crate made the two
+        // goals compete: with the crate between them the players stopped 1.8m apart - half a crate and two capsule
+        // radii - and never met, which CI found and a faster machine hid. Beside it, whoever comes from the far side
+        // shoves it on the way through, and both still end up pressed together.
+        _steerTo = Crates().Count > 1 ? Crates()[1].GlobalPosition with { Y = 0, Z = Crates()[1].GlobalPosition.Z - 1.3f } : Vector3.Zero;
 
         // One shot each along the way, so the weapon's request and accept round trip is part of the run and the
         // scoreboard has something to disagree about
