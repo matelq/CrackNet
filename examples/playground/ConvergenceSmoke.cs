@@ -600,8 +600,11 @@ public partial class ConvergenceSmoke : Node
         // only: that is where the guess being hidden is made (netfox-net#38), and where the report came from. A client
         // shows the host's player straight from arriving state, with no input to predict from, and what it shows
         // depends on how evenly the states arrive - printed, not gated, until the wire carries a freshness signal.
-        // Two reversals are allowed: one at the start and one at the end of a walk, where the direction really changes.
-        if (_isHost && (_remoteReversals > 2 || _remoteJumps > 0))
+        // Some are allowed: a reversal at each end of a walk, where the direction really changes, and one reversal or
+        // jump per several seconds of walking for the display delay moving a tick when the link changes, or an input
+        // arriving late enough to rewrite a tick already shown - the one visible move a jitter buffer has, by design,
+        // until netfox-net#39 slews through it. Before the fix this read 8 jumps per 60 frames.
+        if (_isHost && (_remoteReversals > 2 + _remoteFrames / 200 || _remoteJumps > _remoteFrames / 500))
         {
             failure += $" remote-jerky(reversals={_remoteReversals} jumps={_remoteJumps} of {_remoteFrames} moving frames)";
             ok = false;
