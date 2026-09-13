@@ -99,7 +99,7 @@ jobs:
         run: $GODOT --headless --path . res://examples/physics/RapierCheck.tscn -- --require
       - name: Run e2e over ENet
         run: |
-          "$GODOT" --headless --path . res://examples/e2e/E2E.tscn -- --host --seconds=14 > host.log 2>&1 &
+          "$GODOT" --headless --path . res://examples/e2e/E2E.tscn -- --host --seconds=20 > host.log 2>&1 &
           host=$!
           sleep 5
           "$GODOT" --headless --path . res://examples/e2e/E2E.tscn -- --join --seconds=10 > client.log 2>&1 || true
@@ -109,7 +109,7 @@ jobs:
           grep -q "ok=True" host.log && grep -q "ok=True" client.log
       - name: Run the playground sample
         run: |
-          "$GODOT" --headless --path . res://examples/playground/PlaygroundSmoke.tscn -- --host --seconds=14 > pg-host.log 2>&1 &
+          "$GODOT" --headless --path . res://examples/playground/PlaygroundSmoke.tscn -- --host --seconds=20 > pg-host.log 2>&1 &
           host=$!
           sleep 6
           "$GODOT" --headless --path . res://examples/playground/PlaygroundSmoke.tscn -- --join --seconds=8 > pg-client.log 2>&1 || true
@@ -141,7 +141,7 @@ jobs:
         run: sh parity/run-parity.sh "$GODOT"
       - name: Run e2e through the proxy, under what a real network does
         run: |
-          "$GODOT" --headless --path . res://examples/e2e/E2E.tscn -- --host --seconds=14 --profile=realistic > host-lossy.log 2>&1 &
+          "$GODOT" --headless --path . res://examples/e2e/E2E.tscn -- --host --seconds=20 --profile=realistic > host-lossy.log 2>&1 &
           host=$!
           sleep 5
           "$GODOT" --headless --path . res://examples/e2e/E2E.tscn -- --join --seconds=10 --profile=realistic > client-lossy.log 2>&1 || true
