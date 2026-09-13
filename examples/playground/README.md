@@ -161,10 +161,11 @@ and a long resimulation with many bodies will make itself felt.
 Two more, learned when the rewind started actually happening (netfox-net#62 - the driver ported from upstream's
 disabled file never loaded a snapshot, and stepped physics twice per tick instead). A whole-space rewind moves the
 **kinematic** bodies too, and netfox restores their nodes from its own history a moment later, so the driver pushes
-every kinematic node's transform back to its body on each resimulated tick. And Rapier applies a transform on the
-next step, so `PlayerCharacter.Move` calls `PhysicsDriver.Active?.FlushQueries()` after `MoveAndSlide` - without it
-the second player to move in a tick tests against where the first one *was*, and two players walking into each other
-end up 3cm apart instead of 80.
+every kinematic node's transform back to its body on each resimulated tick and flushes the space once, because
+Rapier applies a transform on the next step and `MoveAndSlide` is a query - without the flush two players walking
+into each other ended 3cm apart instead of 80. It flushes once and not after each body moves, on purpose: the order
+bodies move in differs between peers, and a body that sees the previous body's new position gives each peer a
+different tick.
 
 ### Steam: hosting through a lobby
 

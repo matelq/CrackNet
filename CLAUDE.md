@@ -60,8 +60,9 @@ strips the section name from its keys. The same script installs GodotSteam with 
 godotengine/godot PR 76462. Rolling a `RigidBody` back means re-stepping the physics space several times inside one
 frame, which is why the driver exists at all; a kinematic body needs none of it. Two Rapier facts the driver encodes
 (netfox-net#62): a whole-space rewind moves kinematic bodies too, so the driver pushes every kinematic node's transform
-to its body on each resimulated tick; and Rapier applies transforms on the next step, so a body that moved inside a
-tick calls `PhysicsDriver.Active?.FlushQueries()` before the next body's `MoveAndSlide` tests against it. A held
+to its body on each resimulated tick and flushes the space once, because Rapier applies transforms on the next step
+and `MoveAndSlide` is a query. Never flush inside the tick after one body moves: the next body then sees it, and the
+order bodies move in differs between peers (14cm permanent disagreement, seen in CI). A held
 pickup is out of the world (no collision layer, frozen) and drawn from its holder every frame after interpolation,
 never moved inside the tick (netfox-net#59).
 

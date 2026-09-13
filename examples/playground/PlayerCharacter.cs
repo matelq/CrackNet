@@ -266,8 +266,6 @@ public partial class PlayerCharacter : CharacterBody3D
         Velocity = velocity * factor;
         MoveAndSlide();
         Velocity /= factor;
-        // So that the next body to move this tick collides with where this one is now, not where it was
-        PhysicsDriver.Active?.FlushQueries();
         ShoveWhatWasHit(velocity);
     }
 

@@ -155,10 +155,13 @@ Two things follow from rewinding the whole space that a kinematic-only setup nev
 the space too, so a rewind moves them to where the snapshot had them, while netfox restores their nodes from its own
 history a moment later - and a node only pushes its transform to its body when the value changes, so a player
 standing still against another was left with its body in one place and its node in another. The driver now tells
-every kinematic body where its node is on every resimulated tick. And Rapier applies a transform on the next step,
-where `MoveAndSlide` is a query against the space as it is now: the second player to move in a tick tested against
-where the first one *was*, and two players walking into each other ended 3cm apart instead of 80. A kinematic body
-calls `PhysicsDriver.Active?.FlushQueries()` after it has moved.
+every kinematic body where its node is on every resimulated tick, and flushes the space once so the tick's queries
+see it - Rapier applies a transform on the next step, and `MoveAndSlide` is a query; without the flush two players
+walking into each other passed to 3cm apart instead of stopping at 80. Once, and not after each body moves: a flush
+inside the tick lets the second body to move see the first one's new position, the order bodies move in is the scene
+tree's and differs between peers, and two peers simulating the same tick from the same state then disagreed by 14cm
+for good. Everything tests against where everything was at the start of the tick; that is what keeps a tick a
+function of its state.
 
 Two things Rapier does not give you. It does not resolve contact between kinematic bodies - `MoveAndSlide` never
 pushes another body whatever solver is underneath, so the wedging above is unchanged with the engine switched. And it

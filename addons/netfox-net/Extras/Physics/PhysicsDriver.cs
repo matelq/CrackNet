@@ -23,15 +23,8 @@ public partial class PhysicsDriver : Node
 
     protected Rid PhysicsSpace;
 
-    /// <summary>
-    /// The driver stepping this process's space, for code that has to ask it something mid-tick - see
-    /// <see cref="FlushQueries"/>. One per process in practice; a second one replaces it.
-    /// </summary>
-    public static PhysicsDriver? Active { get; private set; }
-
     public override void _EnterTree()
     {
-        Active = this;
         Context = NetfoxContext.For(this);
         var time = Context.NetworkTime;
         time.BeforeTick += BeforeTick;
@@ -48,7 +41,6 @@ public partial class PhysicsDriver : Node
 
     public override void _ExitTree()
     {
-        if (Active == this) Active = null;
         if (Context.NetworkTime is { } time)
         {
             time.BeforeTick -= BeforeTick;
@@ -82,12 +74,22 @@ public partial class PhysicsDriver : Node
     /// Rolling the space back also moves every kinematic body in it to where the snapshot had it - but their nodes
     /// are restored by netfox from its own history, a moment later, and a node only pushes its transform to the body
     /// when the value changes. A player standing still against another was left with its body where the snapshot
-    /// put it and its node where history did, and the other player walked into the node. And a push is applied on
-    /// the next step, so a snapshot taken right after a tick has the kinematic bodies one tick behind their nodes.
-    /// So on every resimulated tick, once history has been restored, every body that is not rolled back by state
-    /// of its own is told where its node is.
+    /// put it and its node where history did, and the other player walked into the node. So on every resimulated
+    /// tick, once history has been restored, every body that is not rolled back by state of its own is told where
+    /// its node is - and the space is flushed once, so the tick's queries see all of them.
+    /// <para>
+    /// Once, here, and not after each body moves: a flush inside the tick makes the second body to move see the
+    /// first one's new position, and which body moves first is the scene tree's business and differs between peers.
+    /// Two peers that simulate the same tick from the same state then disagree by 14cm for good (seen in CI). Every
+    /// body testing against where everything was at the start of the tick is what keeps the tick a function of its
+    /// state.
+    /// </para>
     /// </summary>
-    private void AfterPrepareTick(int tick) => PushNodeTransforms(GetTree().Root);
+    private void AfterPrepareTick(int tick)
+    {
+        PushNodeTransforms(GetTree().Root);
+        FlushQueries();
+    }
 
     // ponytail: a tree walk per resimulated tick; a group of kinematic bodies if the tree ever gets big
     protected virtual void PushNodeTransforms(Node node)
@@ -119,13 +121,12 @@ public partial class PhysicsDriver : Node
     }
 
     /// <summary>
-    /// Makes every transform written since the last step visible to queries. Rapier applies a body's new transform
-    /// on the next step, and <c>MoveAndSlide</c> is a query: the second player to move in a tick tests against
-    /// where the first one <i>was</i>, and two players walking into each other pass through instead of stopping
-    /// (measured: 3cm apart instead of 80). A kinematic body calls this after it has moved. Nothing to do on an
-    /// engine that applies transforms as they are written.
+    /// Makes every transform written so far visible to queries. Rapier applies a body's new transform on the next
+    /// step, and <c>MoveAndSlide</c> is a query: without this, the transforms pushed above are not what the tick
+    /// tests against (two players walking into each other passed to 3cm apart instead of stopping at 80). Nothing
+    /// to do on an engine that applies transforms as they are written.
     /// </summary>
-    public virtual void FlushQueries() { }
+    protected virtual void FlushQueries() { }
 
     protected virtual void InitPhysicsSpace() { }
     protected virtual void PhysicsStep(double delta) { }

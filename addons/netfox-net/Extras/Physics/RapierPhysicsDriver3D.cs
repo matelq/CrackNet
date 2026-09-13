@@ -40,7 +40,7 @@ public partial class RapierPhysicsDriver3D : PhysicsDriver
         ClassDB.ClassCallStatic(ServerClass, "space_flush_queries", PhysicsSpace);
     }
 
-    public override void FlushQueries()
+    protected override void FlushQueries()
     {
         if (_stateManager is not null) ClassDB.ClassCallStatic(ServerClass, "space_flush_queries", PhysicsSpace);
     }
