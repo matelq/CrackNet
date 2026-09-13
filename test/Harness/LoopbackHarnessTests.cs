@@ -562,6 +562,62 @@ public partial class LoopbackHarnessTests : HarnessSuite
             $"{lateFills} of {arrivals} input arrivals filled a gap; a fixed window of three manages 6 and leaves a run of 7");
     }
 
+    /// <summary>
+    /// A lossy schema is applied on the wire, but history used to record what the node actually held. So the peer
+    /// owning an input simulated from the exact value and every other peer from the quantized one, and the same tick
+    /// produced two different answers - by the same amount every time, so it never averaged out (netfox-net#36).
+    /// <para>
+    /// Compared on the recorded input rather than on a position, because a position is pulled back by corrections
+    /// and would hide the very error being looked for. The direction is chosen so that no component survives half
+    /// precision intact.
+    /// </para>
+    /// </summary>
+    [Test]
+    public async Task ALossySchemaGivesEveryPeerTheSameInput()
+    {
+        var schema = new Dictionary<string, NetworkSchemaSerializer>
+        {
+            ["Input:Movement"] = NetworkSchemas.Vec3T(NetworkSchemas.Float16()),
+        };
+        var awkward = new Vector3(0.123456789f, 0.0f, 0.765432109f);
+
+        HarnessPlayer.Spawn(Host, 2, schema: schema, direction: awkward);
+        HarnessPlayer.Spawn(Client, 2, schema: schema, direction: awkward);
+
+        var first = Host.Context.NetworkTime.Tick;
+        Expect.True(await WaitUntil(() => Host.Context.NetworkTime.Tick - first > 40, 8),
+            $"only reached tick {Host.Context.NetworkTime.Tick}");
+
+        // Every tick both stacks have a recorded input for, which is what each of them simulates that tick from
+        var compared = 0;
+        var mismatched = 0;
+        var worst = 0.0f;
+        for (var tick = first + 5; tick < Host.Context.NetworkTime.Tick - 5; tick++)
+        {
+            var mine = Recorded(Client, tick);
+            var theirs = Recorded(Host, tick);
+            if (mine is null || theirs is null) continue;
+
+            compared++;
+            var gap = ((Vector3)mine - (Vector3)theirs).Length();
+            worst = Mathf.Max(worst, gap);
+            if (gap > 0) mismatched++;
+        }
+
+        Expect.True(compared > 10, $"only {compared} ticks had a recorded input on both peers");
+        var detail = FormattableString.Invariant($"worst {worst:E3}");
+        Expect.Equal(0, mismatched,
+            $"{mismatched} of {compared} ticks recorded a different input on the owner than on the authority, {detail}: " +
+            "the schema is being applied on the wire but not to what the owner simulates from");
+
+        static Variant? Recorded(NetfoxStack stack, int tick)
+        {
+            var player = stack.GetChildren().OfType<HarnessPlayer>().First();
+            var snapshot = stack.Context.NetworkHistoryServer.GetRollbackInputSnapshot(tick);
+            return snapshot is not null && snapshot.TryGetProperty(player.Input, "Movement", out var value) ? value : (Variant?)null;
+        }
+    }
+
     private static string Describe(Dictionary<NetfoxStack, Dictionary<int, HarnessPlayer>> players)
         => string.Join(" ", players.Select(entry => $"{entry.Key.Name}={Positions(entry.Value)}"));
 

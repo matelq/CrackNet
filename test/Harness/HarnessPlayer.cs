@@ -82,12 +82,13 @@ public partial class HarnessPlayer : Node3D, IRollbackTick
     /// <summary>A second input node owned by the host, for upstream foxssake/netfox#236. Contributes no movement.</summary>
     public HarnessInput? Events { get; private set; }
 
-    public static HarnessPlayer Spawn(Node parent, int ownerPeer, bool enablePrediction = false, bool withServerEvents = false)
+    public static HarnessPlayer Spawn(Node parent, int ownerPeer, bool enablePrediction = false, bool withServerEvents = false,
+        Dictionary<string, NetworkSchemaSerializer>? schema = null, Vector3? direction = null)
     {
         var player = new HarnessPlayer { Name = $"Player_{ownerPeer}" };
         player.SetMultiplayerAuthority(1);
 
-        player.Input = new HarnessInput { Name = "Input", Direction = HarnessInput.DirectionFor(ownerPeer) };
+        player.Input = new HarnessInput { Name = "Input", Direction = direction ?? HarnessInput.DirectionFor(ownerPeer) };
         player.Input.SetMultiplayerAuthority(ownerPeer);
         player.AddChild(player.Input);
 
@@ -111,6 +112,7 @@ public partial class HarnessPlayer : Node3D, IRollbackTick
         player.AddChild(player.Synchronizer);
 
         parent.AddChild(player);
+        if (schema is not null) player.Synchronizer.SetSchema(schema);
         return player;
     }
 

@@ -206,6 +206,16 @@ public partial class NetworkSynchronizationServer : Node
 
     internal PropertyPool OwnedRollbackStateProperties => _rbOwnedStateProperties;
 
+    /// <summary>
+    /// The value as this property's schema will deliver it, so what a peer records for itself is what every other
+    /// peer will be told. Properties with no schema of their own are returned untouched, which is nearly all of them.
+    /// </summary>
+    internal Variant Quantize(Node subject, NodePath property, Variant value)
+    {
+        var serializer = _schemas.GetSerializer(subject, property);
+        return ReferenceEquals(serializer, _schemas.Fallback) ? value : serializer.Quantize(value);
+    }
+
     private HistoryBuffer<Snapshot> GetPeerSentHistory(int peer)
     {
         if (!_rbSentStateHistory.TryGetValue(peer, out var history))

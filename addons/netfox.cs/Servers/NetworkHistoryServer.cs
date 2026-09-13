@@ -213,9 +213,14 @@ public partial class NetworkHistoryServer : Node
                 continue;
             }
 
+            // Record what the wire would deliver rather than what the node holds. Without this the peer that owns a
+            // property simulates from the exact value and everyone else from the quantized one, so the same input
+            // produces two different answers for the same tick - forever, and by the same amount each time.
+            var synchronization = Context.NetworkSynchronizationServer;
             foreach (var property in propertyPool.GetPropertiesOf(subject))
             {
                 var value = subject.GetValue(property);
+                if (synchronization is not null) value = synchronization.Quantize(subject, property, value);
                 subjectSnapshot.SetValue(property, value);
                 snapshot.SetProperty(subject, property, value);
             }

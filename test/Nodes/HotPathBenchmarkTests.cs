@@ -102,6 +102,13 @@ public partial class HotPathBenchmarkTests : TestSuite
         GD.Print(FormattableString.Invariant($"ALLOC GetNodesInGroup: {PerCall(() => GetTree().GetNodesInGroup(group))}B"));
         GD.Print(FormattableString.Invariant($"ALLOC Multiplayer.GetPeers: {PerCall(() => Multiplayer.GetPeers())}B"));
         GD.Print(FormattableString.Invariant($"ALLOC new Snapshot: {PerCall(() => new Snapshot(1))}B"));
+
+        // Quantizing runs on the record path for every schema'd property, every tick (netfox-net#36)
+        var lossy = NetworkSchemas.Vec3T(NetworkSchemas.Float16());
+        var lossless = NetworkSchemas.Variant();
+        var sample = Variant.From(new Vector3(0.123456789f, 1.5f, 0.765432109f));
+        GD.Print(FormattableString.Invariant($"ALLOC lossy schema Quantize: {PerCall(() => lossy.Quantize(sample))}B per call"));
+        GD.Print(FormattableString.Invariant($"ALLOC lossless schema Quantize: {PerCall(() => lossless.Quantize(sample))}B per call"));
     }
 
     [Test]

@@ -42,6 +42,30 @@ for a sniper's aim.
 The judgement is per property and it is yours. The safe default is to leave everything on `Variant` until bandwidth
 is actually a problem, then look at what is big and changes often - transforms, usually - before anything else.
 
+### A lossy schema changes what everyone simulates, not only what is sent
+
+A lossy schema is applied when a property is **recorded into history**, not only when it goes on the wire. So the peer
+that owns a property simulates from the same number every other peer will be handed, and a tick produces one answer
+rather than two.
+
+That matters more than the size of the error suggests. Half precision is about 5e-4 relative - a couple of
+centimetres over eight seconds of walking - but it is the *same* error every tick rather than noise, so it never
+averages out. Recording the exact value locally and the quantized one everywhere else would leave the owner and the
+authority permanently disagreeing by a little, and produce a steady trickle of corrections that no amount of
+bandwidth or luck removes. Glenn Fiedler makes the point in
+[State Synchronization](https://gafferongames.com/post/state_synchronization/): quantize the simulation as if it had
+been sent, on both sides.
+
+Two things follow for you:
+
+- **A lossy schema is part of your simulation.** Picking `Degrees8()` for a facing means every peer, the owner
+  included, simulates from an angle rounded to 1.4 degrees. That is usually what you want, and it is never a surprise.
+- **A custom `NetworkSchemaSerializer` gets this for free.** The default `Quantize` round trips through your
+  `Encode` and `Decode`, so it is correct without you doing anything. Override it if the answer is cheaper to
+  compute directly, or if your encoding is lossless and the round trip is pure waste.
+
+Properties with no schema of their own are left alone, which is nearly all of them.
+
 ## What is available
 
 `NetworkSchemas` is a set of static factories:

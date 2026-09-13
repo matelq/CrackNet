@@ -17,6 +17,9 @@ public sealed class ByteWriter
     public int Size => _position;
     public ReadOnlySpan<byte> WrittenSpan => _buffer.AsSpan(0, _position);
 
+    /// <summary>What has been written, without copying it. Only valid until the next write, which may reallocate.</summary>
+    public ReadOnlyMemory<byte> WrittenMemory => _buffer.AsMemory(0, _position);
+
     public byte[] ToArray() => WrittenSpan.ToArray();
 
     public void Clear() => _position = 0;

@@ -11,6 +11,37 @@ public abstract class NetworkSchemaSerializer
 {
     public abstract void Encode(Variant value, ByteWriter buffer);
     public abstract Variant Decode(ByteReader buffer);
+
+    /// <summary>
+    /// The value as it will come back out the other end. For a lossy schema this is not the value that went in, and
+    /// that difference is the point: a peer recording what it actually has and every other peer recording what it was
+    /// sent are then simulating from two different numbers for the same tick.
+    /// <para>
+    /// The error is tiny - half precision is about 5e-4 relative - but it is systematic rather than noise, so it
+    /// never averages out and produces a steady trickle of corrections no amount of bandwidth removes.
+    /// <a href="https://gafferongames.com/post/state_synchronization/">State Synchronization</a> prescribes exactly
+    /// this: quantize the simulation as if it had been sent, on both sides.
+    /// </para>
+    /// <para>
+    /// The default round trips through <see cref="Encode"/> and <see cref="Decode"/>, so a custom serializer is
+    /// correct without doing anything. Override it where the answer is cheaper to compute directly, or where the
+    /// encoding is lossless and the whole round trip can be skipped.
+    /// </para>
+    /// </summary>
+    public virtual Variant Quantize(Variant value)
+    {
+        var buffer = _quantizeBuffer ??= new ByteWriter();
+        buffer.Clear();
+        Encode(value, buffer);
+        return Decode(new ByteReader(buffer.WrittenMemory));
+    }
+
+    /// <summary>
+    /// Reused across calls, because this runs on the record path for every schema'd property every tick. Per thread
+    /// rather than shared: nothing here is synchronized, and a second thread encoding into the same buffer would
+    /// corrupt both answers rather than merely slow them down.
+    /// </summary>
+    [ThreadStatic] private static ByteWriter? _quantizeBuffer;
 }
 
 /// <summary>

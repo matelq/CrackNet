@@ -40,6 +40,7 @@ Well-known command ids. Explicit so they do not depend on autoload order.
 | | Member | Summary |
 |---|---|---|
 | field | `FirstUserCommand` | First id handed out by RegisterCommand for user commands. |
+| field | `InputAck` | Reworked only: the newest input tick a peer has, below which nothing is missing. See netfox-net#40. |
 
 ### DenseSnapshotSerializer
 
@@ -140,6 +141,7 @@ Every `netfox/*` project setting, read once into one mutable object. Upstream re
 | | Member | Summary |
 |---|---|---|
 | property | `Instance` | The settings the autoloads use. Replace before they enter the tree; mutating it later only affects re-reads. |
+| property | `MaxInputRedundancy` | The most input ticks one packet may carry. `InputRedundancy` is the floor and this is the ceiling: in between, the window is whatever the receiving peer has not acknowledged yet. It exists to bound the packet rather than the redundancy. A peer that has heard nothing for a long time would otherwise try to send its whole history in one go, which does not fit and would be dropped whole - turning a bad link into no link at all. |
 | property | `SyncPanicThreshold` | Same `netfox/time/recalibrate_threshold` key as `RecalibrateThreshold`, but with the fallback upstream uses in the time synchronizer (`network-time-synchronizer.gd:105`). The two differ only when the setting is absent. |
 | method | `Load` | Reads every setting from `ProjectSettings`, falling back to the defaults the plugin registers. |
 
@@ -150,6 +152,7 @@ Transmits commands over the network: a single id byte plus raw binary data, eith
 | | Member | Summary |
 |---|---|---|
 | property | `Context` | The stack this server belongs to; resolved when it enters the tree. |
+| property | `SentCounts` | Payload bytes and packets sent per command id since the last `ResetSentCounts`. Transport framing is not included, so this says what netfox asked for rather than what went on the wire. It exists because a total cannot answer the question that matters when something grows: which command grew. |
 | field | `PacketPrefix` | Prefix of raw command packets: NUL, n, f. |
 | method | `IsCommandPacket(System.ReadOnlySpan{System.Byte})` | True if `packet` is a command packet. Always true when commands go over RPC. |
 | method | `RegisterCommand(System.Action{System.Int32,System.Byte[]},Godot.MultiplayerPeer.TransferModeEnum,System.Int32)` | Register a command at the next available id. |
@@ -243,6 +246,11 @@ Runs the rollback loop: restore history, resimulate, record, broadcast. Port of 
 
 Base class for schema serializers. Encode a Variant into a ByteWriter, decode it back from a ByteReader. Extend to implement custom serializers and pass them to RollbackSynchronizer.SetSchema. Port of schemas/network-schema-serializer.gd.
 
+| | Member | Summary |
+|---|---|---|
+| field | `_quantizeBuffer` | Reused across calls, because this runs on the record path for every schema'd property every tick. Per thread rather than shared: nothing here is synchronized, and a second thread encoding into the same buffer would corrupt both answers rather than merely slow them down. |
+| method | `Quantize(Godot.Variant)` | The value as it will come back out the other end. For a lossy schema this is not the value that went in, and that difference is the point: a peer recording what it actually has and every other peer recording what it was sent are then simulating from two different numbers for the same tick. The error is tiny - half precision is about 5e-4 relative - but it is systematic rather than noise, so it never averages out and produces a steady trickle of corrections no amount of bandwidth removes. State Synchronization prescribes exactly this: quantize the simulation as if it had been sent, on both sides. The default round trips through `ByteWriter` and `ByteReader`, so a custom serializer is correct without doing anything. Override it where the answer is cheaper to compute directly, or where the encoding is lossless and the whole round trip can be skipped. |
+
 ### NetworkSchemas
 
 Factory of schema serializers. Port of schemas/network-schemas.gd; naming follows the original (uint16, vec3f32, ...). `Variant` and `String` read like the types of the same name on purpose: they are kept as upstream names them, so the upstream schema documentation applies here unchanged. C# resolves the two without ambiguity, and renaming them would cost that mapping for a cosmetic gain.
@@ -270,10 +278,17 @@ Synchronizes rollback input, rollback state and synchronized state over the netw
 |---|---|---|
 | property | `Context` | The stack this server belongs to; resolved when it enters the tree. |
 | property | `EnableInputBroadcast` | When off, inputs only go to the authorities of the nodes they control. From netfox/rollback/enable_input_broadcast. |
+| field | `AckInterval` | Ticks between acknowledgements. One per tick per peer would be half as many packets again on the host for four bytes each; a stale acknowledgement only costs a few repeated input ticks, which are patches against the newest and nearly free. |
+| field | `_inputAcknowledged` | What each peer we send input to last told us it had. Absent means it has told us nothing yet. |
+| field | `_inputReceived` | What each sender has got through to us, so we can tell it what it no longer has to repeat. |
+| method | `AcknowledgeInput(System.Int32)` | Tells every peer that has sent us input how far it has got through, so it can stop repeating what we already have. Called once per tick alongside `Int32`, and rate limited from there. |
 | method | `Deregister(Godot.Node)` | Deregister every setting associated with `node`. |
 | method | `ErasePeer(System.Int32)` | Erase everything kept about `peer`. Called by default when a peer leaves. |
-| method | `MakePeerSnapshot(Netfox.Core.Data.Snapshot{Godot.Node,Godot.NodePath,Godot.Variant},System.Int32,Netfox.Core.Data.PropertyPool{Godot.Node,Godot.NodePath})` | Snapshot to send to `peer`: only visible subjects and their auth properties. |
+| method | `InputWindowFor(System.Int32,System.Int32,Netfox.NetworkHistoryServer)` | The input ticks to send one peer: everything it has not acknowledged, floored at the configured redundancy and capped so the packet still fits. A fixed count is generous against independent loss and worth nothing against a burst - three in a row go missing 0.1% of the time at 10% loss, but a burst takes all three every time, and the authority is left predicting for the length of the outage. Sending what has not been acknowledged instead is what Deterministic Lockstep does, and it is smaller in the ordinary case as well as larger in the bad one: the floor only applies because an acknowledgement can itself be lost. |
+| method | `MakePeerSnapshot(Netfox.Core.Data.Snapshot{Godot.Node,Godot.NodePath,Godot.Variant},System.Int32,Netfox.Core.Data.PropertyPool{Godot.Node,Godot.NodePath},System.Func{Godot.Node,System.Boolean})` | Snapshot to send to `peer`: only visible subjects and their auth properties. |
+| method | `Quantize(Godot.Node,Godot.NodePath,Godot.Variant)` | The value as this property's schema will deliver it, so what a peer records for itself is what every other peer will be told. Properties with no schema of their own are returned untouched, which is nearly all of them. |
 | method | `ResetSession` | Drops what was sent to whom, keeping registrations, schemas and visibility filters. |
+| method | `SynchronizeStateRange(System.Int32,System.Int32)` | Sends every subject at the newest tick of the range it is authoritative for, rather than all of them at the newest tick of the range. The distinction is the difference between working and not. State is only sent for subjects the sender is authoritative for, and a node driven by a remote peer's input is predicted at the newest tick - that peer's input for it is still a round trip away - so it is not authoritative there and nothing goes out for it. Sending only the newest tick therefore sent such a node nothing at all, ever, and the peer driving it never converged (netfox-net#35). Upstream sends every tick of the range instead (network-rollback.gd:429), which is correct but multiplies state traffic by the length of the range, every frame (#29). One tick per distinct answer is both: two, in a session where the host drives its own player and one remote player. |
 | method | `WithoutUnacknowledgedSubjects(Netfox.Core.Data.Snapshot{Godot.Node,Godot.NodePath,Godot.Variant},System.Int32)` | The diff baseline minus the subjects `peer` cannot resolve yet, so those go out in full. A peer acks a subject by sending back an id for it, which it can only do once it has resolved that subject's name - that is, once the node exists on its side. Until then it drops our frames, and diffing against a baseline it never received would leave it with a node missing every property that happens not to change, until the next full state. Upstream has no such guard (foxssake/netfox#563). |
 | event | `OnInput` | Emitted when new input for a new subject was received. |
 | event | `OnState` | Emitted when state was received. |
@@ -567,6 +582,7 @@ Growable little-endian byte buffer. Replaces the write side of StreamPeerBuffer.
 
 | | Member | Summary |
 |---|---|---|
+| property | `WrittenMemory` | What has been written, without copying it. Only valid until the next write, which may reallocate. |
 | method | `PutUtf8String(System.String)` | u32 byte length followed by UTF-8 bytes, matching StreamPeer.put_utf8_string. |
 
 ### CString
@@ -705,12 +721,18 @@ Editor convenience: the first launched instance hosts, later ones join, optional
 
 | | Member | Summary |
 |---|---|---|
+| property | `Conditions` | Jitter and burst loss on top of `LatencyMs` and `PacketLossPercent`. |
 | property | `ConnectPort` | The port to actually dial: the proxy's when it is running, the server's otherwise. |
 | property | `HostPeerFactory` | Creates the peer to host with, or null when this instance could not take the host role - which is what makes the next one join instead. Upstream hardcodes `ENetMultiplayerPeer` (network-simulator.gd:70), so autoconnect is unusable with a Steam or loopback peer. Replace these before the simulator enters the tree to autoconnect over any transport. The UDP proxy only applies to ENet and is skipped for anything else, since it forwards real UDP packets. |
 | property | `JoinPeerFactory` | Creates the peer to join with. See `HostPeerFactory`. |
 | property | `Peer` | The peer the last autoconnect produced, or null if it never got one. |
+| property | `ProxyCounts` | Packets the proxy passed through, and the two ways it did not. Zero bursts means no burst fired. |
 | property | `ProxyPort` | Port clients connect to when the latency and loss proxy is in the way; otherwise `ServerPort`. |
 | method | `Connect` | The autoconnect itself, without the editor and environment guards around it: host if nothing else has, join if something has. Assigns the resulting peer to the multiplayer API. |
+| method | `InLossBurst(Netfox.Extras.NetworkSimulator.Profile,System.UInt64)` | Whether the link is in one of its outages. Derived from the clock rather than scheduled, so it needs no state and both directions go out together - which is what an outage is, as against loss on one path. |
+| method | `OscillatingJitter(Netfox.Extras.NetworkSimulator.Profile,System.UInt64)` | A raised cosine over the period, so the delay drifts up and back down rather than jumping. |
+| method | `ScheduleOrDrop(System.UInt64)` | When a packet entering the link now should come out the other end, or null if it never does. Both are decided here rather than on the way out: a packet lost on the wire was lost when it was sent, and a delay that is rolled per packet is what lets a later one arrive first. |
+| method | `StartProxy(System.Int32,Netfox.Extras.NetworkSimulator.Profile,System.String)` | Starts the proxy with jitter and burst loss as well as the constant delay and even loss. `Realistic` is the one worth running against. |
 | method | `StartProxy(System.Int32,System.Int32,System.Double,System.String)` | Starts only the latency and loss proxy, without the autoconnect flow that is limited to the editor, and returns the port clients should connect to. Upstream has no such entry point: its proxy is reachable only through autoconnect, which is why it was never covered by a headless run. |
 
 ### NetworkWeapon
