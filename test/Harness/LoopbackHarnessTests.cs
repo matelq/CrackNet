@@ -255,13 +255,20 @@ public partial class LoopbackHarnessTests : HarnessSuite
             $"host owns {Host.Context.NetworkSynchronizationServer.OwnedRollbackStateProperties.Subjects.Count} subjects");
     }
 
+    /// <summary>
+    /// Four peers, which is the player count we are building for. The name used to promise a player scale it did not
+    /// run at: two peers is the count at which the host has only one client to send to, so nothing about how state
+    /// traffic grows with the room shows up.
+    /// </summary>
     [Test]
     public async Task BandwidthAtPlayerScale()
     {
+        NetfoxStack[] stacks = [Host, Client, AddPeer(3), AddPeer(4)];
+
         // Without latency the host simulates each tick once; with it, every late input makes it resimulate a range,
         // which is where state traffic used to multiply (#29)
-        var idle = await MeasureBandwidth(0);
-        var lagging = await MeasureBandwidth(100);
+        var idle = await MeasureBandwidth(stacks, 0);
+        var lagging = await MeasureBandwidth(stacks, 100);
 
         Report("no latency", idle);
         Report("100ms latency", lagging);
@@ -272,7 +279,7 @@ public partial class LoopbackHarnessTests : HarnessSuite
                 $"host {m.HostKbps:F1}KB/s = {m.HostPps:F0} packets/s x {m.HostPacket:F0}B ({m.PerPlayerTick:F0}B per player per tick)");
             var client = FormattableString.Invariant(
                 $"client {m.ClientKbps:F1}KB/s = {m.ClientPps:F0} packets/s x {m.ClientPacket:F0}B");
-            GD.Print($"BANDWIDTH 2 moving players, {label}: {host}, {client}");
+            GD.Print($"BANDWIDTH {PlayerScale} moving players, {label}: {host}, {client}");
         }
 
         // State is sent once per loop, so resimulating a range must not multiply what goes out
@@ -280,9 +287,12 @@ public partial class LoopbackHarnessTests : HarnessSuite
             $"latency should not multiply state traffic: {lagging.PerPlayerTick:F0}B per player per tick against {idle.PerPlayerTick:F0}B without latency");
     }
 
-    private async Task<(double HostKbps, double ClientKbps, double PerPlayerTick, double HostPps, double HostPacket, double ClientPps, double ClientPacket)> MeasureBandwidth(int latencyMs)
+    /// <summary>Players in the bandwidth case, and so peers: the target game is four.</summary>
+    private const int PlayerScale = 4;
+
+    private async Task<(double HostKbps, double ClientKbps, double PerPlayerTick, double HostPps, double HostPacket, double ClientPps, double ClientPacket)> MeasureBandwidth(NetfoxStack[] stacks, int latencyMs)
     {
-        foreach (var stack in new[] { Host, Client })
+        foreach (var stack in stacks)
             foreach (var child in stack.GetChildren())
                 if (child is HarnessPlayer player)
                 {
@@ -291,9 +301,8 @@ public partial class LoopbackHarnessTests : HarnessSuite
                 }
 
         Network.LatencyMs = latencyMs;
-        SpawnPlayers(Host);
-        SpawnPlayers(Client);
-        await WaitUntil(() => Client.Context.NetworkTime.IsInitialSyncDone(), 6);
+        foreach (var stack in stacks) SpawnPlayers(stack, peers: PlayerScale);
+        await WaitUntil(() => stacks.All(stack => stack.Context.NetworkTime.IsInitialSyncDone()), 8);
 
         var firstTick = Host.Context.NetworkTime.Tick;
         Network.ResetTraffic();
@@ -305,7 +314,8 @@ public partial class LoopbackHarnessTests : HarnessSuite
         var fromHost = Network.TrafficFrom(1);
         var fromClient = Network.TrafficFrom(2);
 
-        return (fromHost.Bytes / seconds / 1024, fromClient.Bytes / seconds / 1024, fromHost.Bytes / (double)ticks / 2,
+        return (fromHost.Bytes / seconds / 1024, fromClient.Bytes / seconds / 1024,
+            fromHost.Bytes / (double)ticks / PlayerScale,
             fromHost.Packets / seconds, fromHost.Bytes / (double)Math.Max(1, fromHost.Packets),
             fromClient.Packets / seconds, fromClient.Bytes / (double)Math.Max(1, fromClient.Packets));
     }

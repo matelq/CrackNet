@@ -76,18 +76,21 @@ changed go out.
 than from an accumulator, so a resimulated tick puts it exactly where the first pass did. Change it to accumulate
 `delta` instead and ride it: a correction will drag the player off.
 
-**Two players agreeing about each other is checked separately.** `ConvergenceSmoke.tscn` runs two processes, walks
-both players into each other, and then compares what each peer believes on one and the same tick - position, state,
-jumps left, scoreboard. Comparing by tick rather than by wall clock is what makes it meaningful with the platform in
-play, since the platform never stops. Under latency and packet loss it currently fails, which is
-[#35](https://github.com/matelq/netfox-net/issues/35):
+**Players agreeing about each other is checked separately.** `ConvergenceSmoke.tscn` runs one process per peer, walks
+every player into the same spot, and then compares what each peer believes on one and the same tick - position, state,
+jumps left, scoreboard - over the whole quiet window after the keys are released. Comparing by tick rather than by
+wall clock is what makes it meaningful with the platform in play, since the platform never stops.
 
 ```
-godot --headless --path . res://examples/playground/ConvergenceSmoke.tscn -- --host --on-platform --latency=120 --loss=10
-godot --headless --path . res://examples/playground/ConvergenceSmoke.tscn -- --join --on-platform --latency=120 --loss=10
+godot --headless --path . res://examples/playground/ConvergenceSmoke.tscn -- --host --latency=120 --loss=10
+godot --headless --path . res://examples/playground/ConvergenceSmoke.tscn -- --join --latency=120 --loss=10
 ```
 
-Add `--dump` to have both peers write every tick they recorded, which is how the two runs get diffed.
+`--peers=3` waits for three players before starting, and is then given to all three processes. Two peers is the one
+count at which every player is either your own or the host's, so nothing has to be relayed on anyone else's behalf -
+which is why a third process finds things the second never could. `--on-platform` puts everyone on the moving
+platform, where it still fails ([#41](https://github.com/matelq/netfox-net/issues/41)), and `--dump` has every peer
+write out each tick it recorded, which is how two runs get diffed.
 
 **Riding it is done by hand, and has to be.** `PlayerCharacter` sets `PlatformFloorLayers = 0` to switch off Godot's
 own moving platform support, and `RideFloor` adds `MovingPlatform.MotionAt(tick)` instead. Godot's version derives

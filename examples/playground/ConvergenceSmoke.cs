@@ -59,6 +59,13 @@ public partial class ConvergenceSmoke : Node
     private bool _isHost;
     private bool _onPlatform;
 
+    /// <summary>
+    /// How many players to wait for before the run starts, so a third process can join the same session. Two peers
+    /// is the count at which every player is either yours or the host's, which is the one arrangement where nothing
+    /// has to be relayed on behalf of somebody else.
+    /// </summary>
+    private int _peers = 2;
+
     /// <summary>Write every tick of belief to user://, for diffing the two peers tick by tick.</summary>
     private bool _dump;
     private int _latencyMs;
@@ -97,6 +104,7 @@ public partial class ConvergenceSmoke : Node
             else if (arg == "--dump") _dump = true;
             else if (arg.StartsWith("--latency=")) _latencyMs = (int)Parse(arg, "--latency=");
             else if (arg.StartsWith("--loss=")) _lossPercent = Parse(arg, "--loss=");
+            else if (arg.StartsWith("--peers=")) _peers = Math.Max(2, (int)Parse(arg, "--peers="));
         }
 
         // A trace left by an earlier run has a different random peer id in it, and a client that reads one compares
@@ -138,9 +146,10 @@ public partial class ConvergenceSmoke : Node
                             $"{snapshot.Tick},{player.Name},{value.AsVector3().X:F4},{value.AsVector3().Y:F4},{value.AsVector3().Z:F4},recv,0"));
             };
 
-        if (!await WaitFor(() => _players.GetChildCount() >= 2 && NetworkTime.Instance.IsInitialSyncDone(), 15))
+        if (!await WaitFor(() => _players.GetChildCount() >= _peers && NetworkTime.Instance.IsInitialSyncDone(), 20))
         {
-            Report(false, $"never saw two synchronized players (peer #{Multiplayer.GetUniqueId()})");
+            Report(false,
+                $"saw {_players.GetChildCount()} of {_peers} synchronized players (peer #{Multiplayer.GetUniqueId()})");
             return;
         }
 
@@ -195,12 +204,18 @@ public partial class ConvergenceSmoke : Node
 
     public override void _Process(double delta)
     {
-        if (_players is null || _players.GetChildCount() < 2) return;
-
-        var ordered = Ordered();
-        _closestApproach = Mathf.Min(_closestApproach, ordered[0].Position.DistanceTo(ordered[1].Position));
+        if (_players is null || _players.GetChildCount() < _peers) return;
 
         if (_steerTo is null) return;
+
+        // Closest any two of them ever got, not just the first two: with three players the pair that meets is not
+        // known in advance, and a run where nobody touched proves nothing about collisions.
+        // Only while they are being steered: a player that has just been spawned and not yet been told where it is
+        // sits at the origin, and on a client that reads as every pair meeting before the run has begun.
+        var ordered = Ordered();
+        for (var i = 0; i < ordered.Count; i++)
+            for (var j = i + 1; j < ordered.Count; j++)
+                _closestApproach = Mathf.Min(_closestApproach, ordered[i].Position.DistanceTo(ordered[j].Position));
 
         // On the platform the target moves, and getting up there needs the jump: its top is 1.2m above the ground,
         // which is one jump with nothing to spare
@@ -296,7 +311,7 @@ public partial class ConvergenceSmoke : Node
 
     private void Report(bool reached, string failure)
     {
-        var ok = reached && _final.Count >= 2 && _captureTick >= 0;
+        var ok = reached && _final.Count >= _peers && _captureTick >= 0;
 
         // The players have to have actually met, or the run proves nothing about collisions. Two capsules of radius
         // 0.4 resting against each other are 0.8 apart.
