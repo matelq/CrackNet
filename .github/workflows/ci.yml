@@ -24,6 +24,42 @@ jobs:
       - name: Run tests
         run: dotnet test Netfox.slnx
 
+  godot-stock:
+    name: Godot tests on stock physics
+    # The addon names no physics engine, and the game is the only consumer that wants Rapier. This keeps the other
+    # engine honest at the cost of one suite run: same tests, project.godot switched back, no extension installed.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+      - name: Cache Godot
+        uses: actions/cache@v4
+        with:
+          path: godot
+          key: godot-${{ env.GODOT_VERSION }}-mono-linux-x86_64
+      - name: Install Godot
+        run: |
+          if [ ! -x "godot/Godot_v${GODOT_VERSION}_mono_linux_x86_64/Godot_v${GODOT_VERSION}_mono_linux.x86_64" ]; then
+            curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o godot.zip "https://github.com/godotengine/godot-builds/releases/download/$GODOT_VERSION/Godot_v${GODOT_VERSION}_mono_linux_x86_64.zip"
+            unzip -q godot.zip -d godot
+          fi
+          echo "GODOT=$PWD/godot/Godot_v${GODOT_VERSION}_mono_linux_x86_64/Godot_v${GODOT_VERSION}_mono_linux.x86_64" >> "$GITHUB_ENV"
+      - name: Switch project.godot back to Godot Physics
+        run: |
+          sed -i 's|^3d/physics_engine="Rapier3D"|3d/physics_engine="DEFAULT"|' project.godot
+          grep -n 'physics_engine' project.godot
+      - name: Import resources
+        run: $GODOT --headless --path . --import || true
+      - name: Build
+        run: dotnet build Netfox.csproj
+      - name: Run Godot tests
+        run: $GODOT --headless --path . res://test/TestRunner.tscn
+      - name: The Rapier check skips rather than fails without the extension
+        run: $GODOT --headless --path . res://examples/physics/RapierCheck.tscn | tee rapier.log && grep -q "skipped=True" rapier.log
+
   godot:
     name: Godot tests and e2e
     runs-on: ubuntu-latest
@@ -47,6 +83,10 @@ jobs:
             unzip -q godot.zip -d godot
           fi
           echo "GODOT=$PWD/godot/Godot_v${GODOT_VERSION}_mono_linux_x86_64/Godot_v${GODOT_VERSION}_mono_linux.x86_64" >> "$GITHUB_ENV"
+      - name: Install Rapier
+        # The project is Rapier-first (netfox-net#52): project.godot already asks for Rapier3D, this drops the
+        # pinned extension next to it. Without this step every physics body would sit on an engine that is not there.
+        run: sh tools/install-extensions.sh rapier
       - name: Import resources
         # --import exits with a segfault after a successful import on 4.7.2, so its exit code says nothing
         run: $GODOT --headless --path . --import || true
@@ -54,11 +94,14 @@ jobs:
         run: dotnet build Netfox.csproj
       - name: Run Godot tests
         run: $GODOT --headless --path . res://test/TestRunner.tscn
+      - name: Roll a rigid body back through Rapier
+        # --require: a skip here is a broken install, not a pass (netfox-net#53)
+        run: $GODOT --headless --path . res://examples/physics/RapierCheck.tscn -- --require
       - name: Run e2e over ENet
         run: |
           "$GODOT" --headless --path . res://examples/e2e/E2E.tscn -- --host --seconds=14 > host.log 2>&1 &
           host=$!
-          sleep 2
+          sleep 5
           "$GODOT" --headless --path . res://examples/e2e/E2E.tscn -- --join --seconds=10 > client.log 2>&1 || true
           wait $host || true
           echo "--- host"; cat host.log
@@ -68,7 +111,7 @@ jobs:
         run: |
           "$GODOT" --headless --path . res://examples/playground/PlaygroundSmoke.tscn -- --host --seconds=14 > pg-host.log 2>&1 &
           host=$!
-          sleep 3
+          sleep 6
           "$GODOT" --headless --path . res://examples/playground/PlaygroundSmoke.tscn -- --join --seconds=8 > pg-client.log 2>&1 || true
           wait $host || true
           echo "--- host"; cat pg-host.log
@@ -78,7 +121,7 @@ jobs:
         run: |
           "$GODOT" --headless --path . res://examples/playground/ConvergenceSmoke.tscn -- --host > cv-host.log 2>&1 &
           host=$!
-          sleep 3
+          sleep 6
           "$GODOT" --headless --path . res://examples/playground/ConvergenceSmoke.tscn -- --join > cv-client.log 2>&1 || true
           wait $host || true
           echo "--- host"; cat cv-host.log
@@ -100,7 +143,7 @@ jobs:
         run: |
           "$GODOT" --headless --path . res://examples/e2e/E2E.tscn -- --host --seconds=14 --profile=realistic > host-lossy.log 2>&1 &
           host=$!
-          sleep 2
+          sleep 5
           "$GODOT" --headless --path . res://examples/e2e/E2E.tscn -- --join --seconds=10 --profile=realistic > client-lossy.log 2>&1 || true
           wait $host || true
           echo "--- host"; cat host-lossy.log

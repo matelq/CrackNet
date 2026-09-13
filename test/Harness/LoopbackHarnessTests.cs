@@ -545,6 +545,10 @@ public partial class LoopbackHarnessTests : HarnessSuite
             newestSeen = Math.Max(newestSeen, snapshot.Tick);
         };
 
+        // Until the first acknowledgement lands the sender is on the floor of three like before, so a burst in the
+        // first second of a session is not repaired - and it is not what is being measured. Let that pass first.
+        await WaitUntil(() => Host.Context.NetworkTime.Tick > 40, 5);
+
         // Long enough to sit through several outages: 300ms out of every 2s, at 30 ticks a second
         var first = Host.Context.NetworkTime.Tick;
         var ran = await WaitUntil(() => Host.Context.NetworkTime.Tick - first > 200, 12);
@@ -552,8 +556,8 @@ public partial class LoopbackHarnessTests : HarnessSuite
 
         var client = hostPlayers[2];
         // A round trip plus a margin back from the newest tick, so only ticks that had every chance to be corrected count
-        var longest = client.LongestPredictedRun(Host.Context.NetworkTime.Tick - 30);
-        GD.Print($"BURST longest_predicted_run={longest} predicted={client.PredictedTicks} ticks={Host.Context.NetworkTime.Tick - first} input_arrivals={arrivals} late_fills={lateFills}");
+        var (longest, endsAt) = client.LongestPredictedRunEndingAt(Host.Context.NetworkTime.Tick - 30);
+        GD.Print($"BURST longest_predicted_run={longest} ends_at={endsAt} first={first} predicted={client.PredictedTicks} ticks={Host.Context.NetworkTime.Tick - first} input_arrivals={arrivals} late_fills={lateFills}");
 
         // Measured both ways on this exact case: a fixed redundancy of three leaves a run of 7, every run, and the
         // acknowledged window leaves 0. Three is margin, not a guess.

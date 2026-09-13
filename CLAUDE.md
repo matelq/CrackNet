@@ -15,6 +15,9 @@ Branches: `reworked` is the default and where work happens; `master` keeps parit
   `examples/playground/` — the scene-based sample (see its README), driven headless by `PlaygroundSmoke.tscn` in CI;
   `examples/parity/` and `examples/physics/` — the checks below.
 - Repo root is the Godot project. Godot 4.7.2 mono binary: `.tools/godot/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe` (gitignored). Use exactly this version: older editors downgrade the SDK in Netfox.csproj.
+- **The project is Rapier-first** (netfox-net#52): `project.godot` asks for `Rapier3D`, and the extension is gitignored, so a fresh clone
+  needs `sh tools/install-extensions.sh rapier` before anything with a physics body runs. The addon itself names no engine;
+  CI runs the suite on stock Godot Physics too (`godot-stock` job), with `project.godot` switched back by `sed`.
 
 ## Commands
 
@@ -48,11 +51,18 @@ zip under `addons/netfox.cs/analyzers/`, and is optional - the interfaces can st
 
 ## Physics drivers
 
-`examples/physics/RapierCheck.tscn` runs the Rapier driver against a real install; it skips and exits 0 without one.
-To set one up: `sh tools/install-extensions.sh rapier --enable-rapier`, which unpacks a pinned release into
-`addons/godot-rapier3d` (gitignored) and writes `3d/physics_engine="Rapier3D"` under `[physics]` in project.godot -
-note that project.godot strips the section name from its keys. The same script installs GodotSteam with `steam`. Stock Godot has no `space_step`, so
-`GodotPhysicsDriver2D/3D` report themselves unavailable and only work on a build carrying godotengine/godot PR 76462.
+`examples/physics/RapierCheck.tscn` rolls a rigid body back through the Rapier driver; without the extension it skips
+and exits 0, and `-- --require` turns that skip into a failure, which is how CI runs it. `sh tools/install-extensions.sh
+rapier` unpacks the pinned release into `addons/godot-rapier3d` (gitignored); `--enable-rapier` also writes
+`3d/physics_engine="Rapier3D"` under `[physics]` in project.godot, which is already committed - note that project.godot
+strips the section name from its keys. The same script installs GodotSteam with `steam`. Stock Godot has no
+`space_step`, so `GodotPhysicsDriver2D/3D` report themselves unavailable and only work on a build carrying
+godotengine/godot PR 76462. Rolling a `RigidBody` back means re-stepping the physics space several times inside one
+frame, which is why the driver exists at all; a kinematic body needs none of it.
+
+Two-process checks: give the host a longer head start than feels necessary. The GDExtension loads slower than stock
+Godot, and a client that starts first simply never connects - `ConvergenceSmoke` then reports `players=0`, which reads
+like a broken check rather than a slow start.
 
 ## Docs
 

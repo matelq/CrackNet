@@ -62,16 +62,19 @@ public partial class HarnessPlayer : Node3D, IRollbackTick
     /// input for them is still a round trip away - so counting them measures the tail of the run rather than
     /// anything that went wrong, and it does so identically no matter what the netcode does.
     /// </param>
-    public int LongestPredictedRun(int upToTick)
+    public int LongestPredictedRun(int upToTick) => LongestPredictedRunEndingAt(upToTick).Length;
+
+    /// <summary>The longest run and the tick it ends on, so a failure can say where it was rather than only how long.</summary>
+    public (int Length, int EndsAt) LongestPredictedRunEndingAt(int upToTick)
     {
-        var longest = 0;
+        var longest = (Length: 0, EndsAt: -1);
         var run = 0;
         var previous = int.MinValue;
 
         foreach (var tick in _predictedAt.Keys.Where(at => at <= upToTick).Order())
         {
             run = _predictedAt[tick] ? (tick == previous + 1 ? run + 1 : 1) : 0;
-            longest = Math.Max(longest, run);
+            if (run > longest.Length) longest = (run, tick);
             previous = tick;
         }
         return longest;
