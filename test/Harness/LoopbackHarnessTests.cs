@@ -663,6 +663,34 @@ public partial class LoopbackHarnessTests : HarnessSuite
             $"the host kept sending state for a player it no longer owns: {fromHostAfterFlip} snapshots after the flip");
     }
 
+    /// <summary>
+    /// A rollback root nobody drives: no input node, authority on the host, prediction off. The host runs its rule,
+    /// every other peer is told where it is and simulates it not at all - and all three agree (netfox-net#57).
+    /// </summary>
+    [Test]
+    public async Task ANodeNobodyDrivesIsSimulatedByTheHostAlone()
+    {
+        Network.LatencyMs = 30;
+        var third = AddPeer(3);
+        NetfoxStack[] stacks = [Host, Client, third];
+        var npcs = stacks.ToDictionary(stack => stack, HarnessNpc.Spawn);
+
+        Expect.True(await WaitUntil(() => npcs.Values.All(npc => npc.Position.Length() > 0.3f), 6),
+            $"the NPC never got moving everywhere: {string.Join(" ", npcs.Select(entry => $"{entry.Key.Name}={entry.Value.Position}"))}");
+
+        Expect.True(npcs[Host].SimulatedTicks > 0, "the host should simulate the NPC");
+        Expect.Equal(0, npcs[Client].SimulatedTicks, "a client simulated a node it does not own and cannot predict");
+        Expect.Equal(0, npcs[third].SimulatedTicks, "a client simulated a node it does not own and cannot predict");
+
+        var perTick = HarnessNpc.Speed / Host.Context.NetworkTime.Tickrate;
+        foreach (var stack in new[] { Client, third })
+        {
+            var drift = (npcs[stack].Position - npcs[Host].Position).Length();
+            Expect.True(drift < perTick * 8,
+                FormattableString.Invariant($"{stack.Name} puts the NPC {drift:F3} from where the host does"));
+        }
+    }
+
     private static string Describe(Dictionary<NetfoxStack, Dictionary<int, HarnessPlayer>> players)
         => string.Join(" ", players.Select(entry => $"{entry.Key.Name}={Positions(entry.Value)}"));
 

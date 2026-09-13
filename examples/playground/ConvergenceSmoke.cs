@@ -83,6 +83,9 @@ public partial class ConvergenceSmoke : Node
     /// <summary>Ticks on which this peer believed somebody was carrying a crate, so a pickup run that never picked up cannot pass as one that did.</summary>
     private int _heldTicks;
 
+    /// <summary>A client ran the NPC's rule. It must not: the NPC is told where it is, and that is all.</summary>
+    private bool _clientRanNpcRule;
+
     /// <summary>The proxy, on the host only, so the report can say what the link actually did rather than what it was asked to do.</summary>
     private NetworkSimulator? _proxy;
     private Playground _playground = null!;
@@ -274,13 +277,20 @@ public partial class ConvergenceSmoke : Node
     {
         var tick = NetworkTime.Instance.Tick;
         var beliefs = Ordered().ToDictionary(player => player.Name.ToString(), Settle);
-        if (beliefs.Values.Any(belief => belief.JumpsLeft >= 0 && belief.State != "crate") && _pickup) _heldTicks++;
+        if (beliefs.Values.Any(belief => belief.JumpsLeft >= 0 && IsPlayer(belief)) && _pickup) _heldTicks++;
 
         // Crates too, by name like the players. They are the one thing here that rolls a real physics space back,
         // and until this line nothing compared what two peers believed about them - a crate in two places on two
         // screens passed. They are host-simulated and never predicted, so the expectation is the tight one.
         foreach (var crate in Crates())
             beliefs[crate.Name.ToString()] = new SettledPlayer(crate.Position, "crate", 0);
+
+        // And the NPC: the one root nobody drives. Host-simulated and never predicted, so the same tight expectation
+        foreach (var npc in _playground.GetNode("World/Npcs").GetChildren().OfType<Npc>())
+        {
+            beliefs[npc.Name.ToString()] = new SettledPlayer(npc.Position, "npc", 0);
+            if (!_isHost && npc.SimulatedTicks > 0) _clientRanNpcRule = true;
+        }
         _history[tick] = beliefs;
         _shotsAt[tick] = _playground.GetNode<Scoreboard>("World/Scoreboard").Shots;
 
@@ -302,6 +312,8 @@ public partial class ConvergenceSmoke : Node
             return;
         }
     }
+
+    private static bool IsPlayer(SettledPlayer belief) => belief.State is not ("crate" or "npc");
 
     private List<Node3D> Crates()
         => _playground.GetNode("World/Crates").GetChildren().OfType<Node3D>()
@@ -368,7 +380,14 @@ public partial class ConvergenceSmoke : Node
 
     private void Report(bool reached, string failure)
     {
-        var ok = reached && _final.Count(entry => entry.Value.State != "crate") >= _peers && _captureTick >= 0;
+        var ok = reached && _final.Count(entry => IsPlayer(entry.Value)) >= _peers && _captureTick >= 0;
+
+        // A client must never have simulated the NPC - it is told where it is, and that is all
+        if (_clientRanNpcRule)
+        {
+            failure += " client-ran-npc-rule";
+            ok = false;
+        }
 
         // A pickup run has to have carried something, or it tested the crates being shoved and nothing else
         if (_pickup) ok &= _heldTicks > 10;
@@ -442,7 +461,7 @@ public partial class ConvergenceSmoke : Node
         var head = FormattableString.Invariant(
             $"CONVERGENCE role={(_isHost ? "host" : "client")} ok={ok} peer=#{Multiplayer.GetUniqueId()} at_tick={_captureTick}");
         var tail = FormattableString.Invariant(
-            $"mode={(_onPlatform ? "platform" : "ground")} players={_final.Count(entry => entry.Value.State != "crate")} crates={_final.Count(entry => entry.Value.State == "crate")} held_ticks={_heldTicks} collided={collided} closest={_closestApproach:F3} shots={_finalShots}{comparison} {beliefs} {failure}");
+            $"mode={(_onPlatform ? "platform" : "ground")} players={_final.Count(entry => IsPlayer(entry.Value))} crates={_final.Count(entry => entry.Value.State == "crate")} npcs={_final.Count(entry => entry.Value.State == "npc")} held_ticks={_heldTicks} collided={collided} closest={_closestApproach:F3} shots={_finalShots}{comparison} {beliefs} {failure}");
         GD.Print($"{head} {tail}");
 
         // What the link did, not what it was asked to do. A configured burst that never fires reads exactly like a

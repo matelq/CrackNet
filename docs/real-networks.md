@@ -51,6 +51,13 @@ with each other rather than with the world needs at least three peers, because a
 own or the authority's and nothing is ever relayed on anyone else's behalf. The loopback harness under `test/Harness`
 supports any number of stacks for exactly this, and `ConvergenceSmoke --peers=3` runs the sample with three.
 
+One default worth knowing here: **a rollback node with no input is simulated on every peer.** netfox reasons that
+a rule which needs no input can be run by anyone, and for a platform on a fixed path that is exactly right. For
+something that reacts to players - an NPC, prey - it means every client extrapolates it from its own predicted view
+of the players and is corrected each tick. If you want such an object replicated rather than guessed, gate its tick
+on `IsMultiplayerAuthority()`: clients then keep the state they were sent and interpolate it. The sample's `Npc` does
+this, and `ConvergenceSmoke` fails if a client ever ran its rule.
+
 Whether remote players should be predicted at all, or shown a few ticks in the past with interpolation instead, is
 open in this repository (netfox-net#38). For an object nobody owns - prey, a ball - the honest choice is available
 per object: leave `EnablePrediction` off on its synchronizer and it is replicated and interpolated, never guessed.

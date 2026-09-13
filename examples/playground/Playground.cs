@@ -66,6 +66,12 @@ public partial class Playground : Node3D
 
         GetNode<Beacon>("World/Beacon").PlayerRoot = SpawnRoot;
 
+        // One thing nobody controls. Host-simulated, interpolated on clients, never predicted - see Npc. Built here
+        // rather than in the scene so both peers get identical trees from the same line.
+        var npcs = new Node3D { Name = "Npcs" };
+        GetNode("World").AddChild(npcs);
+        npcs.AddChild(new Npc { Name = "Npc_0", Position = new Vector3(3, 1, 1) });
+
         // NetworkEvents starts and stops the tick loop with the session, so nothing here has to
         NetworkEvents.Instance.OnServerStart += HandleServerStart;
         NetworkEvents.Instance.OnClientStart += HandleClientStart;

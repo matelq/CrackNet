@@ -109,6 +109,12 @@ crate back to free. `HeldCrate` is rollback state (an index, not a node referenc
 `Facing` - also rollback state - so a throw is a function of the tick. `ConvergenceSmoke --pickup` does the whole
 thing on both peers and reports `held_ticks`, so a run that never actually grabbed cannot pass as one that did.
 
+**The NPC** (`Npc.cs`, one `Npc_0` under `World/Npcs`) is the thing nobody controls: it wanders and runs from players
+who come close. Its "AI" is a steering function in `RollbackTick` - a pure function of state, so the host can roll
+it back when a player's late input turns out to have chased it another way. Authority is the host and prediction is
+off, so clients never simulate it: they are told where it is and show that, interpolated, one round trip late. That
+is the honest answer for an object nobody owns, and `ConvergenceSmoke` fails if a client ever simulated it.
+
 `--peers=3` waits for three players before starting, and is then given to all three processes. Two peers is the one
 count at which every player is either your own or the host's, so nothing has to be relayed on anyone else's behalf -
 which is why a third process finds things the second never could. `--on-platform` puts everyone on the moving
