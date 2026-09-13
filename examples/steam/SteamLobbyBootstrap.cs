@@ -115,6 +115,18 @@ public partial class SteamLobbyBootstrap : Node
             return;
         }
 
+        // Nagle holds a small message back for a few milliseconds hoping more shows up, then sends them together. A
+        // tick-based netcode is exactly the program it was written to punish: netfox sends once per tick on purpose,
+        // so every message here is what Valve's own docs name as the proper case for turning it off - "flushing the
+        // last message in a server tick". Left on, it adds latency to the input every peer is waiting for, which
+        // input_delay then compensates for.
+        //
+        // no_delay stays off, and not by oversight. GodotSteam applies it per connection, to reliable messages too
+        // (_get_steam_packet_flags), and Steam says it is invalid for reliable messages: a message that cannot go out
+        // within ~200ms is dropped rather than queued. Right for per-tick state, wrong for the identity handshake.
+        // The same function maps UnreliableOrdered onto Reliable, so netfox's sync-state channel is reliable here.
+        peer.Set("no_nagle", true);
+
         var error = (Error)peer.Call(method, lobbyId).AsInt32();
         if (error != Error.Ok)
         {
