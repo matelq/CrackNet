@@ -129,14 +129,24 @@ jobs:
           grep -q "ok=True" cv-host.log && grep -q "ok=True" cv-client.log
       - name: Pick up a crate, carry it, throw it - and agree about all of it
         run: |
-          "$GODOT" --headless --path . res://examples/playground/ConvergenceSmoke.tscn -- --host --pickup > pk-host.log 2>&1 &
+          "$GODOT" --headless --path . res://examples/playground/ConvergenceSmoke.tscn -- --host --pickup --dump > pk-host.log 2>&1 &
           host=$!
           sleep 6
-          "$GODOT" --headless --path . res://examples/playground/ConvergenceSmoke.tscn -- --join --pickup > pk-client.log 2>&1 || true
+          "$GODOT" --headless --path . res://examples/playground/ConvergenceSmoke.tscn -- --join --pickup --dump > pk-client.log 2>&1 || true
           wait $host || true
           echo "--- host"; grep CONVERGENCE pk-host.log
           echo "--- client"; grep CONVERGENCE pk-client.log
           grep -q "ok=True" pk-host.log && grep -q "ok=True" pk-client.log
+      - name: Keep the per-tick traces when a two-peer check disagreed (netfox-net#63 shows once in ~10 runs)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: convergence-traces
+          path: |
+            ~/.local/share/godot/app_userdata/netfox-net/*.csv
+            pk-*.log
+            cv-*.log
+          if-no-files-found: ignore
       - name: Check a player rides the moving platform
         run: $GODOT --headless --path . res://examples/playground/PlatformRideCheck.tscn
       - name: Clone the GDScript original for the parity trace

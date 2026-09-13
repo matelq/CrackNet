@@ -691,6 +691,36 @@ public partial class LoopbackHarnessTests : HarnessSuite
         }
     }
 
+    /// <summary>
+    /// netfox-net#63: in the playground, once in a few runs, the NPC came to rest and the client showed it one or two
+    /// ticks short of where the host had it - for the whole quiet window, with nothing moving. A node the client
+    /// never simulates lives entirely off the state it is sent; this asks whether the state for the last ticks of
+    /// motion always arrives, over a link with latency and then over one with loss.
+    /// </summary>
+    [Test]
+    public async Task ANodeThatStopsIsWhereTheHostLeftItOnEveryPeer()
+    {
+        Network.LatencyMs = 30;
+        NetfoxStack[] stacks = [Host, Client];
+        var npcs = stacks.ToDictionary(stack => stack, HarnessNpc.Spawn);
+        await WaitUntil(() => Host.Context.NetworkTime.Tick > 5, 5);
+
+        foreach (var repeat in Enumerable.Range(0, 4))
+        {
+            var stopAt = Host.Context.NetworkTime.Tick + 20;
+            foreach (var npc in npcs.Values) npc.StopAtTick = stopAt;
+            Expect.True(await WaitUntil(() => Host.Context.NetworkTime.Tick > stopAt + 30, 6), "the host never got past the stop tick");
+
+            var drift = (npcs[Client].Position - npcs[Host].Position).Length();
+            Expect.True(drift < 1e-3f, FormattableString.Invariant(
+                $"round {repeat}: the NPC stopped at @{stopAt} and a second later the client has it {drift:F3} from the host ({drift / (HarnessNpc.Speed / Host.Context.NetworkTime.Tickrate):F1} ticks of its speed)"));
+
+            // Off again: StopAtTick in the past means "never stop" is not what we want, so push it out of reach
+            foreach (var npc in npcs.Values) npc.StopAtTick = int.MaxValue;
+            await WaitUntil(() => Host.Context.NetworkTime.Tick > stopAt + 45, 3);
+        }
+    }
+
     private static string Describe(Dictionary<NetfoxStack, Dictionary<int, HarnessPlayer>> players)
         => string.Join(" ", players.Select(entry => $"{entry.Key.Name}={Positions(entry.Value)}"));
 

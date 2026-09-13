@@ -22,6 +22,9 @@ public partial class HarnessNpc : Node3D, IRollbackTick
     /// <summary>Which way it is going; state, so a rewind restores it with the position.</summary>
     public Vector3 Heading { get; set; } = Vector3.Right;
 
+    /// <summary>Stand still from this tick on, so the case can ask where it came to rest. Negative: never stops.</summary>
+    public int StopAtTick { get; set; } = -1;
+
     public static HarnessNpc Spawn(Node parent)
     {
         var npc = new HarnessNpc { Name = "Npc" };
@@ -41,6 +44,7 @@ public partial class HarnessNpc : Node3D, IRollbackTick
     {
         if (!IsMultiplayerAuthority()) return;
         SimulatedTicks++;
+        if (StopAtTick >= 0 && tick >= StopAtTick) return;
         // A slow circle: deterministic, never still, and a function of nothing but this tick's state
         Heading = Heading.Rotated(Vector3.Up, 0.05f).Normalized();
         Position += Heading * Speed * (float)delta;

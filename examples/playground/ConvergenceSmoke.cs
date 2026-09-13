@@ -187,7 +187,8 @@ public partial class ConvergenceSmoke : Node
         if (_dump)
             NetworkSynchronizationServer.Instance.OnState += snapshot =>
             {
-                foreach (var player in Ordered())
+                // Players and the NPC alike: the NPC is the one whose position on a client is nothing but what arrived
+                foreach (var player in Ordered().Cast<Node3D>().Concat(_playground.GetNode("World/Npcs").GetChildren().OfType<Npc>()))
                     if (snapshot.TryGetProperty(player, "position", out var value))
                         _received.Add(FormattableString.Invariant(
                             $"{snapshot.Tick},{player.Name},{value.AsVector3().X:F4},{value.AsVector3().Y:F4},{value.AsVector3().Z:F4},recv,0"));
