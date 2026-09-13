@@ -185,6 +185,7 @@ Tracks the history of rollback state, rollback input, and synchronized state pro
 | method | `Ignore(Godot.Node)` | Do not record `subject` until FlushIgnores, which runs after every rollback tick. |
 | method | `PushRollbackState(Godot.Node,System.Int32)` | Record the registered rollback state properties of `subject` at `tick`, e.g. to seed spawn state. |
 | method | `ResetSession` | Drops every recorded tick, keeping which properties are registered. Called on session reset. |
+| method | `RestoreRollbackState(System.Int32,System.Collections.Generic.IEnumerable{Godot.Node})` | Restores only `subjects` to their latest rollback state at or before `tick`. |
 
 ### NetworkIdentityServer
 
@@ -234,6 +235,7 @@ Runs the rollback loop: restore history, resimulate, record, broadcast. Port of 
 | method | `ReportUnreproducedMutations(System.Collections.Generic.HashSet{Godot.Node},System.Int32)` | Mutations are expected to be a function of state and input, so resimulating a tick should produce them again. One that does not come back is either a legitimate change of outcome, or a one-off effect that the resimulation has just silently dropped, which is the hard-to-find half of foxssake/netfox#383. Traced, not warned, because only the second case is a problem and the two cannot be told apart from here. |
 | method | `ResetSession` | Drops the state left over from the session that just ended. |
 | method | `Rollback` | The rollback loop. Called by NetworkTime after every tick loop. |
+| event | `AfterDisplayRestore` | Emitted once the display state has been restored for `DisplayTick`, before interpolation records it. The place to show a node from a different tick than the rest of the world; see `DisplayKnownOnly`. Not in upstream netfox. |
 | event | `AfterLoop` | Emitted after the rollback loop. |
 | event | `AfterPrepareTick` | Emitted after state is restored for the tick. |
 | event | `AfterProcessTick` | Emitted after the tick is simulated. |
@@ -445,6 +447,8 @@ Configures rollback for a node tree: which properties are state, which are input
 
 | | Member | Summary |
 |---|---|---|
+| property | `DisplayDelayTicks` | How many ticks behind the present this node is currently shown, when `DisplayKnownOnly` is on. Zero for a node driven by this peer's own input. |
+| property | `DisplayKnownOnly` | Show this node from the last tick its input is actually known for, instead of from the predicted head. Where this peer is the node's state authority and someone else drives its input, the newest ticks are simulated from input that is still a round trip away and corrected when it lands - a remote player on the host's screen moves, snaps back, moves, and the host is the only screen that shows it. With this on, the node is displayed from the state after the last tick with real input, behind a delay that covers the worst input age of the last second so the node moves one tick per tick, and the TickInterpolator smooths it as usual. What is drawn is then always something that happened. The simulation is untouched - only what is put on the node between loops changes - and a node whose input is this peer's own, or whose state this peer does not own, is left alone. Not for observers. A peer that merely receives a node's state cannot tell "unchanged" from "not arrived" - an unchanged node sends nothing, by design of the diffs - so neither the age of the latest state nor the spacing of arrivals measures freshness there; both were tried and both held a standing player seconds in the past once it moved again. Hiding arrival jitter on an observer needs a freshness signal on the wire first. netfox-net#38. |
 | property | `EnablePrediction` | Simulate managed nodes even without up to date input. |
 | property | `InputProperties` | Input property paths in "Node:property" form, relative to Root. |
 | property | `Root` | Node the property paths are relative to; defaults to the parent. |
@@ -454,6 +458,7 @@ Configures rollback for a node tree: which properties are state, which are input
 | property | `VisibilityFilter` | Controls which peers receive state. Added as a child automatically, under its own name so that it reads as itself in a saved scene rather than as a generated one. |
 | method | `AddInput(System.Object,System.String)` | Add an input property at runtime. Node may be a string, NodePath or Node relative to Root. |
 | method | `AddState(System.Object,System.String)` | Add a state property at runtime. Node may be a string, NodePath or Node relative to Root. |
+| method | `DisplayFromKnown` | The display half of `DisplayKnownOnly`: puts the state recorded after the last tick with real input back on the managed nodes, over the state for the display tick that the rollback loop just restored. |
 | method | `GetInputAge` | Age of the latest known input in ticks, or -1 if none. |
 | method | `GetLastKnownInput` | Latest tick with input for this synchronizer, or -1. |
 | method | `GetLastKnownState` | Age of the latest known state in ticks, or -1. |

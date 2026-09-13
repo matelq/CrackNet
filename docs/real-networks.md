@@ -67,9 +67,23 @@ something predicted bodies collide with**. A client's copy of it is at least one
 a player who brushes it slides differently on each peer - 10cm apart for good, measured. The sample's NPC is on no
 collision layer for that reason.
 
-Whether remote players should be predicted at all, or shown a few ticks in the past with interpolation instead, is
-open in this repository (netfox-net#38). For an object nobody owns - prey, a ball - the honest choice is available
-per object: leave `EnablePrediction` off on its synchronizer and it is replicated and interpolated, never guessed.
+One more thing the listen server does that a dedicated server never shows anyone: the host is the authority for
+every remote player's body, cannot wait for that player's input, predicts it by repeating the last input it has, and
+corrects when the real input lands a round trip later. Every other peer receives that player as final state; the host
+draws the corrections. In a two-window test the host's screen showed the other player move, snap back, move - and
+that screen only. `RollbackSynchronizer.DisplayKnownOnly` is the answer: on the peer that owns a node's state but
+not its input, the node is displayed from the state after the last tick with real input, behind a delay that covers
+the worst input age of the last few seconds, so it moves one tick per tick and nothing drawn is a guess. The
+simulation is untouched. Measured with a per-frame check on displayed positions (`ConvergenceSmoke` counts frames on
+which a remote player is drawn against its own velocity or further than it could have walked): 7-9 jumps per walk
+on the host under every profile before, 0 after. It costs that player's latency in display time, on the host only.
+
+It does **not** apply to a peer that merely observes a node, and the reason is worth knowing: under diff states an
+unchanged node sends nothing, so an observer cannot tell "unchanged" from "not yet arrived" - the age of the latest
+received state and the spacing between arrivals both read a standing player as seconds stale once it moves again.
+Both were tried; both held the node in the past. Hiding arrival jitter on an observer needs a freshness signal on the
+wire first (netfox-net#65). For an object nobody owns - prey, a ball - the honest choice is still available per
+object: leave `EnablePrediction` off on its synchronizer and it is replicated and interpolated, never guessed.
 
 ## Test under a real network, not a LAN
 
@@ -173,11 +187,12 @@ than assume, and it has not been measured here (netfox-net#54).
 
 ## Still open
 
-- **Interpolate or extrapolate remote players** (netfox-net#38), and what `input_delay` buys (netfox-net#42). Both
-  wait on a prototype of player-to-player pushing, because pushing is the case that decides them.
+- **What `input_delay` buys** (netfox-net#42) waits on a prototype of player-to-player pushing.
 - **Corrections are shown as they land.** Nothing smooths a correction today; `TickInterpolator` smooths between
   ticks. The standard answer is a visual error offset that decays in rendering and never touches the simulation
-  (netfox-net#39). Not built, because nobody has yet seen the pop it would hide.
+  (netfox-net#39). The pop it would hide has now been seen: a thrown crate landing late on an observer, and the
+  one-tick step when a display delay changes.
+- **An observer-side jitter buffer** needs the wire to say "unchanged" (netfox-net#65, above).
 
 ## Reading
 

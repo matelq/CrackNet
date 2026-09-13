@@ -100,6 +100,16 @@ public partial class ConvergenceSmoke : Node
     private int _carryDropFrames;
     private float _carryDisplayGap;
 
+    /// <summary>
+    /// What the screen does with a remote player while it moves (netfox-net#38): per frame, after interpolation, the
+    /// displayed position is compared with the previous frame's. A step against the direction of the previous step
+    /// is a reversal - the player visibly moved back - and a step longer than three ticks of walking is a jump. Both
+    /// are what "jerky" means, and neither is visible in the quiet window or in a per-tick comparison. Counted for
+    /// remote players only; the local one is predicted from its own input and is the control.
+    /// </summary>
+    private int _remoteReversals, _remoteJumps, _localReversals, _remoteFrames, _watchedFrames;
+    private readonly Dictionary<string, (Vector3 Position, Vector3 Step)> _lastDisplayed = new();
+
     /// <summary>Worst distance between a player's node and its physics body, per tick: the body is what the other player collides with.</summary>
     private float _playerBodyGap;
     private string _playerBodyGapAt = "";
@@ -155,6 +165,10 @@ public partial class ConvergenceSmoke : Node
             else if (arg == "--pickup") _pickup = true;
         }
 
+        // Off by default headless (upstream parity), and this check measures what is drawn: without it every tick is
+        // a jump and no per-frame metric means anything
+        InterpolationServer.Instance.SetServerEnabled(true);
+
         // A trace left by an earlier run has a different random peer id in it, and a client that reads one compares
         // against a stranger. Clearing it here and waiting for our own name below makes that impossible rather than
         // unlikely.
@@ -183,6 +197,11 @@ public partial class ConvergenceSmoke : Node
         }
 
         NetworkTime.Instance.AfterTickLoop += Record;
+        NetworkSynchronizationServer.Instance.OnState += snapshot =>
+        {
+            foreach (var subject in snapshot.Subjects)
+                if (subject is PlayerCharacter) _statesReceived[subject.Name.ToString()] = _statesReceived.GetValueOrDefault(subject.Name.ToString()) + 1;
+        };
 
         // What actually arrives over the wire for each player, so "the state never got here" can be told apart from
         // "the state got here and was not applied"
@@ -313,6 +332,8 @@ public partial class ConvergenceSmoke : Node
         Steer(target);
         if (_onPlatform) Climb(delta, target);
 
+        WatchDisplayedMotion(delta);
+
         // Every frame, not every tick: a crate that is in the hand on every tick and on the floor in between is a
         // crate the player saw on the floor
         foreach (var (holder, crate) in Carried())
@@ -323,13 +344,49 @@ public partial class ConvergenceSmoke : Node
         }
     }
 
-    /// <summary>Every crate somebody on this peer believes they are carrying, with who.</summary>
-    private IEnumerable<(PlayerCharacter Holder, NetworkRigidBody3D Crate)> Carried()
+    private void WatchDisplayedMotion(double delta)
+    {
+        _watchedFrames++;
+        // A jump is a step well beyond what walking covers in one frame - measured against this frame's delta, since
+        // headless frames are neither 60 a second nor regular
+        var farther = 5.0f * (float)delta * 2.5f;
+        foreach (var player in Ordered())
+        {
+            var name = player.Name.ToString();
+            var position = player.GlobalPosition with { Y = 0 };
+            if (_lastDisplayed.TryGetValue(name, out var last))
+            {
+                var step = position - last.Position;
+                if (step.LengthSquared() > 1e-6f)
+                {
+                    // Against the velocity the player has in its state, not against the previous step: a player
+                    // steered onto a spot jiggles around it and really does reverse; a correction moves the drawing
+                    // against the way the player is going
+                    var velocity = player.Velocity with { Y = 0 };
+                    var reversed = velocity.LengthSquared() > 1 && step.Dot(velocity) < 0;
+                    if (player.IsLocal) { if (reversed) _localReversals++; }
+                    else
+                    {
+                        _remoteFrames++;
+                        if (reversed) _remoteReversals++;
+                        if (step.Length() > farther) _remoteJumps++;
+                    }
+                }
+                _lastDisplayed[name] = (position, step.LengthSquared() > 1e-6f ? step : last.Step);
+            }
+            else _lastDisplayed[name] = (position, Vector3.Zero);
+        }
+    }
+
+    /// <summary>Every crate somebody on this peer believes they are carrying, with who - as drawn, or as simulated when beliefs are given.</summary>
+    private IEnumerable<(PlayerCharacter Holder, NetworkRigidBody3D Crate)> Carried(Dictionary<string, SettledPlayer>? beliefs = null)
     {
         var crates = Crates();
         foreach (var player in Ordered())
-            if (player.HeldCrate >= 0 && player.HeldCrate < crates.Count && crates[player.HeldCrate] is NetworkRigidBody3D crate)
-                yield return (player, crate);
+        {
+            var held = beliefs is not null && beliefs.TryGetValue(player.Name.ToString(), out var belief) ? belief.JumpsLeft : player.HeldCrate;
+            if (held >= 0 && held < crates.Count && crates[held] is NetworkRigidBody3D crate) yield return (player, crate);
+        }
     }
 
     private static Vector3 Hand(PlayerCharacter holder) => holder.Hand;
@@ -342,25 +399,34 @@ public partial class ConvergenceSmoke : Node
     private static float Horizontally(PlayerCharacter a, PlayerCharacter b)
         => new Vector2(a.Position.X - b.Position.X, a.Position.Z - b.Position.Z).Length();
 
+    private readonly Dictionary<string, int> _inputAge = new(), _statesReceived = new();
+
     /// <summary>Keeps what this peer believes right now, against the tick it believes it for.</summary>
     private void Record()
     {
         var tick = NetworkTime.Instance.Tick;
-        var beliefs = Ordered().ToDictionary(player => player.Name.ToString(), Settle);
+        foreach (var player in Ordered())
+        {
+            var name = player.Name.ToString();
+            var input = player.Synchronizer.GetLastKnownInput();
+            _inputAge[name] = input < 0 ? -1 : tick - input;
+        }
+        var beliefs = Ordered().ToDictionary(player => player.Name.ToString(), player => Settle(player, tick));
         if (beliefs.Values.Any(belief => belief.JumpsLeft >= 0 && IsPlayer(belief)) && _pickup) _heldTicks++;
 
         // Crates too, by name like the players. They are the one thing here that rolls a real physics space back,
         // and until this line nothing compared what two peers believed about them - a crate in two places on two
         // screens passed. They are host-simulated and never predicted, so the expectation is the tight one.
         foreach (var crate in Crates())
-            beliefs[crate.Name.ToString()] = new SettledPlayer(crate.Position, "crate", 0);
+            beliefs[crate.Name.ToString()] = new SettledPlayer(SimulatedPosition(crate, tick), "crate", 0);
 
         // The body, not the node: the node is what gets drawn, the body is what gets collided with and thrown, and
         // nothing forces them to agree while the crate is frozen and carried by hand
-        foreach (var (holder, crate) in Carried())
+        // From what was simulated, not from what is drawn: a remote player is drawn a few ticks late on the host
+        foreach (var (holder, crate) in Carried(beliefs))
         {
             // Not on the tick it was grabbed: the layer change written inside that tick reaches queries on the next step
-            if (_heldLastTick.GetValueOrDefault(holder.Name.ToString(), -1) != holder.HeldCrate) continue;
+            if (_heldLastTick.GetValueOrDefault(holder.Name.ToString(), -1) != beliefs[holder.Name.ToString()].JumpsLeft) continue;
             var body = PhysicsServer3D.BodyGetState(crate.GetRid(), PhysicsServer3D.BodyState.Transform).AsTransform3D().Origin;
             var hits = crate.GetWorld3D().DirectSpaceState.IntersectPoint(new PhysicsPointQueryParameters3D { Position = body, CollisionMask = 1 });
             if (hits.Any(hit => hit["rid"].AsRid() == crate.GetRid())) _heldCrateCollidableTicks++;
@@ -386,9 +452,10 @@ public partial class ConvergenceSmoke : Node
         {
             if (!_isHost) break;
             var name = player.Name.ToString();
+            var held = beliefs[name].JumpsLeft;
             var was = _heldLastTick.GetValueOrDefault(name, -1);
-            _heldLastTick[name] = player.HeldCrate;
-            if (was < 0 || player.HeldCrate >= 0 || was >= allCrates.Count || allCrates[was] is not RigidBody3D thrownCrate) continue;
+            _heldLastTick[name] = held;
+            if (was < 0 || held >= 0 || was >= allCrates.Count || allCrates[was] is not RigidBody3D thrownCrate) continue;
             var body = PhysicsServer3D.BodyGetState(thrownCrate.GetRid(), PhysicsServer3D.BodyState.Transform).AsTransform3D().Origin;
             _thrownFromGap = Mathf.Max(_thrownFromGap, body.DistanceTo(Hand(player)));
         }
@@ -396,7 +463,7 @@ public partial class ConvergenceSmoke : Node
         // And the NPC: the one root nobody drives. Host-simulated and never predicted, so the same tight expectation
         foreach (var npc in _playground.GetNode("World/Npcs").GetChildren().OfType<Npc>())
         {
-            beliefs[npc.Name.ToString()] = new SettledPlayer(npc.Position, "npc", 0);
+            beliefs[npc.Name.ToString()] = new SettledPlayer(SimulatedPosition(npc, tick), "npc", 0);
             if (!_isHost && npc.SimulatedTicks > 0) _clientRanNpcRule = true;
         }
         _history[tick] = beliefs;
@@ -427,8 +494,28 @@ public partial class ConvergenceSmoke : Node
         => _playground.GetNode("World/Crates").GetChildren().OfType<Node3D>()
             .OrderBy(crate => crate.Name.ToString(), StringComparer.Ordinal).ToList();
 
-    private static SettledPlayer Settle(PlayerCharacter player)
-        => new(player.Position, player.StateMachine.State.ToString(), player.HeldCrate);
+    /// <summary>
+    /// What this peer <i>simulated</i> for the tick, read from the rollback history rather than from the node. After
+    /// the loop a node holds its display state, and since netfox-net#38 that can be a few ticks in the past for a
+    /// remote player on the host - reading it back as the belief for the current tick would compare display latency
+    /// and call it disagreement. Falls back to the node for anything the history has no record of.
+    /// </summary>
+    private static SettledPlayer Settle(PlayerCharacter player, int tick)
+    {
+        var snapshot = NetworkHistoryServer.Instance.GetRollbackStateSnapshot(tick);
+        var position = snapshot is not null && snapshot.TryGetProperty(player, "position", out var p) ? p.AsVector3() : player.Position;
+        var state = snapshot is not null && snapshot.TryGetProperty(player.StateMachine, "State", out var st) ? st.ToString() : player.StateMachine.State.ToString();
+        var held = snapshot is not null && snapshot.TryGetProperty(player, "HeldCrate", out var h) ? h.AsInt32() : player.HeldCrate;
+        return new SettledPlayer(position, state, held);
+    }
+
+    private static Vector3 SimulatedPosition(Node3D node, int tick)
+    {
+        var snapshot = NetworkHistoryServer.Instance.GetRollbackStateSnapshot(tick);
+        if (snapshot is not null && snapshot.TryGetProperty(node, "position", out var p)) return p.AsVector3();
+        if (snapshot is not null && snapshot.TryGetProperty(node, "PhysicsState", out var ps)) return ps.AsGodotArray()[0].AsVector3();
+        return node.Position;
+    }
 
     /// <summary>
     /// Players in the same order on every peer. Node names carry the peer id and every peer knows them all, so
@@ -506,6 +593,17 @@ public partial class ConvergenceSmoke : Node
         if (_pickup && _thrownFromGap > 1.5f) { failure += FormattableString.Invariant($" thrown-from-elsewhere({_thrownFromGap:F2}m)"); ok = false; }
         if (_pickup && _carryDropFrames > 0) { failure += FormattableString.Invariant($" crate-drawn-off-hand({_carryDropFrames}frames,{_carryDisplayGap:F2}m)"); ok = false; }
 
+        // A remote player must not be seen walking backwards or jumping while it walks forwards. Gated on the host
+        // only: that is where the guess being hidden is made (netfox-net#38), and where the report came from. A client
+        // shows the host's player straight from arriving state, with no input to predict from, and what it shows
+        // depends on how evenly the states arrive - printed, not gated, until the wire carries a freshness signal.
+        // Two reversals are allowed: one at the start and one at the end of a walk, where the direction really changes.
+        if (_isHost && (_remoteReversals > 2 || _remoteJumps > 0))
+        {
+            failure += $" remote-jerky(reversals={_remoteReversals} jumps={_remoteJumps} of {_remoteFrames} moving frames)";
+            ok = false;
+        }
+
         // The players have to have actually met, or the run proves nothing about collisions. Two capsules of radius
         // 0.4 resting against each other are 0.8 apart.
         var collided = _closestApproach < 1.2f;
@@ -572,10 +670,16 @@ public partial class ConvergenceSmoke : Node
                 $"{entry.Key}=({entry.Value.Position.X:F3},{entry.Value.Position.Y:F3},{entry.Value.Position.Z:F3})/{entry.Value.State}/{entry.Value.JumpsLeft}")));
         if (_dump) Dump();
 
+        // Whether the displayed position is interpolated at all, per player: a per-frame metric on a node that only
+        // moves once a tick would count every tick as a jump
+        var interpolation = string.Join(",", Ordered().Select(player =>
+            $"{(player.IsLocal ? "local" : "remote")}:{(InterpolationServer.Instance.CanInterpolate(player) ? "on" : "off")}/delay{player.Synchronizer.DisplayDelayTicks}/input_age{_inputAge.GetValueOrDefault(player.Name.ToString(), -1)}/states_rx{_statesReceived.GetValueOrDefault(player.Name.ToString())}"));
+        failure += $" display=[{interpolation}]";
+
         var head = FormattableString.Invariant(
             $"CONVERGENCE role={(_isHost ? "host" : "client")} ok={ok} peer=#{Multiplayer.GetUniqueId()} at_tick={_captureTick}");
         var tail = FormattableString.Invariant(
-            $"mode={(_onPlatform ? "platform" : "ground")} players={_final.Count(entry => IsPlayer(entry.Value))} crates={_final.Count(entry => entry.Value.State == "crate")} npcs={_final.Count(entry => entry.Value.State == "npc")} held_ticks={_heldTicks} held_crate_collidable_ticks={_heldCrateCollidableTicks} carry_drop_frames={_carryDropFrames} thrown_from_gap={_thrownFromGap:F3} player_body_gap={_playerBodyGap:F3}{_playerBodyGapAt} collided={collided} closest={_closestApproach:F3}@{_closestAt} shots={_finalShots}{comparison} {beliefs} {failure}");
+            $"mode={(_onPlatform ? "platform" : "ground")} players={_final.Count(entry => IsPlayer(entry.Value))} crates={_final.Count(entry => entry.Value.State == "crate")} npcs={_final.Count(entry => entry.Value.State == "npc")} held_ticks={_heldTicks} held_crate_collidable_ticks={_heldCrateCollidableTicks} carry_drop_frames={_carryDropFrames} thrown_from_gap={_thrownFromGap:F3} player_body_gap={_playerBodyGap:F3}{_playerBodyGapAt} remote_reversals={_remoteReversals} remote_jumps={_remoteJumps} remote_moving_frames={_remoteFrames}/{_watchedFrames} local_reversals={_localReversals} collided={collided} closest={_closestApproach:F3}@{_closestAt} shots={_finalShots}{comparison} {beliefs} {failure}");
         GD.Print($"{head} {tail}");
 
         // What the link did, not what it was asked to do. A configured burst that never fires reads exactly like a

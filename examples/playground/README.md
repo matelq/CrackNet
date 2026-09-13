@@ -116,6 +116,13 @@ it measures **during the carry**, not only after everything has settled: `held_c
 whether the held body can still be walked into, `carry_drop_frames` counts the frames the crate was drawn away from
 the hand, and `thrown_from_gap` is how far from the hand it left. The quiet-window comparison saw none of the above.
 
+**What the host draws for other players.** `player.tscn` turns on `DisplayKnownOnly` on the synchronizer: the host,
+which owns every player's body but only its own input, shows a remote player from the last tick it has that player's
+real input for, behind a small jitter buffer, rather than from the prediction it corrects every frame. That removed
+the "moves, snaps back, moves" that only the host's window showed (netfox-net#38). `ConvergenceSmoke` measures it per
+frame - `remote_jumps` and `remote_reversals` on the host must be zero - with interpolation switched on for the
+headless run, since what is measured is what is drawn.
+
 **The NPC** (`Npc.cs`, one `Npc_0` under `World/Npcs`) is the thing nobody controls: it wanders and runs from players
 who come close. Its "AI" is a steering function in `RollbackTick` - a pure function of state, so the host can roll
 it back when a player's late input turns out to have chased it another way. Authority is the host and prediction is

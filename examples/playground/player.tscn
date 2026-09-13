@@ -35,6 +35,7 @@ script = ExtResource("2_gf4vq")
 script = ExtResource("3_5l22w")
 Root = NodePath("..")
 EnablePrediction = true
+DisplayKnownOnly = true
 StateProperties = PackedStringArray(":position", ":velocity", "RewindableStateMachine:State", ":JumpHeld", ":JumpsLeft", ":HeldCrate", ":Facing")
 InputProperties = PackedStringArray("Input:Jump", "Input:Movement", "Input:Grab", "Input:Throw")
 

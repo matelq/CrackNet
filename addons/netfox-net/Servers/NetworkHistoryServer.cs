@@ -164,6 +164,9 @@ public partial class NetworkHistoryServer : Node
 
     internal bool RestoreRollbackInput(int tick) => RestoreLatest(tick, _rbInputHistory);
     internal bool RestoreRollbackState(int tick) => RestoreLatest(tick, _rbStateHistory);
+
+    /// <summary>Restores only <paramref name="subjects"/> to their latest rollback state at or before <paramref name="tick"/>.</summary>
+    internal bool RestoreRollbackState(int tick, IEnumerable<Node> subjects) => RestoreLatest(tick, _rbStateHistory, subjects);
     internal bool RestoreSynchronizerState(int tick) => RestoreLatest(tick, _syncHistory);
 
     internal Snapshot? GetRollbackInputSnapshot(int tick) => _rbInputSnapshots.GetAt(tick);
@@ -235,11 +238,11 @@ public partial class NetworkHistoryServer : Node
         }
     }
 
-    private bool RestoreLatest(int tick, PerObjectHistory history)
+    private bool RestoreLatest(int tick, PerObjectHistory history, IEnumerable<Node>? subjects = null)
     {
         var anyApplied = false;
 
-        foreach (var subject in history.Subjects.ToList())
+        foreach (var subject in (subjects ?? history.Subjects).ToList())
         {
             var snapshot = history.GetLatestSnapshot(tick, subject);
             if (snapshot is null) continue;

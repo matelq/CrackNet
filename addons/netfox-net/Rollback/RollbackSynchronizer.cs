@@ -31,6 +31,27 @@ public partial class RollbackSynchronizer : BaseSynchronizer
         }
     }
 
+    /// <summary>
+    /// Show this node from the last tick its input is actually known for, instead of from the predicted head.
+    /// <para>
+    /// Where this peer is the node's state authority and someone else drives its input, the newest ticks are simulated
+    /// from input that is still a round trip away and corrected when it lands - a remote player on the host's screen
+    /// moves, snaps back, moves, and the host is the only screen that shows it. With this on, the node is displayed
+    /// from the state after the last tick with real input, behind a delay that covers the worst input age of the last
+    /// second so the node moves one tick per tick, and the TickInterpolator smooths it as usual. What is drawn is then
+    /// always something that happened. The simulation is untouched - only what is put on the node between loops
+    /// changes - and a node whose input is this peer's own, or whose state this peer does not own, is left alone.
+    /// </para>
+    /// <para>
+    /// Not for observers. A peer that merely receives a node's state cannot tell "unchanged" from "not arrived" -
+    /// an unchanged node sends nothing, by design of the diffs - so neither the age of the latest state nor the
+    /// spacing of arrivals measures freshness there; both were tried and both held a standing player seconds in the
+    /// past once it moved again. Hiding arrival jitter on an observer needs a freshness signal on the wire first.
+    /// netfox-net#38.
+    /// </para>
+    /// </summary>
+    [Export] public bool DisplayKnownOnly { get; set; }
+
     /// <summary>State property paths in "Node:property" form, relative to Root.</summary>
     [ExportGroup("State")]
     [Export] public string[] StateProperties { get; set; } = [];
@@ -234,6 +255,61 @@ public partial class RollbackSynchronizer : BaseSynchronizer
     /// <summary>Do not record the state of <paramref name="node"/> during this rollback tick.</summary>
     public void IgnorePrediction(Node node) => Context.NetworkHistoryServer.Ignore(node);
 
+    /// <summary>
+    /// The display half of <see cref="DisplayKnownOnly"/>: puts the state recorded after the last tick with real
+    /// input back on the managed nodes, over the state for the display tick that the rollback loop just restored.
+    /// </summary>
+    private void DisplayFromKnown()
+    {
+        if (!DisplayKnownOnly || _inputProperties.IsEmpty) return;
+        if (_inputProperties.Subjects.All(subject => subject.IsMultiplayerAuthority())) return; // our own input: nothing is guessed
+        if (!_stateProperties.Subjects.All(subject => subject.IsMultiplayerAuthority())) return; // not ours to know better
+
+        var history = Context.NetworkHistoryServer;
+        var now = Context.NetworkTime.Tick;
+        var known = history.GetLatestInputFor(_inputProperties.Subjects, now) + 1;
+        if (known <= 0) return;
+
+        // A jitter buffer rather than the newest real tick: data arrives in bunches, and a display that advances as
+        // data arrives stands still and then leaps. The delay is the worst input age of the last three seconds, so it
+        // changes only when the link does. Growing it moves the node back a tick once; shrinking it skips a tick
+        // once. Slewing through those instead of stepping is netfox-net#39, the same smoothing corrections need.
+        _recentAges[now % _recentAges.Length] = now - known;
+        _recentAgeTicks[now % _recentAges.Length] = now;
+        var delay = 0;
+        var window = Context.NetworkTime.Tickrate * 3;
+        for (var i = 0; i < _recentAges.Length; i++)
+            if (now - _recentAgeTicks[i] < window) delay = Math.Max(delay, _recentAges[i]);
+
+        // Growing the delay moves the node back a tick, once, and is rare. Shrinking it would skip a tick forward
+        // every time the link quietens - a hitch on every walk. So the delay only shrinks when nobody could see it:
+        // when the node's state is the same at the tick shown now and at the tick that would be shown instead.
+        if (delay < DisplayDelayTicks && !SameState(now - DisplayDelayTicks, now - delay)) delay = DisplayDelayTicks;
+
+        DisplayDelayTicks = delay;
+        history.RestoreRollbackState(Math.Min(Context.NetworkRollback.DisplayTick, now - delay), _stateProperties.Subjects);
+    }
+
+    private bool SameState(int tickA, int tickB)
+    {
+        var history = Context.NetworkHistoryServer;
+        var a = history.GetRollbackStateSnapshot(tickA);
+        var b = history.GetRollbackStateSnapshot(tickB);
+        if (a is null || b is null) return false;
+        foreach (var subject in _stateProperties.Subjects)
+            foreach (var property in _stateProperties.GetPropertiesOf(subject))
+            {
+                if (!a.TryGetProperty(subject, property, out var va) || !b.TryGetProperty(subject, property, out var vb)) return false;
+                if (!Snapshot.ValueComparer.Equals(va, vb)) return false;
+            }
+        return true;
+    }
+
+    /// <summary>How many ticks behind the present this node is currently shown, when <see cref="DisplayKnownOnly"/> is on. Zero for a node driven by this peer's own input.</summary>
+    public int DisplayDelayTicks { get; private set; }
+    private readonly int[] _recentAges = new int[256];
+    private readonly int[] _recentAgeTicks = new int[256];
+
     /// <summary>Latest tick with input for this synchronizer, or -1.</summary>
     public int GetLastKnownInput()
         => Context.NetworkHistoryServer.GetLatestInputFor(_inputProperties.Subjects, Context.NetworkTime.Tick);
@@ -308,6 +384,7 @@ public partial class RollbackSynchronizer : BaseSynchronizer
             rollback.NotifyResimulationStart(SpawnTick);
         };
         rollback.BeforeLoop += _spawnResimHandler;
+        rollback.AfterDisplayRestore += DisplayFromKnown;
 
         VisibilityFilter ??= new PeerVisibilityFilter { Name = "PeerVisibilityFilter" };
         if (VisibilityFilter.GetParent() is null)
@@ -321,8 +398,12 @@ public partial class RollbackSynchronizer : BaseSynchronizer
         if (Root is not null) ManagedRoots.Remove(Root);
 
         // Godot auto-disconnects signals of freed nodes; C# events need explicit cleanup
-        if (_spawnResimHandler is not null && Context.NetworkRollback is { } rollback)
-            rollback.BeforeLoop -= _spawnResimHandler;
+        if (Context.NetworkRollback is { } rollback)
+        {
+            if (_spawnResimHandler is not null) rollback.BeforeLoop -= _spawnResimHandler;
+            rollback.AfterDisplayRestore -= DisplayFromKnown;
+        }
+
         StopReprocessOnConnect();
 
         // Consider the synchronizer and its nodes freed, deregister everything

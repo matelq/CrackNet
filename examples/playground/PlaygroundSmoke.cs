@@ -14,6 +14,9 @@ public partial class PlaygroundSmoke : Node
 {
     private bool _isHost;
     private double _seconds = 10;
+
+    /// <summary>How long to hold the direction key. Two seconds is enough to have something to replicate; a longer walk gives another peer something to watch.</summary>
+    private double _walk = 2.0;
     private Playground _playground = null!;
 
     // The two processes cannot both report while the other is alive - whoever outlives the other sees it leave. So
@@ -52,6 +55,7 @@ public partial class PlaygroundSmoke : Node
             if (arg == "--host") _isHost = true;
             else if (arg == "--join") _isHost = false;
             else if (arg.StartsWith("--seconds=")) _seconds = double.Parse(arg["--seconds=".Length..], System.Globalization.CultureInfo.InvariantCulture);
+            else if (arg.StartsWith("--walk=")) _walk = double.Parse(arg["--walk=".Length..], System.Globalization.CultureInfo.InvariantCulture);
         }
 
         _playground = GD.Load<PackedScene>("res://examples/playground/playground.tscn").Instantiate<Playground>();
@@ -65,7 +69,7 @@ public partial class PlaygroundSmoke : Node
         // Hold a direction briefly, so the players move and the synchronizers have something to replicate, then let
         // go well before anyone walks off the ground
         Godot.Input.ParseInputEvent(new InputEventAction { Action = "ui_right", Pressed = true });
-        await ToSignal(GetTree().CreateTimer(2.0), Godot.Timer.SignalName.Timeout);
+        await ToSignal(GetTree().CreateTimer(_walk), Godot.Timer.SignalName.Timeout);
         Godot.Input.ParseInputEvent(new InputEventAction { Action = "ui_right", Pressed = false });
 
         // One shot, so the weapon's request and accept round trip is exercised too

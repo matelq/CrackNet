@@ -68,6 +68,13 @@ public partial class NetworkRollback : Node
     /// <summary>Emitted after the rollback loop.</summary>
     public event Action? AfterLoop;
 
+    /// <summary>
+    /// Emitted once the display state has been restored for <see cref="DisplayTick"/>, before interpolation records
+    /// it. The place to show a node from a different tick than the rest of the world; see
+    /// <see cref="RollbackSynchronizer.DisplayKnownOnly"/>. Not in upstream netfox.
+    /// </summary>
+    public event Action? AfterDisplayRestore;
+
     private int _tick;
     private int _resimFrom;
     private int _rollbackFrom = -1;
@@ -327,6 +334,7 @@ public partial class NetworkRollback : Node
         AfterLoop?.Invoke();
         history.RestoreRollbackState(DisplayTick);
         liveness.RestoreLiveness(DisplayTick);
+        AfterDisplayRestore?.Invoke();
         simulation.TrimTicksSimulated(HistoryStart);
         liveness.DestroyOldSubjects(HistoryStart);
 

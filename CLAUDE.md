@@ -81,7 +81,9 @@ a session that predates `.mcp.json`, talk to the server over stdio yourself (spa
 `initialize`, `tools/call`); it connects to the editor asynchronously, so wait a couple of seconds before the first call.
 Quirks: `godot_exec` takes `source`, runs outside the tree, so reach the scene through
 `Engine.get_main_loop().current_scene`; buttons are pressed with `emit_signal("pressed")`; `godot_input sequence` takes
-`inputs: [{action_name, duration_ms, start_ms}]`; `screenshot_game` returns the PNG inline. Used first to see #60 with
+`inputs: [{action_name, duration_ms, start_ms}]`; `screenshot_game` returns the PNG inline. `godot_game_time freeze` pauses the tree and holds the netfox tick, but
+`step` makes NetworkTime catch up to the wall clock in a burst and other peers keep running - pause one peer to look at
+it, never step a multiplayer session with it. Used first to see #60 with
 your own eyes: the NPC had a collision shape and no mesh, and the after-screenshot is how the fix was checked.
 
 ## Docs

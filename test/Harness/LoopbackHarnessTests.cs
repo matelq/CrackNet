@@ -721,6 +721,37 @@ public partial class LoopbackHarnessTests : HarnessSuite
         }
     }
 
+    /// <summary>
+    /// A node whose input and state both belong to the host is real on every tick, so the host sends it at the newest
+    /// tick of every loop, and while it moves a client has to hear about it nearly every tick. Written when the
+    /// playground counted 11 states in ten seconds for the host's player - which turned out to be a player standing
+    /// still, for whom an empty diff is the correct message; this pins the moving case, which nothing had.
+    /// </summary>
+    [Test]
+    public async Task TheHostsOwnPlayerReachesAClientEveryFewTicks()
+    {
+        Network.LatencyMs = 20;
+        var hostPlayers = SpawnPlayers(Host);
+        var clientPlayers = SpawnPlayers(Client);
+
+        var ticksWithHostPlayer = new HashSet<int>();
+        var ticksWithClientPlayer = new HashSet<int>();
+        Client.Context.NetworkSynchronizationServer.OnState += snapshot =>
+        {
+            if (snapshot.Subjects.Contains(clientPlayers[1])) ticksWithHostPlayer.Add(snapshot.Tick);
+            if (snapshot.Subjects.Contains(clientPlayers[2])) ticksWithClientPlayer.Add(snapshot.Tick);
+        };
+
+        await WaitUntil(() => hostPlayers[1].Position.X > 0.5f && clientPlayers[1].Position.X > 0.5f, 6);
+        var from = Host.Context.NetworkTime.Tick;
+        await WaitUntil(() => Host.Context.NetworkTime.Tick >= from + 60, 6);
+
+        var hostPlayerStates = ticksWithHostPlayer.Count(tick => tick >= from && tick < from + 60);
+        var clientPlayerStates = ticksWithClientPlayer.Count(tick => tick >= from && tick < from + 60);
+        Expect.True(hostPlayerStates >= 30,
+            $"in 60 ticks the client got state for the host's player on {hostPlayerStates} ticks and for its own on {clientPlayerStates}");
+    }
+
     private static string Describe(Dictionary<NetfoxStack, Dictionary<int, HarnessPlayer>> players)
         => string.Join(" ", players.Select(entry => $"{entry.Key.Name}={Positions(entry.Value)}"));
 
