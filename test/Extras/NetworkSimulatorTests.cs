@@ -110,4 +110,69 @@ public partial class NetworkSimulatorTests : TestSuite
 
         Expect.Equal(simulator.ServerPort, simulator.ConnectPort);
     }
+
+    /// <summary>
+    /// A burst that never fires reads exactly like a clean link, so the arithmetic that decides when one is on is
+    /// worth pinning: seconds against milliseconds, and a modulo on an unsigned clock.
+    /// </summary>
+    [Test]
+    public void BurstsFireForTheirDurationAndThenStop()
+    {
+        var profile = new NetworkSimulator.Profile(BurstLossMs: 300, BurstIntervalSeconds: 5);
+
+        Expect.True(NetworkSimulator.InLossBurst(profile, 0), "a burst should be on at the start of an interval");
+        Expect.True(NetworkSimulator.InLossBurst(profile, 299), "299ms into a 300ms burst");
+        Expect.False(NetworkSimulator.InLossBurst(profile, 300), "300ms is one past the end");
+        Expect.False(NetworkSimulator.InLossBurst(profile, 4999), "the quiet stretch before the next one");
+        Expect.True(NetworkSimulator.InLossBurst(profile, 5000), "the next interval starts another burst");
+        Expect.True(NetworkSimulator.InLossBurst(profile, 100_000_100), "and it keeps working far from zero");
+
+        // Which is 6% of the time, and the fraction is the point: it has to beat an input redundancy of three
+        var on = Enumerable.Range(0, 10_000).Count(ms => NetworkSimulator.InLossBurst(profile, (ulong)ms));
+        Expect.Equal(600, on);
+
+        Expect.False(NetworkSimulator.InLossBurst(new NetworkSimulator.Profile(BurstLossMs: 300), 0),
+            "no interval means no bursts");
+        Expect.False(NetworkSimulator.InLossBurst(new NetworkSimulator.Profile(BurstIntervalSeconds: 5), 0),
+            "no duration means no bursts");
+    }
+
+    /// <summary>Oscillating jitter has to reach both ends of its spread, or it is just a constant delay again.</summary>
+    [Test]
+    public void OscillatingJitterSweepsTheWholeSpread()
+    {
+        var profile = new NetworkSimulator.Profile(JitterMs: 100, JitterPeriodSeconds: 10);
+
+        Expect.Equal(0, NetworkSimulator.OscillatingJitter(profile, 0));
+        Expect.Equal(100, NetworkSimulator.OscillatingJitter(profile, 5000));
+        Expect.Equal(0, NetworkSimulator.OscillatingJitter(profile, 10_000));
+
+        // And never leaves it, which is what keeps a packet from arriving before the link allows
+        for (var ms = 0; ms < 10_000; ms += 137)
+        {
+            var jitter = NetworkSimulator.OscillatingJitter(profile, (ulong)ms);
+            Expect.True(jitter is >= 0 and <= 100, $"jitter {jitter} at {ms}ms is outside 0..100");
+        }
+    }
+
+    /// <summary>The two named profiles are what checks ask for by name, so their shape is part of the contract.</summary>
+    [Test]
+    public void TheNamedProfilesCarryJitterAndBursts()
+    {
+        foreach (var (name, profile) in new[]
+                 {
+                     ("Realistic", NetworkSimulator.Profile.Realistic),
+                     ("Hostile", NetworkSimulator.Profile.Hostile),
+                 })
+        {
+            Expect.True(profile.LatencyMs > 0, $"{name} has no latency");
+            Expect.True(profile.JitterMs > 0, $"{name} has no jitter, which is half of what it is for");
+            Expect.True(profile.PacketLossPercent > 0, $"{name} has no steady loss");
+            Expect.True(NetworkSimulator.InLossBurst(profile, 0), $"{name} never bursts");
+        }
+
+        // Realistic is the floor to playtest above; Hostile is what a check runs against
+        Expect.True(NetworkSimulator.Profile.Hostile.LatencyMs > NetworkSimulator.Profile.Realistic.LatencyMs);
+        Expect.True(NetworkSimulator.Profile.Hostile.PacketLossPercent > NetworkSimulator.Profile.Realistic.PacketLossPercent);
+    }
 }

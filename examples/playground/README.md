@@ -82,9 +82,16 @@ jumps left, scoreboard - over the whole quiet window after the keys are released
 wall clock is what makes it meaningful with the platform in play, since the platform never stops.
 
 ```
-godot --headless --path . res://examples/playground/ConvergenceSmoke.tscn -- --host --latency=120 --loss=10
-godot --headless --path . res://examples/playground/ConvergenceSmoke.tscn -- --join --latency=120 --loss=10
+godot --headless --path . res://examples/playground/ConvergenceSmoke.tscn -- --host --profile=hostile
+godot --headless --path . res://examples/playground/ConvergenceSmoke.tscn -- --join --profile=hostile
 ```
+
+`--profile` picks a named set of link conditions instead of the constant delay and even loss `--latency` and `--loss`
+give, which no real network does either of. `realistic` is
+[what mas-bandwidth recommends playtesting above](https://mas-bandwidth.com/what-is-lag/) - 50ms round trip, jitter,
+1% steady loss and a burst every few seconds - and `hostile` is deliberately worse, because a floor to play above is
+not the same thing as a check. The run prints what the link actually did (`forwarded`, `dropped`, `burst_dropped`), so
+a burst that never fired cannot be mistaken for a clean run.
 
 `--peers=3` waits for three players before starting, and is then given to all three processes. Two peers is the one
 count at which every player is either your own or the host's, so nothing has to be relayed on anyone else's behalf -

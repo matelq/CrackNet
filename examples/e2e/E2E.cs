@@ -76,6 +76,9 @@ public partial class E2E : Node
     private double _seconds = 6;
     private int _latencyMs;
     private double _lossPercent;
+
+    /// <summary>Named conditions - jitter and burst loss - instead of one delay and even loss. Null uses the flags.</summary>
+    private NetworkSimulator.Profile? _profile;
     private int _statesReceived;
     private int _inputsReceived;
     private readonly Dictionary<int, E2EPlayer> _players = new();
@@ -92,6 +95,8 @@ public partial class E2E : Node
             else if (arg.StartsWith("--seconds=")) _seconds = ParseDouble(arg, "--seconds=");
             else if (arg.StartsWith("--latency=")) _latencyMs = (int)ParseDouble(arg, "--latency=");
             else if (arg.StartsWith("--loss=")) _lossPercent = ParseDouble(arg, "--loss=");
+            else if (arg == "--profile=realistic") _profile = NetworkSimulator.Profile.Realistic;
+            else if (arg == "--profile=hostile") _profile = NetworkSimulator.Profile.Hostile;
         }
 
         NetworkSynchronizationServer.Instance.OnState += snapshot =>
@@ -103,7 +108,8 @@ public partial class E2E : Node
         };
         NetworkSynchronizationServer.Instance.OnInput += _ => _inputsReceived++;
 
-        var simulated = _latencyMs > 0 || _lossPercent > 0;
+        var conditions = _profile ?? new NetworkSimulator.Profile(_latencyMs, _lossPercent);
+        var simulated = _profile is not null || _latencyMs > 0 || _lossPercent > 0;
         var peer = new ENetMultiplayerPeer();
         Error error;
 
@@ -114,8 +120,8 @@ public partial class E2E : Node
             {
                 var simulator = new NetworkSimulator { Name = "NetworkSimulator" };
                 AddChild(simulator);
-                var proxyPort = simulator.StartProxy(Port, _latencyMs, _lossPercent);
-                GD.Print($"E2E proxy on port {proxyPort} with {_latencyMs}ms latency and {_lossPercent}% loss");
+                var proxyPort = simulator.StartProxy(Port, conditions);
+                GD.Print($"E2E proxy on port {proxyPort} with {conditions}");
             }
         }
         else

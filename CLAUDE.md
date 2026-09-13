@@ -24,11 +24,11 @@ dotnet run -c Release --project Netfox.Core.Benchmarks -- --filter '*'    # core
 dotnet build Netfox.csproj                                                # addon + tests
 <godot> --headless --path . res://test/TestRunner.tscn                    # Godot tests, exit 0 = ok
 <godot> --headless --path . res://examples/e2e/E2E.tscn -- --host --seconds=14   # host must outlive the client
-<godot> --headless --path . res://examples/e2e/E2E.tscn -- --join --seconds=10  # add --latency=40 --loss=3 on both for the proxy run
+<godot> --headless --path . res://examples/e2e/E2E.tscn -- --join --seconds=10  # add --profile=realistic on both for the proxy run
 <godot> --headless --path . res://examples/playground/PlaygroundSmoke.tscn -- --host --seconds=14   # sample, host first
 <godot> --headless --path . res://examples/playground/PlaygroundSmoke.tscn -- --join --seconds=8
 <godot> --headless --path . res://examples/playground/PlatformRideCheck.tscn   # rider stays on the moving platform
-<godot> --headless --path . res://examples/playground/ConvergenceSmoke.tscn -- --host|--join   # peers agree after colliding; add --peers=3 (one process each), --on-platform --latency=120 --loss=10
+<godot> --headless --path . res://examples/playground/ConvergenceSmoke.tscn -- --host|--join   # peers agree after colliding; add --peers=3 (one process each), --on-platform, --profile=realistic|hostile
 <godot> --headless --path . res://examples/playground/PlatformPushCheck.tscn [-- --no-push]   # #41 reproducer, fails on purpose; --no-push is the control
 ```
 

@@ -96,12 +96,12 @@ jobs:
         run: $GODOT --headless --path netfox --import || true
       - name: Compare tick traces against the original
         run: sh parity/run-parity.sh "$GODOT"
-      - name: Run e2e through the latency and loss proxy
+      - name: Run e2e through the proxy, under what a real network does
         run: |
-          "$GODOT" --headless --path . res://examples/e2e/E2E.tscn -- --host --seconds=14 --latency=40 --loss=3 > host-lossy.log 2>&1 &
+          "$GODOT" --headless --path . res://examples/e2e/E2E.tscn -- --host --seconds=14 --profile=realistic > host-lossy.log 2>&1 &
           host=$!
           sleep 2
-          "$GODOT" --headless --path . res://examples/e2e/E2E.tscn -- --join --seconds=10 --latency=40 --loss=3 > client-lossy.log 2>&1 || true
+          "$GODOT" --headless --path . res://examples/e2e/E2E.tscn -- --join --seconds=10 --profile=realistic > client-lossy.log 2>&1 || true
           wait $host || true
           echo "--- host"; cat host-lossy.log
           echo "--- client"; cat client-lossy.log

@@ -70,6 +70,15 @@ public partial class ConvergenceSmoke : Node
     private bool _dump;
     private int _latencyMs;
     private double _lossPercent;
+
+    /// <summary>
+    /// A named set of conditions instead of the constant delay and even loss that --latency and --loss give, which no
+    /// real link does either of. Null runs on whatever those two flags said.
+    /// </summary>
+    private NetworkSimulator.Profile? _profile;
+
+    /// <summary>The proxy, on the host only, so the report can say what the link actually did rather than what it was asked to do.</summary>
+    private NetworkSimulator? _proxy;
     private Playground _playground = null!;
     private Node _players = null!;
     private MovingPlatform _platform = null!;
@@ -105,6 +114,8 @@ public partial class ConvergenceSmoke : Node
             else if (arg.StartsWith("--latency=")) _latencyMs = (int)Parse(arg, "--latency=");
             else if (arg.StartsWith("--loss=")) _lossPercent = Parse(arg, "--loss=");
             else if (arg.StartsWith("--peers=")) _peers = Math.Max(2, (int)Parse(arg, "--peers="));
+            else if (arg == "--profile=realistic") _profile = NetworkSimulator.Profile.Realistic;
+            else if (arg == "--profile=hostile") _profile = NetworkSimulator.Profile.Hostile;
         }
 
         // A trace left by an earlier run has a different random peer id in it, and a client that reads one compares
@@ -120,7 +131,8 @@ public partial class ConvergenceSmoke : Node
 
         // With a proxy in the way the host still listens on its own port and the client goes to the proxy's, which
         // is where the delay and the dropped packets live
-        var simulated = _latencyMs > 0 || _lossPercent > 0;
+        var conditions = _profile ?? new NetworkSimulator.Profile(_latencyMs, _lossPercent);
+        var simulated = _profile is not null || _latencyMs > 0 || _lossPercent > 0;
         if (simulated && !_isHost) _playground.Port += 1;
 
         _playground.GetNode<Button>(_isHost ? "UI/Lobby/Panel/Rows/Buttons/Host" : "UI/Lobby/Panel/Rows/Buttons/Join")
@@ -128,9 +140,9 @@ public partial class ConvergenceSmoke : Node
 
         if (simulated && _isHost)
         {
-            var port = GetNode<NetworkSimulator>("/root/NetworkSimulator")
-                .StartProxy(_playground.Port, _latencyMs, _lossPercent);
-            GD.Print($"CONVERGENCE proxy on {port} with {_latencyMs}ms latency and {_lossPercent}% loss");
+            _proxy = GetNode<NetworkSimulator>("/root/NetworkSimulator");
+            var port = _proxy.StartProxy(_playground.Port, conditions);
+            GD.Print($"CONVERGENCE proxy on {port} with {conditions}");
         }
 
         NetworkTime.Instance.AfterTickLoop += Record;
@@ -215,7 +227,7 @@ public partial class ConvergenceSmoke : Node
         var ordered = Ordered();
         for (var i = 0; i < ordered.Count; i++)
             for (var j = i + 1; j < ordered.Count; j++)
-                _closestApproach = Mathf.Min(_closestApproach, ordered[i].Position.DistanceTo(ordered[j].Position));
+                _closestApproach = Mathf.Min(_closestApproach, Horizontally(ordered[i], ordered[j]));
 
         // On the platform the target moves, and getting up there needs the jump: its top is 1.2m above the ground,
         // which is one jump with nothing to spare
@@ -223,6 +235,14 @@ public partial class ConvergenceSmoke : Node
         Steer(target);
         if (_onPlatform) Climb(delta, target);
     }
+
+    /// <summary>
+    /// How far apart two players are on the floor, ignoring height. Straight line distance answers the wrong
+    /// question: a player that climbs on top of another is about 1.6m away by that measure and in contact by any
+    /// other, so a run where that happened read as one where they never met.
+    /// </summary>
+    private static float Horizontally(PlayerCharacter a, PlayerCharacter b)
+        => new Vector2(a.Position.X - b.Position.X, a.Position.Z - b.Position.Z).Length();
 
     /// <summary>Keeps what this peer believes right now, against the tick it believes it for.</summary>
     private void Record()
@@ -379,6 +399,15 @@ public partial class ConvergenceSmoke : Node
         var tail = FormattableString.Invariant(
             $"mode={(_onPlatform ? "platform" : "ground")} players={_final.Count} collided={collided} closest={_closestApproach:F3} shots={_finalShots}{comparison} {beliefs} {failure}");
         GD.Print($"{head} {tail}");
+
+        // What the link did, not what it was asked to do. A configured burst that never fires reads exactly like a
+        // clean run otherwise, and that is the kind of check that passes for the wrong reason.
+        if (_proxy is not null)
+        {
+            var counts = _proxy.ProxyCounts;
+            GD.Print(FormattableString.Invariant(
+                $"CONVERGENCE link: forwarded={counts.Forwarded} dropped={counts.Dropped} burst_dropped={counts.BurstDropped}"));
+        }
 
         GetTree().Quit(ok ? 0 : 1);
     }
