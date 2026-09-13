@@ -70,6 +70,20 @@ Two-process checks: give the host a longer head start than feels necessary. The 
 Godot, and a client that starts first simply never connects - `ConvergenceSmoke` then reports `players=0`, which reads
 like a broken check rather than a slow start.
 
+## Driving the editor and a running game (godot-mcp)
+
+`addons/godot_mcp` (satelliteoflove/godot-mcp, MIT, committed) plus `.mcp.json` give the agent the editor: open and run
+scenes, inject input actions, run GDScript inside the running game, screenshot it, and sample node fields per frame.
+The plugin is enabled in project.godot and adds the `MCPGameBridge` autoload, which is inert headless (the suite and
+the smokes run with it). It needs the editor open: `Godot_v4.7.2-stable_mono_win64.exe --editor --path .` in the
+background; the addon then listens on 127.0.0.1:6550 and a freshly started Claude session gets the `godot_*` tools. In
+a session that predates `.mcp.json`, talk to the server over stdio yourself (spawn `npx -y @satelliteoflove/godot-mcp`,
+`initialize`, `tools/call`); it connects to the editor asynchronously, so wait a couple of seconds before the first call.
+Quirks: `godot_exec` takes `source`, runs outside the tree, so reach the scene through
+`Engine.get_main_loop().current_scene`; buttons are pressed with `emit_signal("pressed")`; `godot_input sequence` takes
+`inputs: [{action_name, duration_ms, start_ms}]`; `screenshot_game` returns the PNG inline. Used first to see #60 with
+your own eyes: the NPC had a collision shape and no mesh, and the after-screenshot is how the fix was checked.
+
 ## Docs
 
 `docs/` holds the guides, written for C# users of the library rather than for this repo. `docs/api.md` is generated:

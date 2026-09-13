@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "godot-mcp": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@satelliteoflove/godot-mcp"
+      ],
+      "env": {}
+    }
+  }
+}

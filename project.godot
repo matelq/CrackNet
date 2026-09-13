@@ -30,6 +30,7 @@ NetworkPerformance="*res://addons/netfox-net/NetworkPerformance.cs"
 InterpolationServer="*res://addons/netfox-net/Servers/InterpolationServer.cs"
 WindowTiler="*res://addons/netfox-net/Extras/WindowTiler.cs"
 NetworkSimulator="*res://addons/netfox-net/Extras/NetworkSimulator.cs"
+MCPGameBridge="res://addons/godot_mcp/game_bridge/mcp_game_bridge.gd"
 
 [dotnet]
 
@@ -37,7 +38,14 @@ project/assembly_name="Netfox"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/netfox-net/plugin.cfg")
+enabled=PackedStringArray("res://addons/netfox-net/plugin.cfg", "res://addons/godot_mcp/plugin.cfg")
+
+[godot_mcp]
+
+bind_mode=0
+custom_bind_ip=""
+port_override_enabled=false
+port_override=6550
 
 [netfox]
 

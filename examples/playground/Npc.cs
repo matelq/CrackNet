@@ -41,6 +41,14 @@ public partial class Npc : CharacterBody3D, IRollbackTick
     private Node? _players;
     private float _gravity;
 
+    private Node3D _visual = null!;
+
+    /// <summary>Turns the visual to the heading. Display only: rotation is not state and the body is never rotated.</summary>
+    public override void _Process(double delta)
+    {
+        if (Heading.LengthSquared() > 0.01f) _visual.Rotation = new Vector3(0, Mathf.Atan2(Heading.X, Heading.Z), 0);
+    }
+
     public override void _Ready()
     {
         _gravity = (float)(double)ProjectSettings.GetSetting("physics/3d/default_gravity", 9.8);
@@ -54,6 +62,26 @@ public partial class Npc : CharacterBody3D, IRollbackTick
         CollisionLayer = 0;
         CollisionMask = 1;
         AddChild(new CollisionShape3D { Name = "CollisionShape3D", Shape = new CapsuleShape3D { Radius = 0.35f, Height = 1.2f } });
+
+        // Something to look at: the first NPC had a collision shape and nothing else, and read as "not seen" in the
+        // first two-window session (netfox-net#60). The nose is on the visual's +Z and _Process turns the visual to
+        // the heading, so which way it is running is readable - the body itself is not rotated, since its transform
+        // is what the physics side is told every tick.
+        _visual = new Node3D { Name = "Visual" };
+        _visual.AddChild(new MeshInstance3D
+        {
+            Name = "Mesh",
+            Mesh = new CapsuleMesh { Radius = 0.35f, Height = 1.2f },
+            MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.85f, 0.55f, 0.2f) },
+        });
+        _visual.AddChild(new MeshInstance3D
+        {
+            Name = "Nose",
+            Mesh = new BoxMesh { Size = new Vector3(0.15f, 0.15f, 0.3f) },
+            Position = new Vector3(0, 0.3f, 0.45f),
+            MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(0.2f, 0.1f, 0.05f) },
+        });
+        AddChild(_visual);
 
         Synchronizer = new RollbackSynchronizer
         {
