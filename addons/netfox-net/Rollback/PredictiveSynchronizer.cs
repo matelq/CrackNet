@@ -9,7 +9,7 @@ namespace Netfox;
 /// </summary>
 [Tool]
 [GlobalClass]
-[Icon("res://addons/netfox.cs/icons/predictive-synchronizer.svg")]
+[Icon("res://addons/netfox-net/icons/predictive-synchronizer.svg")]
 public partial class PredictiveSynchronizer : BaseSynchronizer
 {
     private static readonly Dictionary<Node, PredictiveSynchronizer> ManagedRoots = new(ReferenceEqualityComparer.Instance);

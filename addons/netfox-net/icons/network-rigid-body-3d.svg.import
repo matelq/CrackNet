@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://q2hnys7qn3sa"
-path="res://.godot/imported/tick-interpolator.svg-56d98471bf0ac7c5a11d8fd871f7e012.ctex"
+uid="uid://jyma77bsekwt"
+path="res://.godot/imported/network-rigid-body-3d.svg-87f68d7febd1381e4e0f912ac798e79c.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://addons/netfox.cs/icons/tick-interpolator.svg"
-dest_files=["res://.godot/imported/tick-interpolator.svg-56d98471bf0ac7c5a11d8fd871f7e012.ctex"]
+source_file="res://addons/netfox-net/icons/network-rigid-body-3d.svg"
+dest_files=["res://.godot/imported/network-rigid-body-3d.svg-87f68d7febd1381e4e0f912ac798e79c.ctex"]
 
 [params]
 

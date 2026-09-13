@@ -9,7 +9,7 @@ namespace Netfox.Extras;
 /// </summary>
 [Tool]
 [GlobalClass]
-[Icon("res://addons/netfox.cs/icons/rewindable-state-machine.svg")]
+[Icon("res://addons/netfox-net/icons/rewindable-state-machine.svg")]
 public partial class RewindableStateMachine : Node, IRollbackTick
 {
     /// <summary>The netfox stack this node uses; resolved when it enters the tree.</summary>

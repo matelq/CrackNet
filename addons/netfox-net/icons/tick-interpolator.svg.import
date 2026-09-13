@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://duevg3nve1vg4"
-path="res://.godot/imported/rewindable-state-machine.svg-2d42d709de95cbb22c550c73697ea77e.ctex"
+uid="uid://q2hnys7qn3sa"
+path="res://.godot/imported/tick-interpolator.svg-1e6d76ef1b549317b8802e4ca0e211b2.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://addons/netfox.cs/icons/rewindable-state-machine.svg"
-dest_files=["res://.godot/imported/rewindable-state-machine.svg-2d42d709de95cbb22c550c73697ea77e.ctex"]
+source_file="res://addons/netfox-net/icons/tick-interpolator.svg"
+dest_files=["res://.godot/imported/tick-interpolator.svg-1e6d76ef1b549317b8802e4ca0e211b2.ctex"]
 
 [params]
 

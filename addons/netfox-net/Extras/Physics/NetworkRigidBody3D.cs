@@ -5,7 +5,7 @@ namespace Netfox.Extras;
 
 /// <summary>RigidBody3D exposing its physics state as one synchronizable property. Port of netfox.extras/physics/network-rigid-body-3d.gd.</summary>
 [GlobalClass]
-[Icon("res://addons/netfox.cs/icons/network-rigid-body-3d.svg")]
+[Icon("res://addons/netfox-net/icons/network-rigid-body-3d.svg")]
 public partial class NetworkRigidBody3D : RigidBody3D, INetworkRigidBody
 {
     private PhysicsDirectBodyState3D? _directState;

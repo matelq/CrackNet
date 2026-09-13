@@ -1,4 +1,4 @@
-# netfox.cs guides
+# netfox-net guides
 
 A native C# port of [netfox](https://github.com/foxssake/netfox): rollback netcode for Godot, with client-side
 prediction and server reconciliation. Same semantics and the same public API as the original, written as idiomatic

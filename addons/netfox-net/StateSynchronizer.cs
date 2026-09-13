@@ -6,7 +6,7 @@ namespace Netfox;
 /// <summary>Replicates properties from their authority to every peer once per tick, without rollback. Port of state-synchronizer.gd.</summary>
 [Tool]
 [GlobalClass]
-[Icon("res://addons/netfox.cs/icons/state-synchronizer.svg")]
+[Icon("res://addons/netfox-net/icons/state-synchronizer.svg")]
 public partial class StateSynchronizer : BaseSynchronizer
 {
     /// <summary>Node the property paths are relative to; defaults to the parent.</summary>

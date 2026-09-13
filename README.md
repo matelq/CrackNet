@@ -1,4 +1,4 @@
-# netfox.cs
+# netfox-net
 
 Native C# port of [netfox](https://github.com/foxssake/netfox) for Godot 4.7 .NET: tick synchronization, rollback with
 client-side prediction and server reconciliation, state synchronization, interpolation, and the netfox.extras toolbox.
@@ -24,13 +24,13 @@ Roadmap lives in [issues](https://github.com/matelq/netfox-net/issues).
 
 ## Using it
 
-1. Take `addons/netfox.cs` from the [latest release](https://github.com/matelq/netfox-net/releases) and drop it into
+1. Take `addons/netfox-net` from the [latest release](https://github.com/matelq/netfox-net/releases) and drop it into
    `res://addons/`. The zip already carries the `Netfox.Core` sources inside it, so there is no project reference to
    add.
 2. Enable the plugin in **Project Settings > Plugins**. It registers the `netfox/*` settings and the autoloads in
    dependency order.
 3. Your project needs `ImplicitUsings` and `Nullable` enabled. Optionally reference
-   `addons/netfox.cs/analyzers/Netfox.SourceGenerators.dll` as an `Analyzer` for the property attributes.
+   `addons/netfox-net/analyzers/Netfox.SourceGenerators.dll` as an `Analyzer` for the property attributes.
 4. Assign `Multiplayer.MultiplayerPeer` — ENet, Steam, anything. `NetworkEvents` starts `NetworkTime` on the host at
    once and on clients once they are connected.
 5. Put a `RollbackSynchronizer` under your player and implement `IRollbackTick` on what should simulate.
@@ -54,7 +54,7 @@ public partial class Player : CharacterBody3D, IRollbackTick
 
 | Path | What |
 |---|---|
-| `addons/netfox.cs/` | The addon. This is what you copy into a project. |
+| `addons/netfox-net/` | The addon. This is what you copy into a project. |
 | `Netfox.Core/` | Engine-agnostic core: history buffers, snapshots, serialization, clock math. No Godot dependency. |
 | `Netfox.SourceGenerators/` | The `[RollbackState]` attributes and the generator behind them. Optional. |
 | `docs/` | The guides, and a generated API reference. |
@@ -121,4 +121,4 @@ There is no wire compatibility with GDScript netfox, and none is intended.
 ## License
 
 MIT, see [LICENSE](LICENSE). Derived from netfox by Gálffy Tamás (Fox and Sake), also MIT; the original notice is kept
-in `addons/netfox.cs/LICENSE.netfox`.
+in `addons/netfox-net/LICENSE.netfox`.

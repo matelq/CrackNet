@@ -8,7 +8,7 @@ namespace Netfox.Editor;
 [Tool]
 public partial class NetfoxPlugin : EditorPlugin
 {
-    private const string Root = "res://addons/netfox.cs";
+    private const string Root = "res://addons/netfox-net";
 
     private sealed record Setting(string Name, Variant Value, Variant.Type Type, PropertyHint Hint = PropertyHint.None, string HintString = "");
 

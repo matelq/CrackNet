@@ -9,7 +9,7 @@ namespace Netfox;
 /// broadcasts the ground truth, and predictions get confirmed or cancelled. Port of rewindable-action.gd.
 /// </summary>
 [GlobalClass]
-[Icon("res://addons/netfox.cs/icons/rewindable-action.svg")]
+[Icon("res://addons/netfox-net/icons/rewindable-action.svg")]
 public partial class RewindableAction : Node
 {
     /// <summary>The netfox stack this node uses; resolved when it enters the tree.</summary>

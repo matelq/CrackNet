@@ -5,7 +5,7 @@ namespace Netfox.Extras;
 /// <summary>A state of a RewindableStateMachine. Override the virtual methods or subscribe to the events. Port of netfox.extras/state-machine/rewindable-state.gd.</summary>
 [Tool]
 [GlobalClass]
-[Icon("res://addons/netfox.cs/icons/rewindable-state.svg")]
+[Icon("res://addons/netfox-net/icons/rewindable-state.svg")]
 public partial class RewindableState : Node
 {
     /// <summary>(previous state, tick, prevent). Call prevent to cancel the transition.</summary>

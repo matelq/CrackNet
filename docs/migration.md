@@ -116,5 +116,5 @@ Everything here differs from upstream on purpose. Each was a decision, not an ac
 
 ## Wire compatibility
 
-There is none, and there is not meant to be. A GDScript netfox peer and a netfox.cs peer cannot talk to each other -
+There is none, and there is not meant to be. A GDScript netfox peer and a netfox-net peer cannot talk to each other -
 the command ids differ, and so does the redundant input encoding. Both ends of a session have to be this port.

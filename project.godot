@@ -10,26 +10,26 @@ config_version=5
 
 [application]
 
-config/name="netfox.cs"
+config/name="netfox-net"
 config/description="Native C# port of netfox: rollback netcode for Godot"
 config/features=PackedStringArray("4.7", "C#", "Forward Plus")
 
 [autoload]
 
-NetworkCommandServer="*res://addons/netfox.cs/Servers/NetworkCommandServer.cs"
-NetworkTime="*res://addons/netfox.cs/NetworkTime.cs"
-NetworkTimeSynchronizer="*res://addons/netfox.cs/NetworkTimeSynchronizer.cs"
-NetworkEvents="*res://addons/netfox.cs/NetworkEvents.cs"
-NetworkIdentityServer="*res://addons/netfox.cs/Servers/NetworkIdentityServer.cs"
-RollbackLivenessServer="*res://addons/netfox.cs/Servers/RollbackLivenessServer.cs"
-NetworkHistoryServer="*res://addons/netfox.cs/Servers/NetworkHistoryServer.cs"
-RollbackSimulationServer="*res://addons/netfox.cs/Servers/RollbackSimulationServer.cs"
-NetworkSynchronizationServer="*res://addons/netfox.cs/Servers/NetworkSynchronizationServer.cs"
-NetworkRollback="*res://addons/netfox.cs/Rollback/NetworkRollback.cs"
-NetworkPerformance="*res://addons/netfox.cs/NetworkPerformance.cs"
-InterpolationServer="*res://addons/netfox.cs/Servers/InterpolationServer.cs"
-WindowTiler="*res://addons/netfox.cs/Extras/WindowTiler.cs"
-NetworkSimulator="*res://addons/netfox.cs/Extras/NetworkSimulator.cs"
+NetworkCommandServer="*res://addons/netfox-net/Servers/NetworkCommandServer.cs"
+NetworkTime="*res://addons/netfox-net/NetworkTime.cs"
+NetworkTimeSynchronizer="*res://addons/netfox-net/NetworkTimeSynchronizer.cs"
+NetworkEvents="*res://addons/netfox-net/NetworkEvents.cs"
+NetworkIdentityServer="*res://addons/netfox-net/Servers/NetworkIdentityServer.cs"
+RollbackLivenessServer="*res://addons/netfox-net/Servers/RollbackLivenessServer.cs"
+NetworkHistoryServer="*res://addons/netfox-net/Servers/NetworkHistoryServer.cs"
+RollbackSimulationServer="*res://addons/netfox-net/Servers/RollbackSimulationServer.cs"
+NetworkSynchronizationServer="*res://addons/netfox-net/Servers/NetworkSynchronizationServer.cs"
+NetworkRollback="*res://addons/netfox-net/Rollback/NetworkRollback.cs"
+NetworkPerformance="*res://addons/netfox-net/NetworkPerformance.cs"
+InterpolationServer="*res://addons/netfox-net/Servers/InterpolationServer.cs"
+WindowTiler="*res://addons/netfox-net/Extras/WindowTiler.cs"
+NetworkSimulator="*res://addons/netfox-net/Extras/NetworkSimulator.cs"
 
 [dotnet]
 
@@ -37,7 +37,7 @@ project/assembly_name="Netfox"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/netfox.cs/plugin.cfg")
+enabled=PackedStringArray("res://addons/netfox-net/plugin.cfg")
 
 [netfox]
 

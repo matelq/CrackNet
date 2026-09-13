@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ce3jh4jtgpwc"
-path="res://.godot/imported/rollback-synchronizer.svg-8b27a229785dd7e75f0f6f0ff92620ec.ctex"
+uid="uid://dnvrpemjv1ten"
+path="res://.godot/imported/state-synchronizer.svg-b01e016b5ec75ee0413615c1ec4166ad.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://addons/netfox.cs/icons/rollback-synchronizer.svg"
-dest_files=["res://.godot/imported/rollback-synchronizer.svg-8b27a229785dd7e75f0f6f0ff92620ec.ctex"]
+source_file="res://addons/netfox-net/icons/state-synchronizer.svg"
+dest_files=["res://.godot/imported/state-synchronizer.svg-b01e016b5ec75ee0413615c1ec4166ad.ctex"]
 
 [params]
 

@@ -6,7 +6,7 @@ namespace Netfox;
 /// <summary>Smooths the configured properties between network ticks. Port of tick-interpolator.gd.</summary>
 [Tool]
 [GlobalClass]
-[Icon("res://addons/netfox.cs/icons/tick-interpolator.svg")]
+[Icon("res://addons/netfox-net/icons/tick-interpolator.svg")]
 public partial class TickInterpolator : Node
 {
     /// <summary>The netfox stack this node uses; resolved when it enters the tree.</summary>

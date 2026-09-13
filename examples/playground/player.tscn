@@ -2,14 +2,14 @@
 
 [ext_resource type="Script" path="res://examples/playground/PlayerCharacter.cs" id="1_1hkaj"]
 [ext_resource type="Script" path="res://examples/playground/PlayerInput.cs" id="2_gf4vq"]
-[ext_resource type="Script" path="res://addons/netfox.cs/Rollback/RollbackSynchronizer.cs" id="3_5l22w"]
-[ext_resource type="Script" path="res://addons/netfox.cs/PeerVisibilityFilter.cs" id="4_732g0"]
-[ext_resource type="Script" path="res://addons/netfox.cs/Extras/StateMachine/RewindableStateMachine.cs" id="5_3tmk0"]
+[ext_resource type="Script" path="res://addons/netfox-net/Rollback/RollbackSynchronizer.cs" id="3_5l22w"]
+[ext_resource type="Script" path="res://addons/netfox-net/PeerVisibilityFilter.cs" id="4_732g0"]
+[ext_resource type="Script" path="res://addons/netfox-net/Extras/StateMachine/RewindableStateMachine.cs" id="5_3tmk0"]
 [ext_resource type="Script" path="res://examples/playground/GroundedState.cs" id="6_val7w"]
 [ext_resource type="Script" path="res://examples/playground/AirborneState.cs" id="7_a4vbl"]
 [ext_resource type="Script" path="res://examples/playground/PlayerWeapon.cs" id="8_edy5l"]
 [ext_resource type="PackedScene" path="res://examples/playground/projectile.tscn" id="9_iq4s0"]
-[ext_resource type="Script" path="res://addons/netfox.cs/TickInterpolator.cs" id="10_244ed"]
+[ext_resource type="Script" path="res://addons/netfox-net/TickInterpolator.cs" id="10_244ed"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_da2md"]
 radius = 0.4

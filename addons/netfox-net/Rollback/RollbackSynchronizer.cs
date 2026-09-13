@@ -10,7 +10,7 @@ namespace Netfox;
 /// </summary>
 [Tool]
 [GlobalClass]
-[Icon("res://addons/netfox.cs/icons/rollback-synchronizer.svg")]
+[Icon("res://addons/netfox-net/icons/rollback-synchronizer.svg")]
 public partial class RollbackSynchronizer : BaseSynchronizer
 {
     private static readonly Dictionary<Node, RollbackSynchronizer> ManagedRoots = new(ReferenceEqualityComparer.Instance);

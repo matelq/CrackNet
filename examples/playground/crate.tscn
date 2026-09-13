@@ -1,8 +1,8 @@
 [gd_scene format=3]
 
-[ext_resource type="Script" path="res://addons/netfox.cs/Extras/Physics/NetworkRigidBody3D.cs" id="1_e05qj"]
-[ext_resource type="Script" path="res://addons/netfox.cs/Rollback/RollbackSynchronizer.cs" id="2_cryx6"]
-[ext_resource type="Script" path="res://addons/netfox.cs/PeerVisibilityFilter.cs" id="3_j7vtd"]
+[ext_resource type="Script" path="res://addons/netfox-net/Extras/Physics/NetworkRigidBody3D.cs" id="1_e05qj"]
+[ext_resource type="Script" path="res://addons/netfox-net/Rollback/RollbackSynchronizer.cs" id="2_cryx6"]
+[ext_resource type="Script" path="res://addons/netfox-net/PeerVisibilityFilter.cs" id="3_j7vtd"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_8pvtk"]
 

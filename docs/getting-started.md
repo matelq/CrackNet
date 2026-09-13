@@ -5,7 +5,7 @@ this, it is the same thing finished.
 
 ## Installing
 
-Drop `addons/netfox.cs` into your project and enable the plugin in **Project Settings > Plugins**. That registers the
+Drop `addons/netfox-net` into your project and enable the plugin in **Project Settings > Plugins**. That registers the
 autoloads (`NetworkTime`, `NetworkRollback` and the servers behind them) in the order they need, and the project
 settings under **Netfox**.
 
@@ -20,12 +20,12 @@ your project needs `ImplicitUsings` and `Nullable` enabled:
 </PropertyGroup>
 ```
 
-The release zip also carries `addons/netfox.cs/analyzers/Netfox.SourceGenerators.dll`. It is optional - it provides
+The release zip also carries `addons/netfox-net/analyzers/Netfox.SourceGenerators.dll`. It is optional - it provides
 the `[RollbackState]`-style attributes - and reference it as an analyzer if you want them:
 
 ```xml
 <ItemGroup>
-  <Analyzer Include="addons/netfox.cs/analyzers/Netfox.SourceGenerators.dll" />
+  <Analyzer Include="addons/netfox-net/analyzers/Netfox.SourceGenerators.dll" />
 </ItemGroup>
 ```
 

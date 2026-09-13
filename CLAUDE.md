@@ -7,8 +7,8 @@ Branches: `reworked` is the default and where work happens; `master` keeps parit
 
 ## Layout
 
-- `Netfox.Core/` — engine-agnostic core, no Godot reference. Generic over `TSubject, TProperty, TValue`; Godot aliases in `addons/netfox.cs/Internal/GlobalUsings.cs`.
-- `addons/netfox.cs/` — the addon (namespace `Netfox`, extras in `Netfox.Extras`). Autoloads expose `Instance`; order is fixed in `Editor/NetfoxPlugin.cs` and `project.godot` (dependencies first).
+- `Netfox.Core/` — engine-agnostic core, no Godot reference. Generic over `TSubject, TProperty, TValue`; Godot aliases in `addons/netfox-net/Internal/GlobalUsings.cs`.
+- `addons/netfox-net/` — the addon (namespace `Netfox`, extras in `Netfox.Extras`). Autoloads expose `Instance`; order is fixed in `Editor/NetfoxPlugin.cs` and `project.godot` (dependencies first).
 - `test/` — Godot-side tests (`TestSuite` + `[Test]`), `Netfox.Core.Tests/` — xUnit. `test/Harness/` runs two stacks in one tree over a loopback peer (reworked).
 - `NetfoxContext` (reworked only): servers register into `NetfoxContext.Default`; a `NetfoxContextRoot` node gives its subtree a second stack. Nodes resolve `Context` in `_EnterTree`; `Instance` still points at the default stack.
 - `examples/e2e/` — two-process ENet check; `examples/steam/` — GodotSteam bootstrap under `#if GODOTSTEAM`;
@@ -47,7 +47,7 @@ embedded script.
 property into the declaring interface the synchronizers gather from, so the paths come from the symbols and cannot go
 stale on a rename. The type has to be `partial` (NFX001 otherwise), and properties only: Godot exposes a partial
 class's properties to `Get`/`Set`, not its plain fields. It is referenced as an analyzer, ships built in the release
-zip under `addons/netfox.cs/analyzers/`, and is optional - the interfaces can still be implemented by hand.
+zip under `addons/netfox-net/analyzers/`, and is optional - the interfaces can still be implemented by hand.
 
 ## Physics drivers
 
@@ -90,8 +90,8 @@ same build, so measure in isolation and take allocations and byte counts, which 
 
 ## Releasing
 
-Bump `version` in `addons/netfox.cs/plugin.cfg`, then tag `vX.Y.Z`. The release workflow refuses a tag that disagrees
-with plugin.cfg. It packages `addons/netfox.cs` with the `Netfox.Core` sources copied into `addons/netfox.cs/Core`, so
+Bump `version` in `addons/netfox-net/plugin.cfg`, then tag `vX.Y.Z`. The release workflow refuses a tag that disagrees
+with plugin.cfg. It packages `addons/netfox-net` with the `Netfox.Core` sources copied into `addons/netfox-net/Core`, so
 a consumer drops in one folder and needs no project reference, and it builds that layout on its own before zipping.
 The addon needs `ImplicitUsings` and `Nullable` enabled in the consuming project.
 

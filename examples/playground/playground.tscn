@@ -3,11 +3,11 @@
 [ext_resource type="Script" path="res://examples/playground/Playground.cs" id="1_v1cmp"]
 [ext_resource type="PackedScene" path="res://examples/playground/player.tscn" id="2_sbxnr"]
 [ext_resource type="Script" path="res://examples/playground/MovingPlatform.cs" id="3_o1lki"]
-[ext_resource type="Script" path="res://addons/netfox.cs/Rollback/RollbackSynchronizer.cs" id="4_m2yo0"]
+[ext_resource type="Script" path="res://addons/netfox-net/Rollback/RollbackSynchronizer.cs" id="4_m2yo0"]
 [ext_resource type="Script" path="res://examples/playground/Scoreboard.cs" id="5_0x2dt"]
-[ext_resource type="Script" path="res://addons/netfox.cs/StateSynchronizer.cs" id="6_k1m7m"]
+[ext_resource type="Script" path="res://addons/netfox-net/StateSynchronizer.cs" id="6_k1m7m"]
 [ext_resource type="Script" path="res://examples/playground/Beacon.cs" id="7_wbw74"]
-[ext_resource type="Script" path="res://addons/netfox.cs/TickInterpolator.cs" id="11_tickin"]
+[ext_resource type="Script" path="res://addons/netfox-net/TickInterpolator.cs" id="11_tickin"]
 [ext_resource type="Script" path="res://examples/playground/PhysicsTier.cs" id="8_a8fih"]
 [ext_resource type="PackedScene" path="res://examples/playground/crate.tscn" id="9_kx0p6"]
 [ext_resource type="Script" path="res://examples/playground/PlaygroundCamera.cs" id="10_cv6dk"]
@@ -136,7 +136,7 @@ layout_mode = 2
 
 [node name="Title" type="Label" parent="UI/Lobby/Panel/Rows" unique_id=670842627]
 layout_mode = 2
-text = "netfox.cs playground"
+text = "netfox-net playground"
 
 [node name="Address" type="LineEdit" parent="UI/Lobby/Panel/Rows" unique_id=1751358616]
 layout_mode = 2

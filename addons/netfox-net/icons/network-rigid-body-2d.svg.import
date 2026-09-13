@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://0fhiusxrpocr"
-path="res://.godot/imported/predictive-synchronizer.svg-8e9cb91441d810e5c78660cf2060d70d.ctex"
+uid="uid://clxkhvq4clce6"
+path="res://.godot/imported/network-rigid-body-2d.svg-7283bb1a6445143e95fff59928395656.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://addons/netfox.cs/icons/predictive-synchronizer.svg"
-dest_files=["res://.godot/imported/predictive-synchronizer.svg-8e9cb91441d810e5c78660cf2060d70d.ctex"]
+source_file="res://addons/netfox-net/icons/network-rigid-body-2d.svg"
+dest_files=["res://.godot/imported/network-rigid-body-2d.svg-7283bb1a6445143e95fff59928395656.ctex"]
 
 [params]
 

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://jyma77bsekwt"
-path="res://.godot/imported/network-rigid-body-3d.svg-bbc89a5792ed2e24f26ceca96ca349bc.ctex"
+uid="uid://bm4sue3nbum3t"
+path="res://.godot/imported/rewindable-action.svg-282fef489d1def4194b5be0f80805e33.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://addons/netfox.cs/icons/network-rigid-body-3d.svg"
-dest_files=["res://.godot/imported/network-rigid-body-3d.svg-bbc89a5792ed2e24f26ceca96ca349bc.ctex"]
+source_file="res://addons/netfox-net/icons/rewindable-action.svg"
+dest_files=["res://.godot/imported/rewindable-action.svg-282fef489d1def4194b5be0f80805e33.ctex"]
 
 [params]
 
