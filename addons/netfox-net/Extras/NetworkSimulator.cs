@@ -337,7 +337,10 @@ public partial class NetworkSimulator : Node
         ServerPort = NetfoxSettings.Instance.AutoconnectPort;
         UseCompression = NetfoxSettings.Instance.UseCompression;
         LatencyMs = NetfoxSettings.Instance.SimulatedLatencyMs;
-        PacketLossPercent = NetfoxSettings.Instance.SimulatedPacketLossChance;
+        // The setting is a chance, 0 to 1 - the editor shows it with that range - and the proxy works in percent.
+        // Upstream reads the one into the other as-is (network-simulator.gd:154), so a "0.3" typed into the editor
+        // dropped 0.3% of packets and a playtest believed to be under 30% loss was under almost none.
+        PacketLossPercent = NetfoxSettings.Instance.SimulatedPacketLossChance * 100.0;
 
         // Jitter and bursts have no project settings of their own: the autoconnect flow is an editor convenience, and
         // the checks that want them go through StartProxy. Add settings when someone wants them in the editor.

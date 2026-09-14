@@ -48,6 +48,29 @@ public partial class NetworkSimulatorTests : TestSuite
         return simulator;
     }
 
+    /// <summary>
+    /// The editor setting is a chance, 0 to 1; the proxy counts in percent. Upstream reads one into the other as-is,
+    /// so "0.3" in the editor dropped 0.3% of packets, and a four-window playtest believed to run under 30% loss ran
+    /// under almost none. The two must meet in the middle exactly once.
+    /// </summary>
+    [Test]
+    public async Task TheLossSettingIsAChanceAndTheProxyCountsPercent()
+    {
+        var backup = NetfoxSettings.Instance;
+        var settings = NetfoxSettings.Load();
+        settings.SimulatedPacketLossChance = 0.3;
+        NetfoxSettings.Instance = settings;
+        try
+        {
+            var simulator = await Simulator("Lossy");
+            Expect.True(Math.Abs(simulator.PacketLossPercent - 30.0) < 1e-9, $"a chance of 0.3 became {simulator.PacketLossPercent}%");
+        }
+        finally
+        {
+            NetfoxSettings.Instance = backup;
+        }
+    }
+
     [Test]
     public async Task HostsWithTheInjectedPeer()
     {
