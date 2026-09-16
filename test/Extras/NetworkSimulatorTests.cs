@@ -116,16 +116,29 @@ public partial class NetworkSimulatorTests : TestSuite
         NetworkSimulator.HostPeerFactory = _ => _network.CreatePeer(1);
         NetworkSimulator.JoinPeerFactory = _ => throw new InvalidOperationException("should not have tried to join");
 
-        var simulator = await Simulator("Hosting Simulator");
-        simulator.ServerCreated += () => hosted++;
-        simulator.ClientConnected += () => joined++;
-        simulator.Connect();
+        // The wrapper is only there when there is something to simulate; the project's own setting (Clear on a
+        // developer's machine) must not decide this test
+        var backup = NetfoxSettings.Instance;
+        var settings = NetfoxSettings.Load();
+        settings.SimulatedProfile = "Bad";
+        NetfoxSettings.Instance = settings;
+        try
+        {
+            var simulator = await Simulator("Hosting Simulator");
+            simulator.ServerCreated += () => hosted++;
+            simulator.ClientConnected += () => joined++;
+            simulator.Connect();
 
-        Expect.Equal(1, hosted);
-        Expect.Equal(0, joined);
-        Expect.True(simulator.Peer is SimulatedMultiplayerPeer, $"expected the simulated wrapper, got {simulator.Peer}");
-        Expect.Equal(1, simulator.Peer!.GetUniqueId());
-        Expect.True(ReferenceEquals(simulator.Peer, simulator.Multiplayer.MultiplayerPeer), "the peer should be assigned to the API");
+            Expect.Equal(1, hosted);
+            Expect.Equal(0, joined);
+            Expect.True(simulator.Peer is SimulatedMultiplayerPeer, $"expected the simulated wrapper, got {simulator.Peer}");
+            Expect.Equal(1, simulator.Peer!.GetUniqueId());
+            Expect.True(ReferenceEquals(simulator.Peer, simulator.Multiplayer.MultiplayerPeer), "the peer should be assigned to the API");
+        }
+        finally
+        {
+            NetfoxSettings.Instance = backup;
+        }
     }
 
     [Test]
