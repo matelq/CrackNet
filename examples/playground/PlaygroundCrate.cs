@@ -47,7 +47,7 @@ public partial class PlaygroundCrate : RigidBody3D
     /// <summary>Simulated only where authoritative and not held; tinted with the simulating peer's colour.</summary>
     public void Refresh()
     {
-        Freeze = !Object.IsAuthority || Object.Holder != 0;
+        SetFrozen(!Object.IsAuthority || Object.Holder != 0);
         _material.AlbedoColor = Playground.ColorOf(Object.Authority).Lerp(Colors.SaddleBrown, 0.35f);
     }
 
@@ -68,5 +68,23 @@ public partial class PlaygroundCrate : RigidBody3D
 
         _restTicks = Sleeping || LinearVelocity.Length() < 0.05f ? _restTicks + 1 : 0;
         if (_restTicks >= RestTicksBeforeReturning && Object.ReturnToHost()) _restTicks = 0;
+    }
+
+    /// <summary>
+    /// Frozen (kinematic) where this peer does not simulate the crate or someone holds it.
+    /// <para>
+    /// Rapier keeps the last kinematic target of a body and goes back to it on the next freeze: a crate held, thrown,
+    /// landed and handed back to the host jumped to where it had been held - inside the thrower, who touched it again
+    /// and blew it hundreds of metres away. Setting the transform again after the switch makes the current position
+    /// the kinematic target.
+    /// </para>
+    /// </summary>
+    public void SetFrozen(bool frozen)
+    {
+        if (Freeze == frozen) return;
+        var transform = GlobalTransform;
+        Freeze = frozen;
+        GlobalTransform = transform;
+        PhysicsServer3D.BodySetState(GetRid(), PhysicsServer3D.BodyState.Transform, transform);
     }
 }
