@@ -59,6 +59,8 @@ public partial class NetworkObject : Node
     internal ObjectPlaybackCursor PlaybackCursor { get; } = new();
     internal bool PlaybackStarted { get; set; }
     internal bool TeleportPending { get; set; }
+    internal bool DespawnRequested { get; set; }
+    internal bool RemoteDespawned { get; set; }
 
     /// <summary>What this peer last sent for the object, and when: an unchanged object is not sent again for a while.</summary>
     internal byte[]? LastSentBody { get; set; }
@@ -73,6 +75,28 @@ public partial class NetworkObject : Node
 
     /// <summary>The next state this peer sends applies without interpolation on the others: a respawn, not a flight.</summary>
     public void Teleport() => TeleportPending = true;
+
+    /// <summary>
+    /// Ends this authoritative object's timeline. It is hidden and stops processing here immediately; remote peers
+    /// hide it when their playback reaches the flagged final sample, and the root is freed after the playback grace
+    /// period so a <see cref="MultiplayerSpawner"/> cannot remove it from observers early.
+    /// </summary>
+    public bool Despawn()
+    {
+        if (!IsAuthority || DespawnRequested) return false;
+        DespawnRequested = true;
+        SetShown(false);
+        Root!.ProcessMode = ProcessModeEnum.Disabled;
+
+        var graceTicks = Math.Ceiling(Context.NetworkObjectServer.PlaybackDelayTicks)
+                         + NetworkObjectServer.StateIntervalTicks * 2;
+        var timer = GetTree().CreateTimer(graceTicks / Context.NetworkTime.Tickrate);
+        timer.Timeout += () =>
+        {
+            if (GodotObject.IsInstanceValid(Root)) Root.QueueFree();
+        };
+        return true;
+    }
 
     /// <summary>
     /// Takes authority over a free object this peer touched. False when it is held by someone else, or when this peer
@@ -150,6 +174,7 @@ public partial class NetworkObject : Node
             Track.Clear();
             PlaybackCursor.Reset();
             PlaybackStarted = false;
+            RemoteDespawned = false;
             LastSentBody = null;
         }
 
@@ -216,9 +241,10 @@ public partial class NetworkObject : Node
         return false;
     }
 
-    internal sealed class Sample(Variant[] values, bool teleport)
+    internal sealed class Sample(Variant[] values, bool teleport, bool despawned)
     {
         public Variant[] Values { get; } = values;
         public bool Teleport { get; } = teleport;
+        public bool Despawned { get; } = despawned;
     }
 }

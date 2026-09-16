@@ -89,6 +89,38 @@ public partial class ProjectileTests : HarnessSuite
     }
 
     [Test]
+    public async Task ObserversKeepAProjectileUntilItsDespawnSampleIsDisplayed()
+    {
+        Network.LatencyMs = 40;
+        var fired = Fire("TimedDespawn");
+        HarnessBody? onHost = null;
+        Expect.True(await WaitUntil(() => (onHost = Host.GetNodeOrNull<HarnessBody>("TimedDespawn")) is { Visible: true }, 5),
+            "projectile never became visible");
+
+        var now = Client.Context.NetworkTime.Tick;
+        var despawnTick = (now + 1) % NetworkObjectServer.StateIntervalTicks == 0 ? now + 1 : now + 2;
+        Expect.True(fired.Object.Despawn());
+        Expect.False(fired.Visible, "authority should hide a despawned projectile immediately");
+
+        for (var frame = 0; frame < 180; frame++)
+        {
+            await NextFrame();
+            onHost = Host.GetNodeOrNull<HarnessBody>("TimedDespawn");
+            var shown = Host.Context.NetworkObjectServer.GetDisplayTick(Shooter);
+            if (shown is null || shown < despawnTick)
+            {
+                Expect.True(onHost is { Visible: true },
+                    $"projectile disappeared at display tick {shown:F1}, before despawn {despawnTick}");
+                continue;
+            }
+
+            if (onHost is null or { Visible: false }) return;
+        }
+
+        Expect.True(false, "projectile stayed visible after its despawn tick");
+    }
+
+    [Test]
     public async Task AHitDecidedByTheTargetAndOneByTheShooterConsumeTheProjectileOnce()
     {
         var fired = Fire("Rocket");

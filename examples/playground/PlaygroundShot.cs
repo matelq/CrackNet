@@ -68,6 +68,6 @@ public partial class PlaygroundShot : Node3D
     private void Consume()
     {
         _consumed = true;
-        if (Object.IsAuthority) QueueFree();
+        if (Object.IsAuthority) Object.Despawn();
     }
 }

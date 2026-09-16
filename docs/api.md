@@ -127,6 +127,7 @@ One replicated object. While its root is this peer's multiplayer authority it se
 | property | `LastSentBody` | What this peer last sent for the object, and when: an unchanged object is not sent again for a while. |
 | property | `Root` | The node that is the object: authority, identity and the synced subtree. The parent by default. |
 | property | `Transferable` | Whether other peers may take authority or ownership. Off for players: their character stays theirs. |
+| method | `Despawn` | Ends this authoritative object's timeline. It is hidden and stops processing here immediately; remote peers hide it when their playback reaches the flagged final sample, and the root is freed after the playback grace period so a `MultiplayerSpawner` cannot remove it from observers early. |
 | method | `IsNewer(System.Int32,System.Int32)` | True when ( `ownershipSequence`, `authoritySequence`) is newer than what this object has. |
 | method | `Release` | Lets go of a held object. This peer keeps simulating it until someone else touches it. |
 | method | `ReturnToHost` | Hands a free object this peer simulates back to the host, typically once it has come to rest. |
