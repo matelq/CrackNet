@@ -38,6 +38,14 @@ public partial class Playground : Node3D
         BuildWorld();
         BuildUi();
 
+        // Editor autoconnect (Project Settings > Netfox > Autoconnect > Enabled): the first instance hosts, the rest
+        // join, through the simulator with the profile set there. The peer is assigned after these events fire.
+        if (GetNodeOrNull<NetworkSimulator>("/root/NetworkSimulator") is { } simulator)
+        {
+            simulator.ServerCreated += () => Callable.From(StartHosting).CallDeferred();
+            simulator.ClientConnected += () => _menu.Hide();
+        }
+
         if (OS.GetCmdlineUserArgs().Contains("--smoke")) AddChild(new PlaygroundSmoke { Name = "Smoke" });
         if (OS.GetCmdlineUserArgs().Contains("--host")) Host();
         else if (OS.GetCmdlineUserArgs().Contains("--join")) Join("127.0.0.1");
@@ -65,6 +73,12 @@ public partial class Playground : Node3D
 
         Multiplayer.MultiplayerPeer = peer;
         if (ThroughSimulator) GetNode<NetworkSimulator>("/root/NetworkSimulator").StartProxy(Port, _profile);
+        StartHosting();
+    }
+
+    /// <summary>Once this peer is the server, by the Host button or by autoconnect: players for everyone who joins.</summary>
+    private void StartHosting()
+    {
         Multiplayer.PeerConnected += id => SpawnPlayer((int)id);
         Multiplayer.PeerDisconnected += id => Players.GetNodeOrNull($"Player{id}")?.QueueFree();
         SpawnPlayer(1);
