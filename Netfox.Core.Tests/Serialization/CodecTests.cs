@@ -153,4 +153,15 @@ public class CodecTests
         Assert.Equal(3, reader.GetPartialData(10).Length);
         Assert.Equal(0, reader.AvailableBytes);
     }
+
+    [Fact]
+    public void AReaderRefusesALengthThatDecodedNegative()
+    {
+        // A varint past int.MaxValue turns negative when read as a length; Take must not slice with it
+        var writer = new ByteWriter();
+        VarUint.Encode(uint.MaxValue, writer);
+        var reader = new ByteReader(writer.ToArray());
+        var length = VarUint.DecodeInt(reader);
+        Assert.Throws<EndOfStreamException>(() => reader.GetData(length).ToArray());
+    }
 }

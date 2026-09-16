@@ -56,7 +56,8 @@ public sealed class ByteReader
 
     private ReadOnlySpan<byte> Take(int count)
     {
-        if (AvailableBytes < count)
+        // A negative count is a length that overflowed on decode: as out of data as one too large
+        if (count < 0 || AvailableBytes < count)
             throw new EndOfStreamException($"Tried to read {count} bytes with {AvailableBytes} available");
         var span = _data.Span.Slice(_position, count);
         _position += count;

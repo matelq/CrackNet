@@ -114,14 +114,22 @@ public partial class NetworkCommandServer : Node
 
     public byte[] GetCommandPacketPrefix() => PacketPrefix;
 
-    private void HandleCommand(int sender, int idx, byte[] data)
+    internal void HandleCommand(int sender, int idx, byte[] data)
     {
         if (!_commands.TryGetValue(idx, out var command))
         {
             Logger.Error("Received unknown command #{0}!", idx);
             return;
         }
-        command.Handle(sender, data);
+        try
+        {
+            command.Handle(sender, data);
+        }
+        catch (EndOfStreamException e)
+        {
+            // A truncated or corrupt packet: drop it rather than throw out of the transport's callback
+            Logger.Warning("Dropped malformed command #{0} from #{1}: {2}", idx, sender, e.Message);
+        }
     }
 
     /// <summary>A registered networked command. Obtained from RegisterCommand.</summary>
@@ -191,7 +199,7 @@ internal partial class PacketCommandTransport : CommandTransport
 
     private void HandlePacket(long peer, byte[] packet)
     {
-        if (!IsCommandPacket(_prefix, packet)) return;
+        if (packet.Length <= _prefix.Length || !IsCommandPacket(_prefix, packet)) return;
         var idx = packet[_prefix.Length];
         var data = packet.AsSpan(_prefix.Length + 1).ToArray();
         Receive((int)peer, idx, data);
