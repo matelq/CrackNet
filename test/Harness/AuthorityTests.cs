@@ -17,11 +17,11 @@ public partial class AuthorityTests : HarnessSuite
         Expect.True(synced, "peers never synced");
     }
 
-    private HarnessBody[] SpawnEverywhere(string name, Vector3 velocity = default, Vector3 location = default)
+    private HarnessBody[] SpawnEverywhere(string name, Vector3 velocity = default, Vector3 location = default, int authority = 1)
         => [
-            HarnessBody.Spawn(Host, name, 1, velocity, location),
-            HarnessBody.Spawn(Client, name, 1, velocity, location),
-            HarnessBody.Spawn(_third, name, 1, velocity, location),
+            HarnessBody.Spawn(Host, name, authority, velocity, location),
+            HarnessBody.Spawn(Client, name, authority, velocity, location),
+            HarnessBody.Spawn(_third, name, authority, velocity, location),
         ];
 
     private static bool Agree(HarnessBody[] bodies, int authority, int owner)
@@ -157,5 +157,43 @@ public partial class AuthorityTests : HarnessSuite
         Client.Disconnect();
         HarnessBody[] remaining = [crate[0], crate[2]];
         Expect.True(await WaitUntil(() => Agree(remaining, 1, 0), 3), Describe(remaining));
+    }
+
+    [Test]
+    public async Task AuthoritySpreadingStopsAtTheSourcesDepthLimit()
+    {
+        var source = SpawnEverywhere("Source", authority: 2);
+        var first = SpawnEverywhere("First");
+        var second = SpawnEverywhere("Second");
+        foreach (var body in source)
+        {
+            body.Object.SpreadsAuthority = true;
+            body.Object.MaxSpreadDepth = 1;
+        }
+        foreach (var body in first) body.Object.SpreadsAuthority = true;
+        await NextFrame();
+
+        Expect.True(source[1].Object.Touch(first[1].Object));
+        Expect.True(await WaitUntil(() => Agree(first, 2, 0), 3), Describe(first));
+        Expect.False(first[1].Object.Touch(second[1].Object));
+        for (var i = 0; i < 20; i++) await NextFrame();
+        Expect.True(Agree(second, 1, 0), Describe(second));
+    }
+
+    [Test]
+    public async Task FirstOfTwoOpposingChainsTakesBothObjects()
+    {
+        Network.SetLink(1, 2, latencyMs: 10);
+        Network.SetLink(1, 3, latencyMs: 80);
+        var left = SpawnEverywhere("Left", authority: 2);
+        var right = SpawnEverywhere("Right", authority: 3);
+        foreach (var body in left.Concat(right)) body.Object.SpreadsAuthority = true;
+        await NextFrame();
+
+        Expect.True(left[1].Object.Touch(right[1].Object));
+        Expect.True(right[2].Object.Touch(left[2].Object));
+
+        Expect.True(await WaitUntil(() => Agree(left, 2, 0) && Agree(right, 2, 0), 5),
+            Describe(left) + " / " + Describe(right));
     }
 }

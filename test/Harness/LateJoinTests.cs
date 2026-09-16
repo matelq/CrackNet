@@ -45,4 +45,20 @@ public partial class LateJoinTests : HarnessSuite
             $"crate auth {lateCrate.Object.Authority} owner {lateCrate.Object.Holder} ticks {lateCrate.Ticks}/{crate.Ticks} visible {lateCrate.Visible}, " +
             $"bullet {late.GetNodeOrNull<HarnessBody>("Bullet")?.Visible}");
     }
+
+    [Test]
+    public async Task TransferableChangesReachALateJoiner()
+    {
+        var onHost = HarnessBody.Spawn(Host, "Locked", 1);
+        HarnessBody.Spawn(Client, "Locked", 1);
+        await NextFrame();
+        onHost.Object.Transferable = false;
+
+        var late = AddPeer(4);
+        for (var i = 0; i < 10; i++) await NextFrame();
+        var lateBody = HarnessBody.Spawn(late, "Locked", 1);
+
+        Expect.True(await WaitUntil(() => !lateBody.Object.Transferable, 3),
+            "late joiner kept the scene default instead of the host's authority record");
+    }
 }

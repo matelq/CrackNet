@@ -26,7 +26,7 @@ public partial class PlaygroundCrate : RigidBody3D
         crate.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = Vector3.One } });
         crate._material = new StandardMaterial3D();
         crate.AddChild(new MeshInstance3D { Mesh = new BoxMesh { Size = Vector3.One }, MaterialOverride = crate._material });
-        crate.Object = new NetworkObject { Name = "NetworkObject" };
+        crate.Object = new NetworkObject { Name = "NetworkObject", SpreadsAuthority = true };
         crate.AddChild(crate.Object);
         crate.AddToGroup("crates");
         return crate;
@@ -55,7 +55,7 @@ public partial class PlaygroundCrate : RigidBody3D
     {
         // Whoever simulates a moving crate simulates what it knocks over too
         if (other is PlaygroundCrate crate && Object.IsAuthority && LinearVelocity.Length() > 0.5f)
-            crate.Object.TryTakeAuthority();
+            Object.Touch(crate.Object);
     }
 
     public override void _PhysicsProcess(double delta)

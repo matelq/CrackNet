@@ -125,14 +125,17 @@ One replicated object. While its root is this peer's multiplayer authority it se
 | property | `Holder` | The peer holding the object, or 0 when nobody does. |
 | property | `IsAuthority` | True when this peer simulates the object and sends its state. |
 | property | `LastSentBody` | What this peer last sent for the object, and when: an unchanged object is not sent again for a while. |
+| property | `MaxSpreadDepth` | Maximum contacts from the source of a spread chain, or -1 for unlimited. |
 | property | `Root` | The node that is the object: authority, identity and the synced subtree. The parent by default. |
-| property | `Transferable` | Whether other peers may take authority or ownership. Off for players: their character stays theirs. |
+| property | `SpreadsAuthority` | Whether this object passes its authority to another object when `NetworkObject` is called. |
+| property | `Transferable` | Whether other peers may take authority or ownership. The current authority sends runtime changes through the host, and the value is included in late-join authority records. |
 | method | `Despawn` | Ends this authoritative object's timeline. It is hidden and stops processing here immediately; remote peers hide it when their playback reaches the flagged final sample, and the root is freed after the playback grace period so a `MultiplayerSpawner` cannot remove it from observers early. |
 | method | `IsNewer(System.Int32,System.Int32)` | True when ( `ownershipSequence`, `authoritySequence`) is newer than what this object has. |
 | method | `Release` | Lets go of a held object. This peer keeps simulating it until someone else touches it. |
 | method | `ReturnToHost` | Hands a free object this peer simulates back to the host, typically once it has come to rest. |
 | method | `SendToAuthority(Godot.Variant)` | Delivers `payload` to whoever is this object's authority, reliably and exactly once, even if authority moves while it is on its way: the transport does not duplicate, and a peer that is no longer the authority passes the event on instead of raising it. On the authority itself it is raised at once. |
 | method | `Teleport` | The next state this peer sends applies without interpolation on the others: a respawn, not a flight. |
+| method | `Touch(Netfox.NetworkObject)` | Passes this object's authority to `other` after game code detects contact. The source's depth limit follows the whole chain; the host verifies this object as the cause and arbitrates opposing requests. |
 | method | `TryGrab` | Takes ownership and authority. False when someone else holds it. |
 | method | `TryTakeAuthority` | Takes authority over a free object this peer touched. False when it is held by someone else, or when this peer is not connected; true means applied here and sent, not yet accepted by the host. |
 | event | `AuthorityChanged` | Raised after the authority or the owner changed, on every peer. |
@@ -150,7 +153,6 @@ Sends the state of every `NetworkObject` this peer is authority for, once per ti
 | property | `PlaybackDelayTicks` | How many ticks behind the newest sample remote objects are shown. |
 | field | `RestHeartbeatTicks` | An object whose state has not changed is sent again only this often. |
 | field | `StateIntervalTicks` | State goes out every this many ticks: 2 at 30 Hz is 15 snapshots a second. |
-| field | `_pendingAuthority` | What the host said about objects this guest does not have yet. A late joiner hears about every object as it connects, and MultiplayerSpawner delivers spawned ones on its own channel, in no particular order with ours. |
 | method | `ErasePeer(System.Int32)` | Forgets a peer's clock. On the host, also takes back every object the peer simulated or held and tells everyone: otherwise a crate carried out of the session stays with nobody for good. |
 | method | `GetDisplayTick(System.Int32)` | The display tick for objects of `peer`, or null before anything arrived from it. |
 | method | `GetPlaybackStatus(System.Int32)` | The receive and playback positions for `peer`, or null before any state arrived. The caller can compare `NewestTick` with its local network tick for network age, and with `DisplayTick` for buffered playback age. |

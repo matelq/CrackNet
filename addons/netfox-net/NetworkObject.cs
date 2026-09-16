@@ -26,14 +26,44 @@ public partial class NetworkObject : Node
     /// <summary>The node that is the object: authority, identity and the synced subtree. The parent by default.</summary>
     [Export] public Node? Root { get; set; }
 
-    /// <summary>Whether other peers may take authority or ownership. Off for players: their character stays theirs.</summary>
-    [Export] public bool Transferable { get; set; } = true;
+    private bool _transferable = true;
+
+    /// <summary>
+    /// Whether other peers may take authority or ownership. The current authority sends runtime changes through the
+    /// host, and the value is included in late-join authority records.
+    /// </summary>
+    [Export]
+    public bool Transferable
+    {
+        get => _transferable;
+        set
+        {
+            if (_transferable == value) return;
+            _transferable = value;
+            if (!Registered || !IsAuthority) return;
+            TransferableSequence++;
+            Context.NetworkObjectServer.SubmitAuthority(this);
+        }
+    }
+
+    /// <summary>Whether this object passes its authority to another object when <see cref="Touch"/> is called.</summary>
+    [Export] public bool SpreadsAuthority { get; set; }
+
+    /// <summary>Maximum contacts from the source of a spread chain, or -1 for unlimited.</summary>
+    [Export(PropertyHint.Range, "-1,64,1")] public int MaxSpreadDepth { get; set; } = -1;
 
     /// <summary>The peer holding the object, or 0 when nobody does.</summary>
     public int Holder { get; private set; }
 
     public int AuthoritySequence { get; private set; }
     public int OwnershipSequence { get; private set; }
+    public int TransferableSequence { get; private set; }
+
+    internal bool Registered { get; set; }
+    internal int SpreadDepth { get; private set; }
+    internal int SpreadLimit { get; private set; } = -1;
+    internal string SpreadCause { get; private set; } = "";
+    internal int EffectiveSpreadLimit => SpreadDepth == 0 ? MaxSpreadDepth : SpreadLimit;
 
     /// <summary>Raised after the authority or the owner changed, on every peer.</summary>
     public event Action? AuthorityChanged;
@@ -106,7 +136,24 @@ public partial class NetworkObject : Node
     {
         if (!Transferable || (Holder != 0 && Holder != LocalPeer)) return false;
         if (IsAuthority) return true;
-        return Request(LocalPeer, Holder, AuthoritySequence + 1, OwnershipSequence);
+        return Request(LocalPeer, Holder, AuthoritySequence + 1, OwnershipSequence, null, 0, -1);
+    }
+
+    /// <summary>
+    /// Passes this object's authority to <paramref name="other"/> after game code detects contact. The source's depth
+    /// limit follows the whole chain; the host verifies this object as the cause and arbitrates opposing requests.
+    /// </summary>
+    public bool Touch(NetworkObject other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+        if (!IsAuthority || !SpreadsAuthority || ReferenceEquals(this, other)) return false;
+        var nextDepth = SpreadDepth + 1;
+        var limit = EffectiveSpreadLimit;
+        if (limit >= 0 && nextDepth > limit) return false;
+        if (!other.Transferable || other.Holder is not 0 && other.Holder != LocalPeer) return false;
+        if (other.IsAuthority) return true;
+        return other.Request(LocalPeer, other.Holder, other.AuthoritySequence + 1, other.OwnershipSequence,
+            this, nextDepth, limit);
     }
 
     /// <summary>Takes ownership and authority. False when someone else holds it.</summary>
@@ -114,16 +161,17 @@ public partial class NetworkObject : Node
     {
         if (!Transferable || (Holder != 0 && Holder != LocalPeer)) return false;
         if (Holder == LocalPeer) return true;
-        return Request(LocalPeer, LocalPeer, AuthoritySequence + 1, OwnershipSequence + 1);
+        return Request(LocalPeer, LocalPeer, AuthoritySequence + 1, OwnershipSequence + 1, null, 0, -1);
     }
 
     /// <summary>Lets go of a held object. This peer keeps simulating it until someone else touches it.</summary>
     public bool Release()
-        => Holder == LocalPeer && Request(LocalPeer, 0, AuthoritySequence, OwnershipSequence + 1);
+        => Holder == LocalPeer && Request(LocalPeer, 0, AuthoritySequence, OwnershipSequence + 1, null, 0, -1);
 
     /// <summary>Hands a free object this peer simulates back to the host, typically once it has come to rest.</summary>
     public bool ReturnToHost()
-        => IsAuthority && Holder == 0 && LocalPeer != HostPeer && Request(HostPeer, 0, AuthoritySequence + 1, OwnershipSequence);
+        => IsAuthority && Holder == 0 && LocalPeer != HostPeer
+           && Request(HostPeer, 0, AuthoritySequence + 1, OwnershipSequence, null, 0, -1);
 
     /// <summary>
     /// Raised on the authority, exactly once per <see cref="SendToAuthority"/> call anywhere: the peer that sent it and
@@ -146,14 +194,27 @@ public partial class NetworkObject : Node
 
     internal const int HostPeer = 1;
 
-    private bool Request(int authority, int owner, int authoritySequence, int ownershipSequence)
+    private bool Request(
+        int authority,
+        int owner,
+        int authoritySequence,
+        int ownershipSequence,
+        NetworkObject? cause,
+        int spreadDepth,
+        int spreadLimit)
     {
         // A change nobody hears about would leave this peer disagreeing with everyone for good
         if (Root!.Multiplayer.MultiplayerPeer is not { } peer || peer is OfflineMultiplayerPeer
             || peer.GetConnectionStatus() != MultiplayerPeer.ConnectionStatus.Connected)
             return false;
 
-        Apply(authority, owner, authoritySequence, ownershipSequence);
+        var causeName = cause is null
+            ? ""
+            : Context.NetworkIdentityServer.GetIdentifierOf(cause.Root!)?.FullName;
+        if (cause is not null && causeName is null) return false;
+
+        Apply(authority, owner, authoritySequence, ownershipSequence, _transferable, TransferableSequence,
+            causeName ?? "", spreadDepth, spreadLimit);
         Context.NetworkObjectServer.SubmitAuthority(this);
         return true;
     }
@@ -163,7 +224,16 @@ public partial class NetworkObject : Node
         => ownershipSequence > OwnershipSequence
            || (ownershipSequence == OwnershipSequence && authoritySequence > AuthoritySequence);
 
-    internal void Apply(int authority, int owner, int authoritySequence, int ownershipSequence)
+    internal void Apply(
+        int authority,
+        int owner,
+        int authoritySequence,
+        int ownershipSequence,
+        bool transferable,
+        int transferableSequence,
+        string spreadCause = "",
+        int spreadDepth = 0,
+        int spreadLimit = -1)
     {
         var changed = authority != Authority || owner != Holder;
         if (authority != Authority)
@@ -181,6 +251,14 @@ public partial class NetworkObject : Node
         Holder = owner;
         AuthoritySequence = authoritySequence;
         OwnershipSequence = ownershipSequence;
+        if (transferableSequence >= TransferableSequence)
+        {
+            _transferable = transferable;
+            TransferableSequence = transferableSequence;
+        }
+        SpreadCause = spreadCause;
+        SpreadDepth = spreadDepth;
+        SpreadLimit = spreadLimit;
         if (changed) AuthorityChanged?.Invoke();
     }
 

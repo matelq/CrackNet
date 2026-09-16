@@ -45,7 +45,7 @@ public partial class PlaygroundPlayer : CharacterBody3D
         player.AddChild(new MeshInstance3D { Mesh = new CapsuleMesh { Radius = 0.4f, Height = 1.8f }, MaterialOverride = new StandardMaterial3D { AlbedoColor = color } });
         player.AddChild(new MeshInstance3D { Mesh = new BoxMesh { Size = new Vector3(0.2f, 0.2f, 0.4f) }, Position = new Vector3(0, 0.5f, -0.45f), MaterialOverride = new StandardMaterial3D { AlbedoColor = Colors.Black } });
 
-        player.Object = new NetworkObject { Name = "NetworkObject", Transferable = false };
+        player.Object = new NetworkObject { Name = "NetworkObject", Transferable = false, SpreadsAuthority = true };
         player.AddChild(player.Object);
 
         // Each player spawns its own shots, so the spawner's authority is the player's peer
@@ -110,7 +110,7 @@ public partial class PlaygroundPlayer : CharacterBody3D
         for (var i = 0; i < GetSlideCollisionCount(); i++)
         {
             if (GetSlideCollision(i).GetCollider() is not PlaygroundCrate crate || crate == _held) continue;
-            if (crate.Object.TryTakeAuthority()) crate.ApplyCentralImpulse(input * 0.6f);
+            if (Object.Touch(crate.Object)) crate.ApplyCentralImpulse(input * 0.6f);
         }
     }
 

@@ -22,7 +22,7 @@ public partial class PlaygroundShot : Node3D
         var shot = new PlaygroundShot { Name = data["name"].AsString(), Position = data["origin"].AsVector3(), _velocity = data["velocity"].AsVector3() };
         shot.SetMultiplayerAuthority(shooter);
         shot.AddChild(new MeshInstance3D { Mesh = new SphereMesh { Radius = 0.15f, Height = 0.3f }, MaterialOverride = new StandardMaterial3D { AlbedoColor = Playground.ColorOf(shooter), EmissionEnabled = true, Emission = Playground.ColorOf(shooter) } });
-        shot.Object = new NetworkObject { Name = "NetworkObject", Transferable = false };
+        shot.Object = new NetworkObject { Name = "NetworkObject", Transferable = false, SpreadsAuthority = true };
         shot.AddChild(shot.Object);
         return shot;
     }
@@ -57,6 +57,7 @@ public partial class PlaygroundShot : Node3D
         foreach (var crate in GetTree().GetNodesInGroup("crates").OfType<PlaygroundCrate>())
         {
             if (crate.GlobalPosition.DistanceTo(GlobalPosition) > HitRadius) continue;
+            Object.Touch(crate.Object);
             crate.Object.SendToAuthority(_velocity.Normalized() * CrateImpulse);
             Consume();
             return;

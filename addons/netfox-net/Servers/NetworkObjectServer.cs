@@ -50,7 +50,18 @@ public partial class NetworkObjectServer : Node
     /// What the host said about objects this guest does not have yet. A late joiner hears about every object as it
     /// connects, and MultiplayerSpawner delivers spawned ones on its own channel, in no particular order with ours.
     /// </summary>
-    private readonly Dictionary<string, (int Authority, int Owner, int AuthoritySequence, int OwnershipSequence)> _pendingAuthority = new();
+    private sealed record AuthorityRecord(
+        int Authority,
+        int Owner,
+        int AuthoritySequence,
+        int OwnershipSequence,
+        bool Transferable,
+        int TransferableSequence,
+        string SpreadCause,
+        int SpreadDepth,
+        int SpreadLimit);
+
+    private readonly Dictionary<string, AuthorityRecord> _pendingAuthority = new();
     private readonly int _maxPacketSize = NetfoxSettings.Instance.MaxSyncPacketSize;
     private NetworkCommandServer.Command _cmdState = null!;
     private NetworkCommandServer.Command _cmdAuthority = null!;
@@ -94,15 +105,17 @@ public partial class NetworkObjectServer : Node
 
         if (Context.NetworkIdentityServer.GetIdentifierOf(obj.Root!) is { } identifier
             && _pendingAuthority.Remove(identifier.FullName, out var pending))
-            obj.Apply(pending.Authority, pending.Owner, pending.AuthoritySequence, pending.OwnershipSequence);
+            ApplyRecord(obj, pending);
 
         ApplyPendingSamples(obj);
+        obj.Registered = true;
     }
 
     internal void Deregister(NetworkObject obj)
     {
         _objects.Remove(obj);
         _byRoot.Remove(obj.Root!);
+        obj.Registered = false;
         Context.NetworkIdentityServer?.DeregisterNode(obj.Root!);
     }
 
@@ -120,7 +133,8 @@ public partial class NetworkObjectServer : Node
             if (obj.Authority != peer && obj.Holder != peer) continue;
             // Players leave with their peer; the game frees them. What is left behind goes back to the host.
             if (!obj.Transferable) continue;
-            obj.Apply(NetworkObject.HostPeer, 0, obj.AuthoritySequence + 1, obj.OwnershipSequence + 1);
+            obj.Apply(NetworkObject.HostPeer, 0, obj.AuthoritySequence + 1, obj.OwnershipSequence + 1,
+                obj.Transferable, obj.TransferableSequence);
             SendAuthority(obj, 0);
         }
     }
@@ -173,6 +187,11 @@ public partial class NetworkObjectServer : Node
             VarUint.Encode(obj.Holder, writer);
             VarUint.Encode(obj.AuthoritySequence, writer);
             VarUint.Encode(obj.OwnershipSequence, writer);
+            writer.PutU8(obj.Transferable ? (byte)1 : (byte)0);
+            VarUint.Encode(obj.TransferableSequence, writer);
+            writer.PutUtf8String(obj.SpreadCause);
+            writer.PutI32(obj.SpreadDepth);
+            writer.PutI32(obj.SpreadLimit);
             _cmdAuthority.Send(writer.ToArray(), target);
         }
     }
@@ -189,6 +208,13 @@ public partial class NetworkObjectServer : Node
         var owner = VarUint.DecodeInt(reader);
         var authoritySequence = VarUint.DecodeInt(reader);
         var ownershipSequence = VarUint.DecodeInt(reader);
+        var transferable = reader.GetU8() != 0;
+        var transferableSequence = VarUint.DecodeInt(reader);
+        var spreadCause = reader.GetUtf8String();
+        var spreadDepth = reader.GetI32();
+        var spreadLimit = reader.GetI32();
+        var record = new AuthorityRecord(authority, owner, authoritySequence, ownershipSequence,
+            transferable, transferableSequence, spreadCause, spreadDepth, spreadLimit);
 
         var identifier = Context.NetworkIdentityServer.ResolveReference(sender, reference, allowQueue: false);
         NetworkObject? obj = null;
@@ -197,22 +223,47 @@ public partial class NetworkObjectServer : Node
         if (!Multiplayer.IsServer())
         {
             if (sender != NetworkObject.HostPeer) return;
-            if (obj is not null) obj.Apply(authority, owner, authoritySequence, ownershipSequence);
-            else _pendingAuthority[reference.FullName] = (authority, owner, authoritySequence, ownershipSequence);
+            if (obj is not null) ApplyRecord(obj, record);
+            else _pendingAuthority[reference.FullName] = record;
             return;
         }
 
         if (identifier is null || obj is null) return;
 
-        var allowed = obj.Transferable
-                      && obj.IsNewer(authoritySequence, ownershipSequence)
-                      && (obj.Holder == 0 || obj.Holder == sender)
-                      && (authority == sender || (authority == NetworkObject.HostPeer && obj.Authority == sender))
-                      && (owner == 0 || owner == sender);
+        NetworkObject? cause = null;
+        if (spreadCause.Length > 0
+            && Context.NetworkIdentityServer.ResolveReference(sender,
+                NetworkIdentityReference.OfFullName(spreadCause), allowQueue: false) is { } causeIdentifier)
+            _byRoot.TryGetValue(causeIdentifier.Subject, out cause);
 
-        if (allowed)
+        var causeAllowed = spreadCause.Length == 0
+                           || cause is not null
+                           && cause.Authority == sender
+                           && cause.SpreadsAuthority
+                           && spreadDepth == cause.SpreadDepth + 1
+                           && spreadLimit == cause.EffectiveSpreadLimit
+                           && (spreadLimit < 0 || spreadDepth <= spreadLimit);
+
+        var authorityAllowed = obj.Transferable
+                               && obj.IsNewer(authoritySequence, ownershipSequence)
+                               && (obj.Holder == 0 || obj.Holder == sender)
+                               && (authority == sender || (authority == NetworkObject.HostPeer && obj.Authority == sender))
+                               && (owner == 0 || owner == sender)
+                               && causeAllowed;
+        var configurationAllowed = transferableSequence > obj.TransferableSequence
+                                   && sender == obj.Authority
+                                   && authority == obj.Authority
+                                   && owner == obj.Holder
+                                   && authoritySequence == obj.AuthoritySequence
+                                   && ownershipSequence == obj.OwnershipSequence;
+
+        if (authorityAllowed || configurationAllowed)
         {
-            obj.Apply(authority, owner, authoritySequence, ownershipSequence);
+            if (authorityAllowed)
+                ApplyRecord(obj, record);
+            else
+                obj.Apply(obj.Authority, obj.Holder, obj.AuthoritySequence, obj.OwnershipSequence,
+                    transferable, transferableSequence, obj.SpreadCause, obj.SpreadDepth, obj.SpreadLimit);
             SendAuthority(obj, 0);
         }
         else
@@ -221,6 +272,10 @@ public partial class NetworkObjectServer : Node
             SendAuthority(obj, sender);
         }
     }
+
+    private static void ApplyRecord(NetworkObject obj, AuthorityRecord record)
+        => obj.Apply(record.Authority, record.Owner, record.AuthoritySequence, record.OwnershipSequence,
+            record.Transferable, record.TransferableSequence, record.SpreadCause, record.SpreadDepth, record.SpreadLimit);
 
     /// <summary>On the host: tells a peer that just joined who has authority over and who holds every object.</summary>
     private void SendAllAuthorityTo(int peer)
