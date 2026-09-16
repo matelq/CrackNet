@@ -25,6 +25,10 @@ What remains is Glenn Fiedler's distributed authority, from
 [Networked Physics in Virtual Reality](https://gafferongames.com/post/networked_physics_in_virtual_reality/), which he
 recommends for co-operative games only.
 
+One rule sits above every mechanic: **every interaction has exactly one arbiter: the authority of the object that
+initiated it; the host picks the first of opposing requests.** Check that rule explicitly whenever adding a mechanic.
+If two peers can both decide the same contact, hit, grab or consumption, the mechanic is not finished.
+
 ## The model
 
 **Authority and ownership.** Every networked object has an authority (the peer that simulates it and sends its state)
@@ -34,18 +38,22 @@ and the object is free or already the requester's, tells everyone, and otherwise
 the host's word. State packets carry no sequences: a receiver keeps state only from the peer it knows as the
 authority, and drops the samples it had when the authority changes, since they run on the previous peer's clock.
 The current authority is Godot's `multiplayer authority` (`IsMultiplayerAuthority()` stays true); the sequences and
-the ownership flag live on top of it. What counts as touching and as rest is the game's: it calls `TryTakeAuthority`
-on contact and `ReturnToHost` once a body has settled.
+the ownership flag live on top of it. What counts as contact and rest is the game's, but the policy is the library's:
+it calls `Touch` on contact and `ReturnToHost` once a body has settled.
 
 - A player's own character is always authoritative on its peer. Input applies at once, with no reconciliation and no
   resimulation. Its authority never transfers.
 - Grabbing a free object takes ownership optimistically; nobody else can take it until it is released.
-- Touching a free object takes authority over it, and whatever that object then hits follows, recursively: the peer who
-  caused a collision simulates it.
+- An authoritative object with `SpreadsAuthority` calls `Touch(other)`; its cause travels with the request, and the
+  touched object follows its authority. `MaxSpreadDepth` limits the whole chain from its source (unlimited by default),
+  rather than restarting at each crate.
 - The host arbitrates conflicts (two grabs at once): the higher sequence wins, and an ownership change beats an
-  authority change. The loser is corrected by the host's update. Conflicts are rare in practice even under latency.
+  authority change. For opposing contact chains, the first request takes the pair: the counter-request is rejected
+  because its cause was just taken by the winner. The loser is corrected by the host's update.
 - The host owns the world by default: NPCs, spawns, doors, anything at rest. A released object returns to the host
   after it has been at rest for N ticks.
+- `Transferable` is part of the host's reliable authority record, including its own sequence, so runtime changes and
+  the current value both reach every peer and late joiner.
 
 **Remote objects.** An object whose authority is another peer is kinematic locally and is driven from a playback
 buffer. It does not push back until authority transfers to the peer touching it; no second physics runs on top of
@@ -57,6 +65,15 @@ and slews its rate to hold that depth. On underrun it holds the last value or ex
 to rebuffer. A late packet never rewrites a displayed past. Corrections are smoothed only in presentation, never in the
 simulation.
 
+State can arrive before a spawned object's reliable scene message. Receivers retain a bounded, short-lived set of
+samples for unknown objects and apply them when the object registers. If those opening samples are already behind the
+peer's shared display clock, the new object starts at its own first sample and advances faster until it catches that
+clock. It never discards the start of its motion; once caught up, all objects from the peer share one clock again.
+
+Despawn is also state. `NetworkObject.Despawn()` sends repeated final samples marked despawned during a grace period,
+hides and stops the authority immediately, and delays freeing the spawner-owned node. Observers keep showing the
+object until playback reaches the marked sample, then hide it; a reliable spawner removal may free it afterward.
+
 **Players and contact.** Players do not collide with each other physically: each peer would push against the other in
 the past. Instead:
 - a push is an event "apply impulse X" to the pushed player's authority (`SendToAuthority`), applied as knockback in
@@ -65,21 +82,24 @@ the past. Instead:
 - standing on or carrying a player attaches to the carrier's displayed transform, like a held object (#59).
 
 **Projectiles.** A projectile, fast or slow, belongs to its shooter and appears at once for them; other peers play it in
-the shooter's timeline. A hit on my own player is decided by my peer, against what I see, so a dodge on my screen
-counts. A hit on anything else is decided by the projectile's owner. Hitscan is decided by the shooter. Damage and
-"projectile consumed" are events to the authority of the target or the projectile (`SendToAuthority`): reliable,
-passed on if the authority moved on the way, and handled in arrival order there, so the first "consumed" wins. Physical
-projectiles (a grenade, a thrown crate) are ordinary physics objects. Spawning and despawning use Godot's
-`MultiplayerSpawner`, one per shooter with the shooter as its authority. A remote object stays hidden until playback
-shows its first sample, so a projectile never hangs at the muzzle for the playback delay.
+the shooter's timeline. The projectile authority is the one arbiter for every hit, against the targets it displays.
+It sends damage or knockback to the chosen target with `SendToAuthority` and calls `Despawn()` on the projectile in the
+same decision, so it cannot pass through the first of two targets or hit twice. Hitscan is likewise shooter-decided.
+Physical projectiles (a grenade, a thrown crate) are ordinary physics objects. Spawning uses one Godot
+`MultiplayerSpawner` per shooter, with the shooter as its authority. A remote projectile stays hidden until playback
+shows its retained first sample, so it begins at the muzzle rather than hanging there or appearing down range.
 
 **QTE.** The host announces a QTE with its start tick. Each participant judges its own input locally, relative to when
 it saw the start, and reports the result; the host only collects and announces the outcome. The base primitive is
 "press within a window together"; others are built from it and events.
 
-**Topology.** The library addresses peers and never knows the route. Over Steam every peer connects to every peer
-(`SteamMultiplayerPeer` joins all lobby members), so state goes directly to observers; ownership, events and QTEs go
-through the host. Over ENet, `SceneMultiplayer.server_relay` gives a star with the same code.
+**Topology.** The library addresses peers and never knows the route. The target Steam transport is a full mesh
+(`SteamMultiplayerPeer` joins every lobby member), so state and peer-directed events go directly to their destination;
+host-arbitrated authority records still go through peer 1. The playground mirrors that topology over ENet: a temporary
+rendezvous lets the host assign compact peer IDs and tell a joiner about existing peers, then every gameplay pair owns
+one `ENetConnection` in `ENetMultiplayerPeer.CreateMesh`. Its `MultiplayerPeerExtension` simulator applies a profile
+once on each sending link—delay and jitter to all packets, steady and burst loss only to unreliable packets—so a
+guest-to-guest packet is no longer relayed or charged twice.
 
 **Bandwidth.** State goes out every 2 ticks (15 Hz). Values are written compactly (a type byte, floats). An object
 whose state has not changed is sent only as a heartbeat once a second; a receiver that sees a sample after such a gap
@@ -90,10 +110,11 @@ ask for them.
 
 ## API
 
-One `NetworkObject` node per object: it holds the sequences, sends state while authoritative, and plays back and
-interpolates otherwise. Properties in its subtree are marked `[Synced]`; `Interpolate` is true by default and set to
-false where a continuous value should step. Discrete types (bool, int, enum, strings, references) always step.
-`Teleport()` makes the next snapshot apply without interpolation.
+One `NetworkObject` node per object: it holds the sequences and contact-spreading policy, sends state while
+authoritative, and plays back and interpolates otherwise. Properties in its subtree are marked `[Synced]`;
+`Interpolate` is true by default and set to false where a continuous value should step. Discrete types (bool, int,
+enum, strings, references) always step. `Teleport()` makes the next snapshot apply without interpolation;
+`Despawn()` ends the object's playback timeline. Games report contacts through `Touch`, not by reimplementing policy.
 
 ## Tests the model needs
 
@@ -103,31 +124,41 @@ false where a continuous value should step. Discrete types (bool, int, enum, str
 4. State from a peer that no longer has authority is not shown, nor blended into the new authority's.
 5. Playback: one peer's objects show the same tick; underrun without freezing; a late packet does not rewrite the past.
 6. A push event is applied exactly once, and an event follows an authority that moved while it was on its way.
-7. A projectile appears on other peers at its firing tick; damage reaches the target's peer exactly once, including when
-   the target decides.
+7. A projectile appears on other peers at its firing tick; its authority hits only the first of two players in line,
+   and observers retain it until their playback reaches its despawn sample.
 8. Late join: the full world and its owners.
 9. Bandwidth bound: bytes per tick for N objects, failing on regression.
-10. Two-process smoke with `--profile=realistic`: an object handed from player to player, disagreement measured on
-    displayed positions during motion, not at rest.
+10. Three-process mesh smoke with `--profile=realistic`: an object driven by client A is observed by the host and
+    client B, with disagreement measured on displayed positions during motion, not at rest.
 
 ## Playground
 
-`examples/playground` is where the model gets played, and in time it has to exercise every point above. Iteration 1:
+`examples/playground` is where the model gets played, and in time it has to exercise every point above. Iteration 2:
 
 - [x] Players: always their own peer's, played back elsewhere, no collision between players
 - [x] Push another player: an event to their peer, applied as knockback
-- [x] Crates: kinematic where not simulated, touching takes authority, the authority chain on impact, back to the host at rest
+- [x] Crates: kinematic where not simulated, `Touch` spreads authority with host arbitration, back to the host at rest
 - [x] Grab, carry, throw (ownership)
-- [x] Slow projectiles: spawned by the shooter, hits on crates decided by the shooter, on a player by that player
+- [x] Slow projectiles: spawned and wholly arbitrated by the shooter; first hit knocks back and despawns on playback
 - [x] Late join (MultiplayerSpawner plus the host's authority table)
 - [x] A leaving peer's crates go back to the host
-- [x] Two-process smoke (`--smoke`) under a named profile, comparing displayed positions during motion
+- [x] Full ENet mesh and per-link in-process simulation under named profiles
+- [x] Three-process smoke (`--smoke`) including client-A-to-client-B state, comparing displayed positions during motion
+- [x] Per-player delay readout split into network age and playback depth
 - [ ] Soft separation of overlapping players
 - [ ] Standing on and carrying a player (attach to the displayed transform)
 - [ ] Throwing a player: `Transferable` carried by the authority command, so the thrown player can hand itself over
 - [ ] Hitscan
 - [ ] QTE: press together within a window
-- [ ] Steam mesh instead of the ENet star
+- [ ] Steam transport (the playground mesh exercises the intended route over ENet)
+
+## Deferred
+
+- Pusher-side predicted knockback shown as a decaying presentation offset. Revisit if push latency still bothers on
+  Casual or Realistic after the mesh.
+- Extrapolating targets to the present for hit tests, in the style of Photon Fusion "Forecast". Revisit if dodges do
+  not count on Casual or Realistic.
+- Sequence number overflow (review finding).
 
 ## Sources
 
