@@ -58,6 +58,7 @@ public partial class NetworkSimulatorTests : TestSuite
     {
         var backup = NetfoxSettings.Instance;
         var settings = NetfoxSettings.Load();
+        settings.SimulatedProfile = "Custom";
         settings.SimulatedPacketLossChance = 0.3;
         NetfoxSettings.Instance = settings;
         try
@@ -127,11 +128,41 @@ public partial class NetworkSimulatorTests : TestSuite
     [Test]
     public async Task ConnectPortSkipsTheProxyWhenThereIsNothingToSimulate()
     {
-        var simulator = await Simulator("Direct Simulator");
-        NetworkSimulator.HostPeerFactory = _ => _network.CreatePeer(1);
-        simulator.Connect();
+        var backup = NetfoxSettings.Instance;
+        var settings = NetfoxSettings.Load();
+        settings.SimulatedProfile = "Clear";
+        NetfoxSettings.Instance = settings;
+        try
+        {
+            var simulator = await Simulator("Direct Simulator");
+            NetworkSimulator.HostPeerFactory = _ => _network.CreatePeer(1);
+            simulator.Connect();
 
-        Expect.Equal(simulator.ServerPort, simulator.ConnectPort);
+            Expect.Equal(simulator.ServerPort, simulator.ConnectPort);
+        }
+        finally
+        {
+            NetfoxSettings.Instance = backup;
+        }
+    }
+
+    [Test]
+    public async Task TheProfileSettingPicksANamedProfile()
+    {
+        var backup = NetfoxSettings.Instance;
+        var settings = NetfoxSettings.Load();
+        settings.SimulatedProfile = "Hostile";
+        settings.SimulatedLatencyMs = 1;
+        NetfoxSettings.Instance = settings;
+        try
+        {
+            var simulator = await Simulator("Profiled");
+            Expect.Equal(NetworkSimulator.Profile.Hostile, simulator.Conditions);
+        }
+        finally
+        {
+            NetfoxSettings.Instance = backup;
+        }
     }
 
     /// <summary>

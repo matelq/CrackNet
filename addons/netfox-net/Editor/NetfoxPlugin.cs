@@ -52,8 +52,12 @@ public partial class NetfoxPlugin : EditorPlugin
         new("netfox/autoconnect/host", "127.0.0.1", Variant.Type.String),
         new("netfox/autoconnect/port", 9999, Variant.Type.Int, PropertyHint.Range, "1,65535,hide_slider"),
         new("netfox/autoconnect/use_compression", false, Variant.Type.Bool),
+        new("netfox/autoconnect/simulated_profile", "Bad", Variant.Type.String, PropertyHint.Enum, "Clear,Casual,Realistic,Bad,Hostile,Custom"),
         new("netfox/autoconnect/simulated_latency_ms", 0, Variant.Type.Int, PropertyHint.Range, "0,200,or_greater"),
         new("netfox/autoconnect/simulated_packet_loss_chance", 0.0, Variant.Type.Float, PropertyHint.Range, "0,1"),
+        new("netfox/autoconnect/simulated_jitter_ms", 0, Variant.Type.Int, PropertyHint.Range, "0,200,or_greater"),
+        new("netfox/autoconnect/simulated_burst_loss_ms", 0, Variant.Type.Int, PropertyHint.Range, "0,1000,or_greater"),
+        new("netfox/autoconnect/simulated_burst_interval_seconds", 0.0, Variant.Type.Float, PropertyHint.Range, "0,60,or_greater"),
     ];
 
     // Order matters: dependencies come first
