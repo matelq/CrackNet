@@ -1,9 +1,12 @@
 # netfox-net
 
-Native C# port of netfox (GDScript rollback netcode for Godot). Reference GDScript lives in `netfox/` (read-only, `.gdignore`,
-gitignored; clone foxssake/netfox there if missing). Roadmap lives in GitHub issues.
-Rule: 1:1 semantics and public API with the original, idiomatic C# inside. When in doubt, read the matching `.gd` file first.
-Branches: `reworked` is the default and where work happens; `master` keeps parity with the original, so changes that deviate from its design (NetfoxContext, settings object, shared synchronizer base) never land there.
+Co-op netcode for Godot C#: distributed authority with state synchronization. Started as a port of netfox; on this
+branch (`distributed-authority`) it no longer is one. The model, its decisions and sources: `docs/design/distributed-authority.md`
+- read it before changing anything networked. The rules of the port (1:1 with the `.gd` original, "Port of x.gd" summaries,
+parity checks) do not apply here; `reworked` and `master` keep the port. Roadmap: the `Distributed authority` milestone.
+
+Work in progress: the rollback stack is being removed. Sections below that describe rollback, the physics resimulation
+driver or parity describe what is being deleted, not what to build on.
 
 ## Layout
 
