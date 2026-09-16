@@ -8,6 +8,12 @@ namespace Netfox;
 /// its subtree every tick; otherwise it plays them back from the authority's samples, a few ticks behind, on the clock
 /// shared by everything that peer sends. See docs/design/distributed-authority.md.
 /// <para>
+/// Authority moves at runtime: <see cref="TryTakeAuthority"/> when this peer touches the object, <see cref="TryGrab"/>
+/// when it holds it, <see cref="Release"/> and <see cref="ReturnToHost"/> after. Every change applies here at once and
+/// goes to the host, which accepts it or corrects this peer. A change is newer when its ownership sequence is higher,
+/// or equal with a higher authority sequence, so a grab beats a touch.
+/// </para>
+/// <para>
 /// A nested <see cref="NetworkObject"/> owns its own subtree: a crate carried inside a player is not part of the
 /// player.
 /// </para>
@@ -20,6 +26,18 @@ public partial class NetworkObject : Node
     /// <summary>The node that is the object: authority, identity and the synced subtree. The parent by default.</summary>
     [Export] public Node? Root { get; set; }
 
+    /// <summary>Whether other peers may take authority or ownership. Off for players: their character stays theirs.</summary>
+    [Export] public bool Transferable { get; set; } = true;
+
+    /// <summary>The peer holding the object, or 0 when nobody does.</summary>
+    public int Owner { get; private set; }
+
+    public int AuthoritySequence { get; private set; }
+    public int OwnershipSequence { get; private set; }
+
+    /// <summary>Raised after the authority or the owner changed, on every peer.</summary>
+    public event Action? AuthorityChanged;
+
     internal List<(Node Node, NodePath Property, bool Interpolate)> Properties { get; } = new();
     internal SampleTrack<Sample> Track { get; } = new();
     internal bool TeleportPending { get; set; }
@@ -27,8 +45,82 @@ public partial class NetworkObject : Node
     /// <summary>True when this peer simulates the object and sends its state.</summary>
     public bool IsAuthority => Root!.IsMultiplayerAuthority();
 
+    public int Authority => Root!.GetMultiplayerAuthority();
+
+    private int LocalPeer => Root!.Multiplayer.GetUniqueId();
+
     /// <summary>The next state this peer sends applies without interpolation on the others: a respawn, not a flight.</summary>
     public void Teleport() => TeleportPending = true;
+
+    /// <summary>
+    /// Takes authority over a free object this peer touched. False when it is held by someone else, or when this peer
+    /// is not connected; true means applied here and sent, not yet accepted by the host.
+    /// </summary>
+    public bool TryTakeAuthority()
+    {
+        if (!Transferable || (Owner != 0 && Owner != LocalPeer)) return false;
+        if (IsAuthority) return true;
+        return Request(LocalPeer, Owner, AuthoritySequence + 1, OwnershipSequence);
+    }
+
+    /// <summary>Takes ownership and authority. False when someone else holds it.</summary>
+    public bool TryGrab()
+    {
+        if (!Transferable || (Owner != 0 && Owner != LocalPeer)) return false;
+        if (Owner == LocalPeer) return true;
+        return Request(LocalPeer, LocalPeer, AuthoritySequence + 1, OwnershipSequence + 1);
+    }
+
+    /// <summary>Lets go of a held object. This peer keeps simulating it until someone else touches it.</summary>
+    public bool Release()
+        => Owner == LocalPeer && Request(LocalPeer, 0, AuthoritySequence, OwnershipSequence + 1);
+
+    /// <summary>Hands a free object this peer simulates back to the host, typically once it has come to rest.</summary>
+    public bool ReturnToHost()
+        => IsAuthority && Owner == 0 && LocalPeer != HostPeer && Request(HostPeer, 0, AuthoritySequence + 1, OwnershipSequence);
+
+    internal const int HostPeer = 1;
+
+    private bool Request(int authority, int owner, int authoritySequence, int ownershipSequence)
+    {
+        // A change nobody hears about would leave this peer disagreeing with everyone for good
+        if (Root!.Multiplayer.MultiplayerPeer is not { } peer || peer is OfflineMultiplayerPeer
+            || peer.GetConnectionStatus() != MultiplayerPeer.ConnectionStatus.Connected)
+            return false;
+
+        Apply(authority, owner, authoritySequence, ownershipSequence);
+        Context.NetworkObjectServer.SubmitAuthority(this);
+        return true;
+    }
+
+    /// <summary>True when (<paramref name="ownershipSequence"/>, <paramref name="authoritySequence"/>) is newer than what this object has.</summary>
+    internal bool IsNewer(int authoritySequence, int ownershipSequence)
+        => ownershipSequence > OwnershipSequence
+           || (ownershipSequence == OwnershipSequence && authoritySequence > AuthoritySequence);
+
+    internal void Apply(int authority, int owner, int authoritySequence, int ownershipSequence)
+    {
+        var changed = authority != Authority || owner != Owner;
+        if (authority != Authority)
+        {
+            SetAuthority(Root!, authority);
+            // Samples are stamped on the previous authority's clock; the new one sends its own
+            Track.Clear();
+        }
+
+        Owner = owner;
+        AuthoritySequence = authoritySequence;
+        OwnershipSequence = ownershipSequence;
+        if (changed) AuthorityChanged?.Invoke();
+    }
+
+    private static void SetAuthority(Node node, int peer)
+    {
+        node.SetMultiplayerAuthority(peer, recursive: false);
+        foreach (var child in node.GetChildren())
+            if (!HasOwnObject(child, except: null) || child is NetworkObject)
+                SetAuthority(child, peer);
+    }
 
     public override void _EnterTree()
     {
@@ -52,16 +144,15 @@ public partial class NetworkObject : Node
 
         foreach (var child in node.GetChildren())
         {
-            if (child is NetworkObject) continue;
-            if (child != this && HasOwnObject(child)) continue;
+            if (child is NetworkObject || HasOwnObject(child, except: this)) continue;
             Gather(child);
         }
     }
 
-    private bool HasOwnObject(Node node)
+    private static bool HasOwnObject(Node node, NetworkObject? except)
     {
         foreach (var child in node.GetChildren())
-            if (child is NetworkObject other && other != this) return true;
+            if (child is NetworkObject other && other != except) return true;
         return false;
     }
 

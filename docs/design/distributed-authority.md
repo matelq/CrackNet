@@ -28,9 +28,14 @@ recommends for co-operative games only.
 ## The model
 
 **Authority and ownership.** Every networked object has an authority (the peer that simulates it and sends its state)
-and optionally an owner (the peer holding it). Each has its own sequence number; a state update carries both, and a
-receiver drops anything older than what it knows. The current authority is Godot's `multiplayer authority`
-(`IsMultiplayerAuthority()` stays true); the sequences and the ownership flag live on top of it.
+and optionally an owner (the peer holding it). Each has its own sequence number. A change applies at once on the
+peer making it and goes to the host over a reliable channel; the host accepts it when (ownership, authority) is newer
+and the object is free or already the requester's, tells everyone, and otherwise corrects the requester. Guests take
+the host's word. State packets carry no sequences: a receiver keeps state only from the peer it knows as the
+authority, and drops the samples it had when the authority changes, since they run on the previous peer's clock.
+The current authority is Godot's `multiplayer authority` (`IsMultiplayerAuthority()` stays true); the sequences and
+the ownership flag live on top of it. What counts as touching and as rest is the game's: it calls `TryTakeAuthority`
+on contact and `ReturnToHost` once a body has settled.
 
 - A player's own character is always authoritative on its peer. Input applies at once, with no reconciliation and no
   resimulation. Its authority never transfers.
@@ -88,7 +93,7 @@ false where a continuous value should step. Discrete types (bool, int, enum, str
 1. Two peers grab one object at once: exactly one owner, and every peer agrees who.
 2. Authority chain: a thrown crate hits a second one, which follows the thrower.
 3. Authority returns to the host after rest.
-4. State from a peer that no longer has authority is dropped by sequence.
+4. State from a peer that no longer has authority is not shown, nor blended into the new authority's.
 5. Playback: one peer's objects show the same tick; underrun without freezing; a late packet does not rewrite the past.
 6. A push event is applied exactly once.
 7. A projectile appears on other peers at its firing tick; damage reaches the target's peer exactly once, including when

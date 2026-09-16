@@ -33,6 +33,7 @@ public partial class NetworkObjectServer : Node
     private readonly Dictionary<int, PlaybackClock> _clocks = new();
     private readonly int _maxPacketSize = NetfoxSettings.Instance.MaxSyncPacketSize;
     private NetworkCommandServer.Command _cmdState = null!;
+    private NetworkCommandServer.Command _cmdAuthority = null!;
 
     public override void _EnterTree()
     {
@@ -45,6 +46,7 @@ public partial class NetworkObjectServer : Node
     public override void _Ready()
     {
         _cmdState = Context.NetworkCommandServer.RegisterCommandAt(CommandIds.ObjectState, HandleState, MultiplayerPeer.TransferModeEnum.Unreliable);
+        _cmdAuthority = Context.NetworkCommandServer.RegisterCommandAt(CommandIds.ObjectAuthority, HandleAuthority, MultiplayerPeer.TransferModeEnum.Reliable);
         Context.NetworkTime.AfterTick += SendState;
         Context.NetworkEvents.OnPeerLeave += ErasePeer;
     }
@@ -82,6 +84,73 @@ public partial class NetworkObjectServer : Node
 
     /// <summary>The display tick for objects of <paramref name="peer"/>, or null before anything arrived from it.</summary>
     public double? GetDisplayTick(int peer) => _clocks.TryGetValue(peer, out var clock) ? clock.Tick : null;
+
+    /// <summary>
+    /// Sends an authority change this peer just applied: a guest asks the host, the host tells everyone.
+    /// </summary>
+    internal void SubmitAuthority(NetworkObject obj)
+    {
+        if (Multiplayer.IsServer()) SendAuthority(obj, 0);
+        else SendAuthority(obj, NetworkObject.HostPeer);
+    }
+
+    private void SendAuthority(NetworkObject obj, int peer)
+    {
+        if (Context.NetworkIdentityServer.GetIdentifierOf(obj.Root!) is not { } identifier) return;
+        var targets = peer == 0 ? Multiplayer.GetPeers() : [peer];
+        foreach (var target in targets)
+        {
+            var writer = new ByteWriter();
+            // By name, not id: this is reliable and rare, and a name resolves even before ids were exchanged
+            NetRef.Encode(Core.Data.NetworkIdentityReference.OfFullName(identifier.FullName), writer);
+            VarUint.Encode(obj.Authority, writer);
+            VarUint.Encode(obj.Owner, writer);
+            VarUint.Encode(obj.AuthoritySequence, writer);
+            VarUint.Encode(obj.OwnershipSequence, writer);
+            _cmdAuthority.Send(writer.ToArray(), target);
+        }
+    }
+
+    /// <summary>
+    /// On the host: accepts a guest's change when it is newer and the object is free or already the guest's, and tells
+    /// everyone; otherwise tells the guest what stands. On a guest: whatever the host says stands.
+    /// </summary>
+    private void HandleAuthority(int sender, byte[] data)
+    {
+        var reader = new ByteReader(data);
+        var reference = NetRef.Decode(reader);
+        var authority = VarUint.DecodeInt(reader);
+        var owner = VarUint.DecodeInt(reader);
+        var authoritySequence = VarUint.DecodeInt(reader);
+        var ownershipSequence = VarUint.DecodeInt(reader);
+
+        if (Context.NetworkIdentityServer.ResolveReference(sender, reference, allowQueue: false) is not { } identifier
+            || !_byRoot.TryGetValue(identifier.Subject, out var obj))
+            return;
+
+        if (!Multiplayer.IsServer())
+        {
+            if (sender == NetworkObject.HostPeer) obj.Apply(authority, owner, authoritySequence, ownershipSequence);
+            return;
+        }
+
+        var allowed = obj.Transferable
+                      && obj.IsNewer(authoritySequence, ownershipSequence)
+                      && (obj.Owner == 0 || obj.Owner == sender)
+                      && (authority == sender || (authority == NetworkObject.HostPeer && obj.Authority == sender))
+                      && (owner == 0 || owner == sender);
+
+        if (allowed)
+        {
+            obj.Apply(authority, owner, authoritySequence, ownershipSequence);
+            SendAuthority(obj, 0);
+        }
+        else
+        {
+            Logger.Debug("Rejected authority change on {0} from #{1}", identifier.FullName, sender);
+            SendAuthority(obj, sender);
+        }
+    }
 
     private void SendState(double delta, int tick)
     {
