@@ -178,24 +178,23 @@ public partial class NetworkSimulatorTests : TestSuite
         }
     }
 
-    /// <summary>The two named profiles are what checks ask for by name, so their shape is part of the contract.</summary>
+    /// <summary>The named profiles are what checks ask for by name, so their shape is part of the contract.</summary>
     [Test]
-    public void TheNamedProfilesCarryJitterAndBursts()
+    public void TheNamedProfilesGetWorseInOrder()
     {
-        foreach (var (name, profile) in new[]
-                 {
-                     ("Realistic", NetworkSimulator.Profile.Realistic),
-                     ("Hostile", NetworkSimulator.Profile.Hostile),
-                 })
-        {
-            Expect.True(profile.LatencyMs > 0, $"{name} has no latency");
-            Expect.True(profile.JitterMs > 0, $"{name} has no jitter, which is half of what it is for");
-            Expect.True(profile.PacketLossPercent > 0, $"{name} has no steady loss");
-            Expect.True(NetworkSimulator.InLossBurst(profile, 0), $"{name} never bursts");
-        }
+        string[] names = ["clear", "casual", "realistic", "bad", "hostile"];
+        var profiles = names.Select(name => NetworkSimulator.Profile.Named(name)!).ToList();
+        Expect.True(ReferenceEquals(NetworkSimulator.Profile.Bad, NetworkSimulator.Profile.Default));
+        Expect.Null(NetworkSimulator.Profile.Named("nope"));
+        Expect.True(NetworkSimulator.Profile.Clear == new NetworkSimulator.Profile(), "clear is no conditions at all");
 
-        // Realistic is the floor to playtest above; Hostile is what a check runs against
-        Expect.True(NetworkSimulator.Profile.Hostile.LatencyMs > NetworkSimulator.Profile.Realistic.LatencyMs);
-        Expect.True(NetworkSimulator.Profile.Hostile.PacketLossPercent > NetworkSimulator.Profile.Realistic.PacketLossPercent);
+        for (var i = 1; i < profiles.Count; i++)
+        {
+            var (better, worse) = (profiles[i - 1], profiles[i]);
+            Expect.True(worse.LatencyMs > better.LatencyMs && worse.JitterMs > better.JitterMs
+                        && worse.PacketLossPercent > better.PacketLossPercent && worse.BurstLossMs > better.BurstLossMs,
+                $"{names[i]} is not worse than {names[i - 1]}");
+            Expect.True(NetworkSimulator.InLossBurst(worse, 0), $"{names[i]} never bursts");
+        }
     }
 }

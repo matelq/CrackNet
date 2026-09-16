@@ -49,33 +49,44 @@ public partial class NetworkSimulator : Node
         int BurstLossMs = 0,
         double BurstIntervalSeconds = 0)
     {
-        /// <summary>
-        /// What mas-bandwidth recommends playtesting under: "at least 50ms round trip latency, several frames worth
-        /// of jitter, and a mix of steady packet loss at 1% combined with bursts of packet loss at least once
-        /// per-minute" (https://mas-bandwidth.com/what-is-lag/).
-        /// <para>
-        /// 25ms each way is the 50ms round trip. 20ms of jitter is several frames at 60fps. The burst is 200ms, which
-        /// at a 30Hz tickrate is six ticks with nothing in them - past what an input redundancy of three can cover,
-        /// which is the interesting part. It fires every five seconds rather than every sixty: the article is
-        /// describing a playtest, and a check that runs for fifteen seconds would meet a once-a-minute burst one run
-        /// in four, which is no better than not having one.
-        /// </para>
-        /// </summary>
-        public static readonly Profile Realistic =
-            new(LatencyMs: 25, PacketLossPercent: 1, JitterMs: 20, BurstLossMs: 200, BurstIntervalSeconds: 5);
+        /// <summary>No latency, no loss: the control run.</summary>
+        public static readonly Profile Clear = new();
+
+        /// <summary>A good home connection to a nearby friend.</summary>
+        public static readonly Profile Casual =
+            new(LatencyMs: 25, PacketLossPercent: 1, JitterMs: 20, BurstLossMs: 50, BurstIntervalSeconds: 10);
 
         /// <summary>
-        /// Worse than anyone should have to play on, which is what a check wants. <see cref="Realistic"/> is a floor
-        /// to playtest above, and it is too kind to catch things: the netfox-net#35 desync does not reproduce under
-        /// it at all, because 25ms each way arrives well inside the input delay and nothing is ever missing.
-        /// <para>
-        /// 120ms each way is what puts every input behind the tick it was meant for, which is the condition that
-        /// makes prediction load-bearing. The same bug fails on the first run here, and reported a disagreement of
-        /// 637m.
-        /// </para>
+        /// Friends a country apart, one on Wi-Fi. Above what mas-bandwidth recommends playtesting under
+        /// (https://mas-bandwidth.com/what-is-lag/): 50ms round trip, several frames of jitter, 1% loss plus bursts.
         /// </summary>
+        public static readonly Profile Realistic =
+            new(LatencyMs: 60, PacketLossPercent: 3, JitterMs: 50, BurstLossMs: 100, BurstIntervalSeconds: 10);
+
+        /// <summary>
+        /// The default for checks: a friend across a continent on a congested line. Playable, and bad enough that a
+        /// check passing under it means something.
+        /// </summary>
+        public static readonly Profile Bad =
+            new(LatencyMs: 150, PacketLossPercent: 5, JitterMs: 100, BurstLossMs: 200, BurstIntervalSeconds: 5);
+
+        /// <summary>Worse than anyone should have to play on; what a check runs to find where things break.</summary>
         public static readonly Profile Hostile =
-            new(LatencyMs: 120, PacketLossPercent: 10, JitterMs: 40, BurstLossMs: 300, BurstIntervalSeconds: 3);
+            new(LatencyMs: 250, PacketLossPercent: 15, JitterMs: 150, BurstLossMs: 300, BurstIntervalSeconds: 3);
+
+        /// <summary>What a check uses when it names no profile.</summary>
+        public static Profile Default => Bad;
+
+        /// <summary>A profile by its name, case-insensitive (clear, casual, realistic, bad, hostile), or null.</summary>
+        public static Profile? Named(string name) => name.ToLowerInvariant() switch
+        {
+            "clear" => Clear,
+            "casual" => Casual,
+            "realistic" => Realistic,
+            "bad" => Bad,
+            "hostile" => Hostile,
+            _ => null,
+        };
     }
 
     /// <summary>Packets the proxy passed through, and the two ways it did not. Zero bursts means no burst fired.</summary>
