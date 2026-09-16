@@ -31,6 +31,12 @@ public partial class NetworkObjectServer : Node
     private readonly List<NetworkObject> _objects = new();
     private readonly Dictionary<Node, NetworkObject> _byRoot = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<int, PlaybackClock> _clocks = new();
+
+    /// <summary>
+    /// What the host said about objects this guest does not have yet. A late joiner hears about every object as it
+    /// connects, and MultiplayerSpawner delivers spawned ones on its own channel, in no particular order with ours.
+    /// </summary>
+    private readonly Dictionary<string, (int Authority, int Owner, int AuthoritySequence, int OwnershipSequence)> _pendingAuthority = new();
     private readonly int _maxPacketSize = NetfoxSettings.Instance.MaxSyncPacketSize;
     private NetworkCommandServer.Command _cmdState = null!;
     private NetworkCommandServer.Command _cmdAuthority = null!;
@@ -51,12 +57,17 @@ public partial class NetworkObjectServer : Node
         _cmdEvent = Context.NetworkCommandServer.RegisterCommandAt(CommandIds.ObjectEvent, HandleEvent, MultiplayerPeer.TransferModeEnum.Reliable);
         Context.NetworkTime.AfterTick += SendState;
         Context.NetworkEvents.OnPeerLeave += ErasePeer;
+        Context.NetworkEvents.OnPeerJoin += SendAllAuthorityTo;
     }
 
     public override void _ExitTree()
     {
         if (Context.NetworkTime is { } time) time.AfterTick -= SendState;
-        if (Context.NetworkEvents is { } events) events.OnPeerLeave -= ErasePeer;
+        if (Context.NetworkEvents is { } events)
+        {
+            events.OnPeerLeave -= ErasePeer;
+            events.OnPeerJoin -= SendAllAuthorityTo;
+        }
         if (ReferenceEquals(Context.NetworkObjectServer, this)) Context.NetworkObjectServer = null!;
         if (Instance == this) Instance = null!;
     }
@@ -66,6 +77,10 @@ public partial class NetworkObjectServer : Node
         _objects.Add(obj);
         _byRoot[obj.Root!] = obj;
         Context.NetworkIdentityServer.RegisterNode(obj.Root!);
+
+        if (Context.NetworkIdentityServer.GetIdentifierOf(obj.Root!) is { } identifier
+            && _pendingAuthority.Remove(identifier.FullName, out var pending))
+            obj.Apply(pending.Authority, pending.Owner, pending.AuthoritySequence, pending.OwnershipSequence);
     }
 
     internal void Deregister(NetworkObject obj)
@@ -81,6 +96,7 @@ public partial class NetworkObjectServer : Node
     internal void ResetSession()
     {
         _clocks.Clear();
+        _pendingAuthority.Clear();
         foreach (var obj in _objects) obj.Track.Clear();
     }
 
@@ -126,15 +142,19 @@ public partial class NetworkObjectServer : Node
         var authoritySequence = VarUint.DecodeInt(reader);
         var ownershipSequence = VarUint.DecodeInt(reader);
 
-        if (Context.NetworkIdentityServer.ResolveReference(sender, reference, allowQueue: false) is not { } identifier
-            || !_byRoot.TryGetValue(identifier.Subject, out var obj))
-            return;
+        var identifier = Context.NetworkIdentityServer.ResolveReference(sender, reference, allowQueue: false);
+        NetworkObject? obj = null;
+        if (identifier is not null) _byRoot.TryGetValue(identifier.Subject, out obj);
 
         if (!Multiplayer.IsServer())
         {
-            if (sender == NetworkObject.HostPeer) obj.Apply(authority, owner, authoritySequence, ownershipSequence);
+            if (sender != NetworkObject.HostPeer) return;
+            if (obj is not null) obj.Apply(authority, owner, authoritySequence, ownershipSequence);
+            else _pendingAuthority[reference.FullName] = (authority, owner, authoritySequence, ownershipSequence);
             return;
         }
+
+        if (identifier is null || obj is null) return;
 
         var allowed = obj.Transferable
                       && obj.IsNewer(authoritySequence, ownershipSequence)
@@ -152,6 +172,13 @@ public partial class NetworkObjectServer : Node
             Logger.Debug("Rejected authority change on {0} from #{1}", identifier.FullName, sender);
             SendAuthority(obj, sender);
         }
+    }
+
+    /// <summary>On the host: tells a peer that just joined who has authority over and who holds every object.</summary>
+    private void SendAllAuthorityTo(int peer)
+    {
+        if (!Multiplayer.IsServer()) return;
+        foreach (var obj in _objects) SendAuthority(obj, peer);
     }
 
     // Two peers that briefly disagree about the authority would pass an event back and forth until they agree
