@@ -10,19 +10,26 @@ public partial class NetworkObjectTests : HarnessSuite
     [Test]
     public async Task PlaybackReadoutSeparatesNetworkAndPlaybackDelay()
     {
+        // 100 ms each way at 30 Hz: state is about three ticks old when it arrives, then waits in the playback buffer
+        Network.LatencyMs = 100;
         HarnessBody.Spawn(Host, "Clock", 1, Speed);
         HarnessBody.Spawn(Client, "Clock", 1, Speed);
 
-        Expect.True(await WaitUntil(() => Client.Context.NetworkObjectServer.GetPlaybackStatus(1) is not null, 5),
-            "client never observed the host clock");
-        var status = Client.Context.NetworkObjectServer.GetPlaybackStatus(1)!.Value;
+        Expect.True(await WaitUntil(() => Client.Context.NetworkTime.IsInitialSyncDone()
+                                          && Client.Context.NetworkObjectServer.GetPlaybackStatus(1) is not null, 8),
+            "client never synced and observed the host clock");
+        for (var i = 0; i < 60; i++) await NextFrame();
 
-        // State is stamped for the tick after AfterTick, so the newest sample may be one ahead of the receiver's
-        // current tick even when their clocks are synchronized.
-        Expect.True(status.NewestTick <= Client.Context.NetworkTime.Tick + 1,
-            $"newest {status.NewestTick}, local {Client.Context.NetworkTime.Tick}");
-        Expect.True(status.DisplayTick <= status.NewestTick,
-            $"display {status.DisplayTick}, newest {status.NewestTick}");
+        var status = Client.Context.NetworkObjectServer.GetPlaybackStatus(1)!.Value;
+        var networkAge = Client.Context.NetworkTime.Tick - status.NewestTick;
+        var playbackAge = status.NewestTick - status.DisplayTick;
+        var interval = NetworkObjectServer.StateIntervalTicks;
+
+        // Clock sync error and the send interval blur both by a couple of ticks; a readout that swapped or summed the
+        // parts, or ignored the latency, falls outside
+        Expect.True(networkAge >= 1 && networkAge <= 3 + interval + 2, $"network age {networkAge} ticks for 100 ms of latency");
+        Expect.True(playbackAge >= 0 && playbackAge <= Client.Context.NetworkObjectServer.PlaybackDelayTicks + interval + 1,
+            $"playback age {playbackAge:F1} ticks");
     }
 
     [Test]
