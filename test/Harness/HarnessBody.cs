@@ -16,11 +16,18 @@ public partial class HarnessBody : Node3D
     /// <summary>Adds a body named <paramref name="name"/> under <paramref name="stack"/>, owned by <paramref name="authority"/>.</summary>
     public static HarnessBody Spawn(Node stack, string name, int authority, Vector3 velocity = default, Vector3 location = default)
     {
+        var body = Create(name, authority, velocity, location);
+        stack.AddChild(body);
+        return body;
+    }
+
+    /// <summary>A body not yet in the tree, for a MultiplayerSpawner's spawn function to return.</summary>
+    public static HarnessBody Create(string name, int authority, Vector3 velocity = default, Vector3 location = default)
+    {
         var body = new HarnessBody { Name = name, Velocity = velocity, Location = location };
         body.SetMultiplayerAuthority(authority);
         body.Object = new NetworkObject { Name = "NetworkObject" };
         body.AddChild(body.Object);
-        stack.AddChild(body);
         return body;
     }
 

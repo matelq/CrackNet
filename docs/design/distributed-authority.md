@@ -69,7 +69,9 @@ the shooter's timeline. A hit on my own player is decided by my peer, against wh
 counts. A hit on anything else is decided by the projectile's owner. Hitscan is decided by the shooter. Damage and
 "projectile consumed" are events to the authority of the target or the projectile (`SendToAuthority`): reliable,
 passed on if the authority moved on the way, and handled in arrival order there, so the first "consumed" wins. Physical
-projectiles (a grenade, a thrown crate) are ordinary physics objects.
+projectiles (a grenade, a thrown crate) are ordinary physics objects. Spawning and despawning use Godot's
+`MultiplayerSpawner`, one per shooter with the shooter as its authority. A remote object stays hidden until playback
+shows its first sample, so a projectile never hangs at the muzzle for the playback delay.
 
 **QTE.** The host announces a QTE with its start tick. Each participant judges its own input locally, relative to when
 it saw the start, and reports the result; the host only collects and announces the outcome. The base primitive is

@@ -123,6 +123,7 @@ public partial class NetworkObject : Node
         if (authority != Authority)
         {
             SetAuthority(Root!, authority);
+            if (IsAuthority && !Shown) SetShown(true);
             // Samples are stamped on the previous authority's clock; the new one sends its own
             Track.Clear();
         }
@@ -150,7 +151,22 @@ public partial class NetworkObject : Node
     public override void _Ready()
     {
         Gather(Root!);
+        // Nothing to show until playback reaches this object's first sample: a projectile would otherwise hang at the
+        // muzzle for the playback delay before it flies
+        if (!IsAuthority) SetShown(false);
         Context.NetworkObjectServer.Register(this);
+    }
+
+    internal bool Shown { get; private set; } = true;
+
+    internal void SetShown(bool shown)
+    {
+        Shown = shown;
+        switch (Root)
+        {
+            case Node3D node: node.Visible = shown; break;
+            case CanvasItem item: item.Visible = shown; break;
+        }
     }
 
     public override void _ExitTree() => Context.NetworkObjectServer?.Deregister(this);

@@ -298,5 +298,7 @@ public partial class NetworkObjectServer : Node
                 : fraction >= 1 ? b : a;
             node.SetValue(property, value);
         }
+
+        if (!obj.Shown) obj.SetShown(true);
     }
 }
