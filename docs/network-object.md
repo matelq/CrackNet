@@ -43,7 +43,8 @@ Object.EventReceived += (fromPeer, payload) => _knockback += payload.AsVector3()
 
 `SendToAuthority` delivers the payload reliably, exactly once, to whoever simulates the object. If authority moves
 while the payload is on its way, the peer that no longer simulates the object passes it on. On the authority itself
-it is raised at once.
+it is raised at once - unless that authority is a claim the host has not confirmed yet: then it waits for the
+host's answer, and goes to the winner if the claim lost.
 
 Players do not collide with each other: each would be pushing a copy of the other in the past. A push is an event to
 the pushed player's peer, applied as knockback there.

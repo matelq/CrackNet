@@ -92,7 +92,9 @@ object until playback reaches the marked sample, then hide it; a reliable spawne
 **Players and contact.** Players do not collide with each other physically: each peer would push against the other in
 the past. Instead:
 - a push is an event "apply impulse X" to the pushed player's authority (`SendToAuthority`), applied as knockback in
-  its controller; the pusher sees the result one round trip later;
+  its controller; the pusher sees the result one round trip later. A guest whose own authority request is still
+  unanswered holds events for the object until the host answers (the answer echoes the request's id), then raises
+  them or passes them to the winner, so a claim the host rejects does not swallow an event;
 - overlapping players are separated softly, each peer nudging its own character away from the displayed neighbour;
 - standing on or carrying a player attaches to the carrier's displayed transform, like a held object (#59).
 
@@ -138,7 +140,8 @@ enum, strings, references) always step. `Teleport()` makes the next snapshot app
 3. Authority returns to the host after rest.
 4. State from a peer that no longer has authority is not shown, nor blended into the new authority's.
 5. Playback: one peer's objects show the same tick; underrun without freezing; a late packet does not rewrite the past.
-6. A push event is applied exactly once, and an event follows an authority that moved while it was on its way.
+6. A push event is applied exactly once, and an event follows an authority that moved while it was on its way, or
+   that the host gave to someone else while the event was raised on a losing claim.
 7. A projectile appears on other peers at its firing tick; its authority hits only the first of two players in line,
    and observers retain it until their playback reaches its despawn sample.
 8. Late join: the full world and its owners.

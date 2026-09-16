@@ -187,13 +187,37 @@ public partial class NetworkObject : Node
     /// authority moves while it is on its way: the transport does not duplicate, and a peer that is no longer the
     /// authority passes the event on instead of raising it. On the authority itself it is raised at once.
     /// </summary>
-    public void SendToAuthority(Variant payload)
+    public void SendToAuthority(Variant payload) => Deliver(LocalPeer, payload, hops: 0);
+
+    /// <summary>
+    /// Raises an event here if this peer is the authority, and passes it on otherwise. While this peer's own request
+    /// is unanswered its authority may be about to be taken back, so the event waits for the host's answer.
+    /// </summary>
+    internal void Deliver(int origin, Variant payload, int hops)
     {
-        if (IsAuthority) Receive(LocalPeer, payload);
-        else Context.NetworkObjectServer.SendEvent(this, Authority, LocalPeer, payload, hops: 0);
+        if (!IsAuthority) Context.NetworkObjectServer.SendEvent(this, Authority, origin, payload, hops);
+        else if (PendingRequest != 0) _heldEvents.Add((origin, payload, hops));
+        else EventReceived?.Invoke(origin, payload);
     }
 
-    internal void Receive(int origin, Variant payload) => EventReceived?.Invoke(origin, payload);
+    private readonly List<(int Origin, Variant Payload, int Hops)> _heldEvents = new();
+
+    /// <summary>The id of this guest's latest authority request the host has not answered yet, or 0.</summary>
+    internal int PendingRequest { get; private set; }
+
+    private int _lastRequestId;
+
+    internal int NextRequest() => PendingRequest = ++_lastRequestId;
+
+    /// <summary>The host answered <paramref name="requestId"/>: events held for it go wherever authority now is.</summary>
+    internal void Answered(int requestId)
+    {
+        if (requestId == 0 || requestId != PendingRequest) return;
+        PendingRequest = 0;
+        var held = _heldEvents.ToArray();
+        _heldEvents.Clear();
+        foreach (var (origin, payload, hops) in held) Deliver(origin, payload, hops);
+    }
 
     internal const int HostPeer = 1;
 

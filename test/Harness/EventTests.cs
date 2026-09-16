@@ -69,4 +69,25 @@ public partial class EventTests : HarnessSuite
 
         Expect.SequenceEqual([(2, 3, "hit")], received);
     }
+
+    [Test]
+    public async Task AnEventOnAClaimTheHostRejectsReachesTheWinner()
+    {
+        // Both grab before hearing of the other; the client's request reaches the host first
+        Network.SetLink(1, 2, latencyMs: 10);
+        Network.SetLink(1, 3, latencyMs: 60);
+        Network.SetLink(2, 3, latencyMs: 60);
+        var (crate, received) = SpawnEverywhere("Crate", authority: 1);
+        await NextFrame();
+
+        Expect.True(crate[1].Object.TryGrab());
+        Expect.True(crate[2].Object.TryGrab());
+        // Peer 3 thinks it simulates the crate and hits it; the host is about to say it does not
+        crate[2].Object.SendToAuthority("hit");
+
+        await WaitUntil(() => received.Count >= 1, 3);
+        for (var i = 0; i < 20; i++) await NextFrame();
+
+        Expect.SequenceEqual([(2, 3, "hit")], received);
+    }
 }

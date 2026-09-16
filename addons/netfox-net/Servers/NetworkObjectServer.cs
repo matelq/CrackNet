@@ -207,10 +207,12 @@ public partial class NetworkObjectServer : Node
     internal void SubmitAuthority(NetworkObject obj)
     {
         if (Multiplayer.IsServer()) SendAuthority(obj, 0);
-        else SendAuthority(obj, NetworkObject.HostPeer);
+        else SendAuthority(obj, NetworkObject.HostPeer, obj.NextRequest());
     }
 
-    private void SendAuthority(NetworkObject obj, int peer)
+    // requestId is a guest's id for its request; answering is, on the host, the guest whose request this answers and
+    // which alone gets that id back
+    private void SendAuthority(NetworkObject obj, int peer, int requestId = 0, int answering = 0)
     {
         if (Context.NetworkIdentityServer.GetIdentifierOf(obj.Root!) is not { } identifier) return;
         var targets = peer == 0 ? Multiplayer.GetPeers() : [peer];
@@ -219,6 +221,7 @@ public partial class NetworkObjectServer : Node
             var writer = new ByteWriter();
             // By name, not id: this is reliable and rare, and a name resolves even before ids were exchanged
             NetRef.Encode(Core.Data.NetworkIdentityReference.OfFullName(identifier.FullName), writer);
+            VarUint.Encode(target == answering || answering == 0 ? requestId : 0, writer);
             VarUint.Encode(obj.Authority, writer);
             VarUint.Encode(obj.Holder, writer);
             VarUint.Encode(obj.AuthoritySequence, writer);
@@ -240,6 +243,7 @@ public partial class NetworkObjectServer : Node
     {
         var reader = new ByteReader(data);
         var reference = NetRef.Decode(reader);
+        var requestId = VarUint.DecodeInt(reader);
         var authority = VarUint.DecodeInt(reader);
         var owner = VarUint.DecodeInt(reader);
         var authoritySequence = VarUint.DecodeInt(reader);
@@ -259,7 +263,11 @@ public partial class NetworkObjectServer : Node
         if (!Multiplayer.IsServer())
         {
             if (sender != NetworkObject.HostPeer) return;
-            if (obj is not null) ApplyRecord(obj, record);
+            if (obj is not null)
+            {
+                ApplyRecord(obj, record);
+                obj.Answered(requestId);
+            }
             else _pendingAuthority[reference.FullName] = record;
             return;
         }
@@ -300,12 +308,12 @@ public partial class NetworkObjectServer : Node
             else
                 obj.Apply(obj.Authority, obj.Holder, obj.AuthoritySequence, obj.OwnershipSequence,
                     transferable, transferableSequence, obj.SpreadCause, obj.SpreadDepth, obj.SpreadLimit);
-            SendAuthority(obj, 0);
+            SendAuthority(obj, 0, requestId, answering: sender);
         }
         else
         {
             Logger.Debug("Rejected authority change on {0} from #{1}", identifier.FullName, sender);
-            SendAuthority(obj, sender);
+            SendAuthority(obj, sender, requestId, answering: sender);
         }
     }
 
@@ -347,10 +355,8 @@ public partial class NetworkObjectServer : Node
             || !_byRoot.TryGetValue(identifier.Subject, out var obj))
             return;
 
-        if (obj.IsAuthority)
-            obj.Receive(origin, payload);
-        else if (hops < MaxEventHops)
-            SendEvent(obj, obj.Authority, origin, payload, hops + 1);
+        if (obj.IsAuthority || hops < MaxEventHops)
+            obj.Deliver(origin, payload, obj.IsAuthority ? hops : hops + 1);
         else
             Logger.Warning("Dropped an event for {0} after {1} hops: peers disagree about its authority", identifier.FullName, hops);
     }
