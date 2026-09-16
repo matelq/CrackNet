@@ -65,7 +65,13 @@ your own eyes: the NPC had a collision shape and no mesh, and the after-screensh
 change. Both projects have `GenerateDocumentationFile` on with CS1591 suppressed, so the XML exists without demanding
 a comment on every member.
 
+Editor playtests use autoconnect (Project Settings > Netfox > Autoconnect > Enabled, plus Debug > Customize Run
+Instances). That setting lands in project.godot: never commit it, and run headless checks locally with
+`NETFOX_NO_AUTOCONNECT=1` while it is on, or they connect to each other.
+
 ## Before committing
+
+Warnings are errors in every project (`Directory.Build.props`). Fix the cause; do not suppress.
 
 Run the whole CI set locally, not a subset: `dotnet format Netfox.slnx --verify-no-changes`, `dotnet test Netfox.slnx`,
 `dotnet build Netfox.csproj`, then the Godot runner. Building only the project you touched once let a broken

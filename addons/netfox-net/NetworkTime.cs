@@ -26,7 +26,6 @@ public partial class NetworkTime : Node
         ClockStretchMax = NetfoxSettings.Instance.MaxTimeStretch,
     };
 
-    private readonly double _recalibrateThreshold = NetfoxSettings.Instance.RecalibrateThreshold;
     private readonly bool _suppressOfflinePeerWarning = NetfoxSettings.Instance.SuppressOfflinePeerWarning;
 
     private State _state = State.Inactive;
@@ -74,17 +73,8 @@ public partial class NetworkTime : Node
     /// <summary>Current network time in ticks, continuously synced with the server.</summary>
     public int Tick => _clock.Tick;
 
-    [Obsolete("Use NetworkTimeSynchronizer.PanicThreshold instead")]
-    public double RecalibrateThreshold => _recalibrateThreshold;
-
     /// <summary>Seconds without frames before the game is considered stalled and catch-up ticks are skipped.</summary>
     public double StallThreshold => _clock.StallThreshold;
-
-    // Upstream still ships these as @deprecated (network-time.gd:129-199), so they stay here too; they go when it drops them
-    [Obsolete("Returns the same as Tick")] public int RemoteTick => Tick;
-    [Obsolete("Returns the same as Time")] public double RemoteTime => Time;
-    [Obsolete("Returns the same as Tick")] public int LocalTick => Tick;
-    [Obsolete("Returns the same as Time")] public double LocalTime => Time;
 
     /// <summary>Estimated roundtrip time to the server. Always 0 on the server.</summary>
     public double RemoteRtt => Context.NetworkTimeSynchronizer.Rtt;

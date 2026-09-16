@@ -80,10 +80,66 @@ public partial class NetfoxPlugin : EditorPlugin
 
         foreach (var (name, path) in Autoloads)
             if (!HasAutoload(name)) AddAutoloadSingleton(name, path);
+
+        _profileFields = ReadProfileFields();
+        _profile = ProjectSettings.GetSetting(ProfileKey).AsString();
+        _syncProfileFields = Callable.From(SyncProfileFields);
+        ProjectSettings.Singleton.Connect(ProjectSettings.SignalName.SettingsChanged, _syncProfileFields);
+        SyncProfileFields();
+    }
+
+    private const string ProfileKey = "netfox/autoconnect/simulated_profile";
+    private static readonly string[] ProfileFieldKeys =
+    [
+        "netfox/autoconnect/simulated_latency_ms",
+        "netfox/autoconnect/simulated_packet_loss_chance",
+        "netfox/autoconnect/simulated_jitter_ms",
+        "netfox/autoconnect/simulated_burst_loss_ms",
+        "netfox/autoconnect/simulated_burst_interval_seconds",
+    ];
+
+    private string _profile = "";
+    private Callable _syncProfileFields;
+    private double[] _profileFields = [];
+
+    private static double[] ReadProfileFields() => ProfileFieldKeys.Select(key => ProjectSettings.GetSetting(key).AsDouble()).ToArray();
+
+    private static double[] FieldsOf(Extras.NetworkSimulator.Profile profile) =>
+        [profile.LatencyMs, profile.PacketLossPercent / 100.0, profile.JitterMs, profile.BurstLossMs, profile.BurstIntervalSeconds];
+
+    /// <summary>
+    /// Keeps the simulator's number fields showing what the chosen profile means: picking a named profile writes its
+    /// values into them, and editing a number away from it switches the profile to Custom.
+    /// </summary>
+    private void SyncProfileFields()
+    {
+        var profile = ProjectSettings.GetSetting(ProfileKey).AsString();
+        var fields = ReadProfileFields();
+        var named = Extras.NetworkSimulator.Profile.Named(profile);
+
+        if (profile != _profile && named is not null && !fields.SequenceEqual(FieldsOf(named)))
+        {
+            fields = FieldsOf(named);
+            for (var i = 0; i < ProfileFieldKeys.Length; i++)
+                ProjectSettings.SetSetting(ProfileFieldKeys[i], ProfileFieldKeys[i].EndsWith("_ms") ? (int)fields[i] : fields[i]);
+            ProjectSettings.Save();
+        }
+        else if (profile == _profile && named is not null && !fields.SequenceEqual(_profileFields) && !fields.SequenceEqual(FieldsOf(named)))
+        {
+            profile = "Custom";
+            ProjectSettings.SetSetting(ProfileKey, profile);
+            ProjectSettings.Save();
+        }
+
+        _profile = profile;
+        _profileFields = fields;
     }
 
     public override void _ExitTree()
     {
+        if (ProjectSettings.Singleton.IsConnected(ProjectSettings.SignalName.SettingsChanged, _syncProfileFields))
+            ProjectSettings.Singleton.Disconnect(ProjectSettings.SignalName.SettingsChanged, _syncProfileFields);
+
         if (ProjectSettings.GetSetting("netfox/general/clear_settings", false).AsBool())
             foreach (var setting in Settings)
                 RemoveSetting(setting);

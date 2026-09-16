@@ -9,7 +9,7 @@ namespace Netfox.Examples.Playground;
 /// </summary>
 public partial class PlaygroundPlayer : CharacterBody3D
 {
-    private const float Speed = 6, JumpSpeed = 5, Gravity = 14, PushStrength = 9, ThrowSpeed = 9, ShotSpeed = 18;
+    private const float Speed = 6, JumpSpeed = 5, Gravity = 14, PushStrength = 4, ThrowSpeed = 9, ShotSpeed = 18;
     private const uint WorldLayer = 1, PlayerLayer = 2, CrateLayer = 4;
 
     [Synced] public Vector3 NetPosition { get => GlobalPosition; set => GlobalPosition = value; }
@@ -17,6 +17,7 @@ public partial class PlaygroundPlayer : CharacterBody3D
 
     public NetworkObject Object { get; private set; } = null!;
     public int Peer { get; private set; }
+    public int Slot { get; private set; }
 
     private Vector3 _knockback;
     private PlaygroundCrate? _held;
@@ -32,15 +33,15 @@ public partial class PlaygroundPlayer : CharacterBody3D
     /// <summary>The crate this player holds, if any.</summary>
     public PlaygroundCrate? Held => _held;
 
-    public static PlaygroundPlayer Create(int peer)
+    public static PlaygroundPlayer Create(int peer, int slot)
     {
-        var player = new PlaygroundPlayer { Name = $"Player{peer}", Peer = peer, Position = new Vector3(-4 + peer % 5 * 2, 1, 6) };
+        var player = new PlaygroundPlayer { Name = $"Player{peer}", Peer = peer, Slot = slot, Position = new Vector3(-6 + slot * 2, 1, 6) };
         player.SetMultiplayerAuthority(peer);
         player.CollisionLayer = PlayerLayer;
         player.CollisionMask = WorldLayer | CrateLayer;
 
         player.AddChild(new CollisionShape3D { Shape = new CapsuleShape3D { Radius = 0.4f, Height = 1.8f } });
-        var color = Playground.ColorOf(peer);
+        var color = Playground.SlotColors[slot % Playground.SlotColors.Length];
         player.AddChild(new MeshInstance3D { Mesh = new CapsuleMesh { Radius = 0.4f, Height = 1.8f }, MaterialOverride = new StandardMaterial3D { AlbedoColor = color } });
         player.AddChild(new MeshInstance3D { Mesh = new BoxMesh { Size = new Vector3(0.2f, 0.2f, 0.4f) }, Position = new Vector3(0, 0.5f, -0.45f), MaterialOverride = new StandardMaterial3D { AlbedoColor = Colors.Black } });
 
@@ -54,6 +55,8 @@ public partial class PlaygroundPlayer : CharacterBody3D
         player.AddChild(player._shots);
         return player;
     }
+
+    public override void _EnterTree() => Playground.SetSlot(Peer, Slot);
 
     public override void _Ready()
     {
@@ -133,7 +136,7 @@ public partial class PlaygroundPlayer : CharacterBody3D
         foreach (var other in GetParent().GetChildren().OfType<PlaygroundPlayer>())
         {
             if (other == this || other.GlobalPosition.DistanceTo(GlobalPosition + Forward) > 1.5f) continue;
-            other.Knock((Forward + Vector3.Up * 0.3f) * PushStrength);
+            other.Knock((Forward + Vector3.Up * 0.1f) * PushStrength);
         }
     }
 
@@ -151,6 +154,7 @@ public partial class PlaygroundPlayer : CharacterBody3D
     /// <summary>The crate this player holds lets go when the player leaves.</summary>
     public override void _ExitTree()
     {
+        Playground.SetSlot(Peer, null);
         if (_held is { } held && Object.IsAuthority) held.Object.Release();
     }
 }

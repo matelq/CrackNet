@@ -38,8 +38,11 @@ public partial class PlaygroundCrate : RigidBody3D
         Object.AuthorityChanged += Refresh;
         Object.EventReceived += (_, payload) => ApplyCentralImpulse(payload.AsVector3());
         BodyEntered += OnBodyEntered;
+        Playground.SlotsChanged += Refresh;
         Refresh();
     }
+
+    public override void _ExitTree() => Playground.SlotsChanged -= Refresh;
 
     /// <summary>Simulated only where authoritative and not held; tinted with the simulating peer's colour.</summary>
     public void Refresh()

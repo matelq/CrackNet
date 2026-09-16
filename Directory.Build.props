@@ -1,0 +1,6 @@
+<Project>
+  <!-- Every project in the repository, the Godot one included: a warning is a bug nobody has read yet. -->
+  <PropertyGroup>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+</Project>

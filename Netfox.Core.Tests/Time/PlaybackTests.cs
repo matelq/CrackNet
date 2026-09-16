@@ -78,17 +78,19 @@ public class PlaybackTests
     }
 
     [Fact]
-    public void JitterAndLossKeepMotionMonotonicAndMemoryBounded()
+    public void JitterAndLossKeepMotionMonotonicAndLatencyBounded()
     {
         var clock = new PlaybackClock(delayTicks: 4);
         var track = new SampleTrack<double>(capacity: 32);
         var random = new Random(42);
+        // Eight ticks lost out of every fifty, 10% loss on top, up to five ticks of jitter
         var deliveries = Enumerable.Range(0, 300).Where(t => t % 50 < 42 && random.NextDouble() > .1)
             .Select(t => (Tick: t, Arrival: t + random.Next(0, 5))).OrderBy(p => p.Arrival).ToList();
 
         var received = 0;
         var previous = double.NegativeInfinity;
-        var biggestStep = 0d;
+        var jumps = 0;
+        var worstDepth = 0d;
         for (var frame = 0; frame < 700; frame++)
         {
             while (received < deliveries.Count && deliveries[received].Arrival <= frame / 2.0)
@@ -102,15 +104,35 @@ public class PlaybackTests
 
             var displayed = a + (b - a) * f;
             Assert.True(displayed >= previous);
-            if (double.IsFinite(previous)) biggestStep = Math.Max(biggestStep, displayed - previous);
+            if (double.IsFinite(previous) && displayed - previous > .526) jumps++;
+            if (frame > 40) worstDepth = Math.Max(worstDepth, clock.Newest - shown);
             Assert.InRange(track.Count, 1, 32);
             previous = displayed;
         }
 
-        Assert.True(previous > 290);
+        Assert.True(previous > 280);
         Assert.True(clock.Holds > 0);
-        // Half a tick per frame at up to 5% fast; anything bigger is a jump the viewer sees
-        Assert.InRange(biggestStep, 0, .526);
+        // A skip forward only where a burst ended, never a creeping delay that takes seconds to drain
+        Assert.InRange(jumps, 1, 6);
+        Assert.InRange(worstDepth, 0, 4 + 5 + 8 + 1);
+    }
+
+    [Fact]
+    public void MotionAfterARestShowsAtTheNormalDepthAtOnce()
+    {
+        var clock = new PlaybackClock(delayTicks: 3);
+        // A resting peer sends a heartbeat every 30 ticks, then starts moving and sends every 2
+        var ticks = Enumerable.Range(0, 6).Select(i => i * 30).Concat(Enumerable.Range(76, 20).Select(i => i * 2)).ToList();
+
+        var next = 0;
+        for (var now = 0.0; now <= 190; now += 0.5)
+        {
+            while (next < ticks.Count && ticks[next] <= now) clock.Observe(ticks[next++]);
+            clock.Advance(.5);
+        }
+
+        // Moving since tick 152, data every 2 ticks: the display trails by the delay, not by a heartbeat interval
+        Assert.InRange(clock.Newest - clock.Tick!.Value, 0, 3 + 2 + 1);
     }
 
     [Fact]

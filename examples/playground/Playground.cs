@@ -17,10 +17,27 @@ public partial class Playground : Node3D
     public const int Port = 9999;
     private const int CrateCount = 12;
 
-    public static readonly Color[] PeerColors =
-        [Colors.White, new(0.9f, 0.3f, 0.3f), new(0.3f, 0.6f, 0.95f), new(0.35f, 0.85f, 0.4f), new(0.95f, 0.8f, 0.25f), new(0.8f, 0.4f, 0.9f)];
+    /// <summary>One colour per player slot, in joining order: the host is red, the next player blue, and so on.</summary>
+    public static readonly Color[] SlotColors =
+    [
+        new(0.9f, 0.25f, 0.25f), new(0.25f, 0.5f, 0.95f), new(0.3f, 0.8f, 0.35f), new(0.95f, 0.8f, 0.2f),
+        new(0.7f, 0.35f, 0.9f), new(0.95f, 0.55f, 0.15f), new(0.2f, 0.85f, 0.85f), new(0.95f, 0.45f, 0.75f),
+    ];
 
-    public static Color ColorOf(int peer) => peer <= 1 ? PeerColors[1] : PeerColors[2 + (peer - 2) % (PeerColors.Length - 2)];
+    private static readonly Dictionary<int, int> Slots = new();
+
+    /// <summary>Raised when a player's slot becomes known or goes away, so things tinted by peer can repaint.</summary>
+    public static event Action? SlotsChanged;
+
+    public static void SetSlot(int peer, int? slot)
+    {
+        if (slot is { } value) Slots[peer] = value;
+        else Slots.Remove(peer);
+        SlotsChanged?.Invoke();
+    }
+
+    /// <summary>The colour of a peer's player slot; grey until that player has arrived.</summary>
+    public static Color ColorOf(int peer) => Slots.TryGetValue(peer, out var slot) ? SlotColors[slot % SlotColors.Length] : Colors.Gray;
 
     public Node3D Players { get; private set; } = null!;
     public Node3D Shots { get; private set; } = null!;
@@ -100,7 +117,13 @@ public partial class Playground : Node3D
         _menu.Hide();
     }
 
-    private void SpawnPlayer(int peer) => _playerSpawner.Spawn(peer);
+    /// <summary>The lowest free slot, so a player who leaves hands their colour to the next one to join.</summary>
+    private void SpawnPlayer(int peer)
+    {
+        var taken = Players.GetChildren().OfType<PlaygroundPlayer>().Select(player => player.Slot).ToHashSet();
+        var slot = Enumerable.Range(0, 64).First(candidate => !taken.Contains(candidate));
+        _playerSpawner.Spawn(new Godot.Collections.Array { peer, slot });
+    }
 
     private void BuildWorld()
     {
@@ -125,7 +148,7 @@ public partial class Playground : Node3D
         AddChild(Shots);
 
         _playerSpawner = new MultiplayerSpawner { Name = "PlayerSpawner", SpawnPath = new NodePath("../Players") };
-        _playerSpawner.SpawnFunction = Callable.From((Variant data) => (Node)PlaygroundPlayer.Create(data.AsInt32()));
+        _playerSpawner.SpawnFunction = Callable.From((Variant data) => (Node)PlaygroundPlayer.Create(data.AsGodotArray()[0].AsInt32(), data.AsGodotArray()[1].AsInt32()));
         AddChild(_playerSpawner);
 
         _camera = new Camera3D { Position = new Vector3(0, 14, 16), RotationDegrees = new Vector3(-45, 0, 0) };
