@@ -3,8 +3,8 @@ using Godot;
 namespace Netfox.Examples.Playground;
 
 /// <summary>
-/// A slow projectile. It belongs to its shooter: the shooter moves it and decides what it hits, except for a player,
-/// whose own peer decides against what it sees - so a dodge on your screen counts.
+/// A slow projectile. It belongs to its shooter, whose peer moves it and is the sole arbiter of every hit against the
+/// targets it displays. The first target receives knockback and the shot enters its despawn timeline immediately.
 /// </summary>
 public partial class PlaygroundShot : Node3D
 {
@@ -27,38 +27,36 @@ public partial class PlaygroundShot : Node3D
         return shot;
     }
 
-    public override void _Ready()
-    {
-        // "It hit me", from the player's own peer: the first word wins, the rest find it gone
-        Object.EventReceived += (_, _) => Consume();
-    }
-
     public override void _PhysicsProcess(double delta)
     {
         if (_consumed) return;
-
-        if (!Object.IsAuthority)
-        {
-            // The only hit a peer decides for someone else's shot: on its own player, where it sees the shot
-            if (Visible && GetTree().GetNodesInGroup("local_player").OfType<PlaygroundPlayer>().FirstOrDefault() is { } me
-                && me.GlobalPosition.DistanceTo(GlobalPosition) < HitRadius)
-            {
-                me.Knock(_velocity.Normalized() * PlayerKnock);
-                Object.SendToAuthority(true);
-                _consumed = true;
-                Hide();
-            }
-            return;
-        }
+        if (!Object.IsAuthority) return;
 
         GlobalPosition += _velocity * (float)delta;
         _age += delta;
 
-        foreach (var crate in GetTree().GetNodesInGroup("crates").OfType<PlaygroundCrate>())
+        var crateHit = GetTree().GetNodesInGroup("crates").OfType<PlaygroundCrate>()
+            .Select(crate => (Crate: crate, Distance: crate.GlobalPosition.DistanceTo(GlobalPosition)))
+            .Where(hit => hit.Distance <= HitRadius)
+            .MinBy(hit => hit.Distance).Crate;
+        var playerHit = GetParent().GetParent().GetNode<Node3D>("Players").GetChildren().OfType<PlaygroundPlayer>()
+            .Where(player => player.Peer != Object.Authority && player.Visible)
+            .Select(player => (Player: player, Distance: player.GlobalPosition.DistanceTo(GlobalPosition)))
+            .Where(hit => hit.Distance <= HitRadius)
+            .MinBy(hit => hit.Distance).Player;
+
+        if (crateHit is not null && (playerHit is null
+                                     || crateHit.GlobalPosition.DistanceTo(GlobalPosition)
+                                     <= playerHit.GlobalPosition.DistanceTo(GlobalPosition)))
         {
-            if (crate.GlobalPosition.DistanceTo(GlobalPosition) > HitRadius) continue;
-            Object.Touch(crate.Object);
-            crate.Object.SendToAuthority(_velocity.Normalized() * CrateImpulse);
+            Object.Touch(crateHit.Object);
+            crateHit.Object.SendToAuthority(_velocity.Normalized() * CrateImpulse);
+            Consume();
+            return;
+        }
+        if (playerHit is not null)
+        {
+            playerHit.Knock(_velocity.Normalized() * PlayerKnock);
             Consume();
             return;
         }

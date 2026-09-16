@@ -121,26 +121,28 @@ public partial class ProjectileTests : HarnessSuite
     }
 
     [Test]
-    public async Task AHitDecidedByTheTargetAndOneByTheShooterConsumeTheProjectileOnce()
+    public async Task ProjectileAuthorityHitsOnlyTheFirstOfTwoPlayersInLine()
     {
-        var fired = Fire("Rocket");
-        HarnessBody? onThird = null;
-        Expect.True(await WaitUntil(() => (onThird = _third.GetNodeOrNull<HarnessBody>("Rocket")) is { Visible: true }, 5), "never reached peer 3");
-
         var hits = new List<string>();
-        fired.Object.EventReceived += (_, payload) =>
+        foreach (var stack in _stacks)
         {
-            if (hits.Count > 0) return;
-            hits.Add(payload.AsString());
-            fired.QueueFree();
-        };
+            var near = HarnessBody.Spawn(stack, "Near", 3, location: new Vector3(1, 0, 0));
+            var far = HarnessBody.Spawn(stack, "Far", 1, location: new Vector3(3, 0, 0));
+            near.CountsTicks = far.CountsTicks = false;
+            near.Object.Transferable = far.Object.Transferable = false;
+            near.Object.EventReceived += (_, _) => hits.Add("near");
+            far.Object.EventReceived += (_, _) => hits.Add("far");
+        }
+        Expect.True(await WaitUntil(() => Client.GetNode<HarnessBody>("Near").Visible
+                                          && Client.GetNode<HarnessBody>("Far").Visible, 5),
+            "shooter never displayed both targets");
 
-        // Peer 3 sees the rocket hit its player; the shooter sees it hit an NPC. Both call it.
-        onThird!.Object.SendToAuthority("player 3");
-        fired.Object.SendToAuthority("npc");
+        foreach (var stack in _stacks)
+            HarnessProjectile.Spawn(stack, "LineShot", Shooter,
+                (HarnessBody)stack.GetNode("Near"), (HarnessBody)stack.GetNode("Far"));
 
-        Expect.True(await WaitUntil(() => _stacks.All(stack => stack.GetNodeOrNull("Rocket") is null), 5),
-            string.Join(", ", _stacks.Select(stack => $"{stack.Name}: {stack.GetNodeOrNull("Rocket") is not null}")));
-        Expect.SequenceEqual(["npc"], hits);
+        Expect.True(await WaitUntil(() => hits.Count > 0, 5), "projectile never hit either player");
+        for (var i = 0; i < 30; i++) await NextFrame();
+        Expect.SequenceEqual(["near"], hits);
     }
 }
