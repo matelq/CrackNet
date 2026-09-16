@@ -35,7 +35,10 @@ public partial class NetworkObjectServer : Node
     public NetfoxContext Context { get; private set; } = NetfoxContext.Default;
 
     /// <summary>How many ticks behind the newest sample remote objects are shown.</summary>
-    public double PlaybackDelayTicks { get; set; } = 3;
+    public double PlaybackDelayTicks { get; set; } = StateIntervalTicks + 0.5;
+
+    /// <summary>The deepest a playback buffer grows to absorb jitter; also what a despawn waits out.</summary>
+    public const double MaxPlaybackDepthTicks = 20;
 
     /// <summary>State goes out every this many ticks: 2 at 30 Hz is 15 snapshots a second.</summary>
     public const int StateIntervalTicks = 2;
@@ -421,7 +424,7 @@ public partial class NetworkObjectServer : Node
         var tick = reader.GetI32();
 
         if (!_clocks.TryGetValue(sender, out var clock))
-            _clocks[sender] = clock = new PlaybackClock(PlaybackDelayTicks);
+            _clocks[sender] = clock = new PlaybackClock(PlaybackDelayTicks, maxDepthTicks: MaxPlaybackDepthTicks);
         clock.Observe(tick);
         // A state for tick N is taken as tick N-1 finishes, so on a clean link it arrives as N comes around
         AddAge(AgesOf(sender).Network, Math.Max(0, LocalTick - tick));

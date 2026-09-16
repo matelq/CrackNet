@@ -60,9 +60,24 @@ buffer. It does not push back until authority transfers to the peer touching it;
 received state.
 
 **Playback.** One playback clock per remote peer, samples per object, so everything one peer sends (a stack of crates,
-a character and what it holds) is shown at the same tick. The clock runs a small fixed delay behind the newest sample
-and slews its rate to hold that depth. On underrun it holds the last value or extrapolates briefly; it never freezes
-to rebuffer. A late packet never rewrites a displayed past. Corrections are smoothed only in presentation, never in the
+a character and what it holds) is shown at the same tick.
+
+What a buffer can absorb is the send interval and jitter, never the base latency: nothing can be shown before it
+arrives. So each link gets its own adaptive depth (decision: per-link buffer, not a session-wide common time):
+
+- depth = minimum (send interval plus half a tick) + this link's jitter, capped at 20 ticks;
+- jitter = 95th minus 5th percentile of how late each arrival came against local time, over the last 20 seconds of
+  arrivals, by time rather than count; below 10 arrivals the minimum is used. The long window keeps the depth steady
+  and makes it shrink slowly after a bad spell, while percentiles let a single outlier (the first packet, the one after
+  an outage) pass. It still grows within about a second of sustained jitter;
+- the clock slews toward the depth: 0.25 tick dead zone, down by at most 5%, up in proportion to how far behind it is,
+  at most half again as fast. Stretching smooths moving between depths; it cannot stand in for depth, because a late
+  stretch of packets lands faster than a few percent of speed can build a margin;
+- the clock's own time keeps running while nothing arrives (a resting peer sends a heartbeat a second), so motion after
+  a rest shows at the normal depth at once. The display never passes the newest sample: on underrun it holds, and
+  after an outage it plays catch-up rather than adding lasting delay.
+
+The playground shows per peer, averaged over a second, how old state is on arrival and how long it waits in the buffer. A late packet never rewrites a displayed past. Corrections are smoothed only in presentation, never in the
 simulation.
 
 State can arrive before a spawned object's reliable scene message. Receivers retain a bounded, short-lived set of
@@ -159,6 +174,11 @@ enum, strings, references) always step. `Teleport()` makes the next snapshot app
 - Extrapolating targets to the present for hit tests, in the style of Photon Fusion "Forecast". Revisit if dodges do
   not count on Casual or Realistic.
 - Sequence number overflow (review finding).
+- A common display time instead of per-link buffers. Session-wide: every screen shows every remote object at the same
+  moment, set by the worst link, so one bad connection slows everyone. Per screen: each viewer uses the deepest of its
+  own links, so only the players on a bad link pay. Revisit if playtests show objects of different players visibly out
+  of step with each other outside interactions, which authority transfer already puts on one clock.
+- Seeding the jitter estimate before a match from the clock-sync pings, for a lobby that exchanges no object state.
 
 ## Sources
 

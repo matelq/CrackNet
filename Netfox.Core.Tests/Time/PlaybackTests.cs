@@ -165,6 +165,8 @@ public class PlaybackTests
     {
         var clock = new PlaybackClock(delayTicks: 2, resyncTicks: 10);
         clock.Observe(0);
+        // A long stall: nothing arrives for 100 ticks of local time, then the peer's current tick does
+        clock.Advance(100);
         clock.Observe(100);
         Assert.Equal(98d, clock.Tick);
     }
@@ -190,5 +192,57 @@ public class PlaybackTests
 
         var behindRealTime = now - clock.Time!.Value;
         Assert.InRange(behindRealTime, 0, 3 + 2);
+    }
+
+    [Fact]
+    public void TheBufferGrowsWithJitterAndStaysMinimalOnACleanLink()
+    {
+        // What a too-shallow buffer costs under bunched arrivals is not dropped packets: it stalls at the newest sample,
+        // then lurches ahead when the late stretch lands. Counted as frames with no motion followed by a big step.
+        static (int Stalls, double BiggestStep, double Depth) Run(double jitterTicks)
+        {
+            var clock = new PlaybackClock(delayTicks: 2.5);
+            var track = new SampleTrack<double>();
+            // The proxy's shape: every packet in a stretch late together, then early again
+            var deliveries = Enumerable.Range(0, 900).Where(t => t % 2 == 0)
+                .Select(t => (Tick: t, Arrival: t + jitterTicks * (0.5 - 0.5 * Math.Cos(2 * Math.PI * t / 40))))
+                .OrderBy(p => p.Arrival).ToList();
+
+            var received = 0;
+            var stalls = 0;
+            var biggest = 0.0;
+            var previous = double.NaN;
+            for (var frame = 0; frame < 1800; frame++)
+            {
+                while (received < deliveries.Count && deliveries[received].Arrival <= frame / 2.0)
+                {
+                    var tick = deliveries[received++].Tick;
+                    clock.Observe(tick);
+                    track.Push(tick, tick, clock.Tick);
+                }
+                clock.Advance(.5);
+                if (clock.Tick is not { } shown || !track.TrySample(shown, out var a, out var b, out var f)) continue;
+
+                var displayed = a + (b - a) * f;
+                // After the first few seconds, which are the buffer learning the link, and before the data runs out
+                if (frame > 400 && frame < 1700 && !double.IsNaN(previous))
+                {
+                    if (displayed == previous) stalls++;
+                    biggest = Math.Max(biggest, displayed - previous);
+                }
+                previous = displayed;
+            }
+            return (stalls, biggest, clock.Depth);
+        }
+
+        var clean = Run(0);
+        Assert.InRange(clean.Depth, 2.5, 3);
+        Assert.Equal(0, clean.Stalls);
+
+        var jittery = Run(6);
+        Assert.Equal(0, jittery.Stalls);
+        Assert.InRange(jittery.Depth, 2.5 + 5, 2.5 + 6.5);
+        // Half a tick of local time per frame, played at most half again as fast while catching up
+        Assert.InRange(jittery.BiggestStep, 0, 0.76);
     }
 }
