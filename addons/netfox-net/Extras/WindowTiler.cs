@@ -28,8 +28,16 @@ public partial class WindowTiler : Node
     private readonly bool _isBorderless = NetfoxSettings.Instance.Borderless;
     private readonly int _tileScreen = NetfoxSettings.Instance.TileScreen;
 
-    // Hash the game name so the lock file names are always valid
-    private readonly string _prefix = $"netfox-window-tiler-{Settings.GetString("application/config/name", "godot").GetHashCode():x}-";
+    // Hash the game name so the lock file names are always valid. Not string.GetHashCode: .NET randomises it per
+    // process, so every instance had its own prefix and saw only its own lock (GDScript's hash() is stable)
+    private readonly string _prefix = $"netfox-window-tiler-{StableHash(Settings.GetString("application/config/name", "godot")):x8}-";
+
+    private static uint StableHash(string text)
+    {
+        var hash = 2166136261u;
+        foreach (var c in text) hash = (hash ^ c) * 16777619u;
+        return hash;
+    }
     private readonly string _uid = $"{(long)(Clocks.UnixTime() * 1000_0000.0)}";
 
     private string LockPath => $"{OS.GetCacheDir()}/{_prefix}{_uid}";
