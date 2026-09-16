@@ -82,7 +82,13 @@ public sealed class LoopbackNetwork
         }
     }
 
-    public void Remove(LoopbackMultiplayerPeer peer) => _peers.Remove(peer.Id);
+    /// <summary>Takes a peer out of the network and tells the others it left, the way a transport does.</summary>
+    public void Remove(LoopbackMultiplayerPeer peer)
+    {
+        if (!_peers.Remove(peer.Id)) return;
+        foreach (var other in _peers.Values)
+            other.AnnouncePeerLeft(peer.Id);
+    }
 
     internal void Send(int from, int to, byte[] data, MultiplayerPeer.TransferModeEnum mode, int channel)
     {
@@ -132,6 +138,8 @@ public partial class LoopbackMultiplayerPeer : MultiplayerPeerExtension
     internal void MarkConnected() => _status = ConnectionStatus.Connected;
 
     internal void AnnouncePeer(int id) => EmitSignal(MultiplayerPeer.SignalName.PeerConnected, id);
+
+    internal void AnnouncePeerLeft(int id) => EmitSignal(MultiplayerPeer.SignalName.PeerDisconnected, id);
 
     internal void Receive(LoopbackPacket packet, int latencyMs)
     {

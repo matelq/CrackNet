@@ -11,7 +11,7 @@ parity checks) do not apply here; `reworked` and `master` keep the port. Roadmap
 - `addons/netfox-net/` — the addon (namespace `Netfox`, extras in `Netfox.Extras`). Autoloads expose `Instance`; order is fixed in `Editor/NetfoxPlugin.cs` and `project.godot` (dependencies first).
 - `test/` — Godot-side tests (`TestSuite` + `[Test]`), `Netfox.Core.Tests/` — xUnit. `test/Harness/` runs several stacks in one tree over a loopback peer.
 - `NetfoxContext`: servers register into `NetfoxContext.Default`; a `NetfoxContextRoot` node gives its subtree a second stack. Nodes resolve `Context` in `_EnterTree`; `Instance` still points at the default stack.
-- `examples/steam/` — GodotSteam bootstrap under `#if GODOTSTEAM`.
+- `examples/playground/` — the co-op sample and its two-process smoke; `examples/steam/` — GodotSteam bootstrap under `#if GODOTSTEAM`.
 - Repo root is the Godot project. Godot 4.7.2 mono binary: `.tools/godot/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe` (gitignored). Use exactly this version: older editors downgrade the SDK in Netfox.csproj.
 - **Rapier-first** (netfox-net#52): `project.godot` asks for `Rapier3D`, and the extension is gitignored, so a fresh clone
   needs `sh tools/install-extensions.sh rapier` before anything with a physics body runs (`steam` installs GodotSteam).
@@ -23,6 +23,9 @@ parity checks) do not apply here; `reworked` and `master` keep the port. Roadmap
 dotnet test Netfox.slnx                                                   # core tests
 dotnet build Netfox.csproj                                                # addon + tests
 <godot> --headless --path . res://test/TestRunner.tscn                    # Godot tests, exit 0 = ok
+<godot> --path . res://examples/playground/playground.tscn                # the sample: Host in one window, Join in others
+<godot> --headless --path . res://examples/playground/playground.tscn -- --smoke --host --seconds=24   # host first, outlives the client
+<godot> --headless --path . res://examples/playground/playground.tscn -- --smoke --join --seconds=15   # same --profile=clear|casual|realistic|bad|hostile on both
 ```
 
 Scenes are `.tscn` files and are the source of truth. To generate one in code, rebuild the tree and `ResourceSaver.Save`
@@ -71,7 +74,8 @@ Run the whole CI set locally, not a subset: `dotnet format Netfox.slnx --verify-
 A check that only compares state after the keys are released is blind to what a player sees: a crate drawn on the
 floor between two ticks, a remote player snapping, a body left behind while its mesh moved. Measure during motion and
 on displayed positions (per frame, after interpolation) as well as at rest, and make the check fail on the reported
-symptom before fixing it (netfox-net#59). And when a check passes on
+symptom before fixing it (netfox-net#59); the playground smoke compares what a peer displayed against the line
+between the samples it actually received, so loss is not blamed on playback nor hidden by it. And when a check passes on
 the first try, ask what it would take to make it fail; more than one check here has passed by measuring nothing
 (netfox-net#62).
 

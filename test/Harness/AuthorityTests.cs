@@ -25,10 +25,10 @@ public partial class AuthorityTests : HarnessSuite
         ];
 
     private static bool Agree(HarnessBody[] bodies, int authority, int owner)
-        => bodies.All(body => body.Object.Authority == authority && body.Object.Owner == owner);
+        => bodies.All(body => body.Object.Authority == authority && body.Object.Holder == owner);
 
     private static string Describe(HarnessBody[] bodies)
-        => string.Join(", ", bodies.Select(body => $"{body.Multiplayer.GetUniqueId()}: auth {body.Object.Authority} owner {body.Object.Owner}"));
+        => string.Join(", ", bodies.Select(body => $"{body.Multiplayer.GetUniqueId()}: auth {body.Object.Authority} owner {body.Object.Holder}"));
 
     [Test]
     public async Task TwoPeersGrabAtOnceAndExactlyOneEndsUpHoldingIt()
@@ -143,5 +143,19 @@ public partial class AuthorityTests : HarnessSuite
             sawNew |= y < 1;
         }
         Expect.True(sawNew, $"observer never showed the client's state: {crate[2].Location}, {Describe(crate)}");
+    }
+
+    [Test]
+    public async Task WhatALeavingPeerHeldGoesBackToTheHost()
+    {
+        var crate = SpawnEverywhere("Crate");
+        await NextFrame();
+
+        Expect.True(crate[1].Object.TryGrab());
+        Expect.True(await WaitUntil(() => Agree(crate, 2, 2), 3), Describe(crate));
+
+        Client.Disconnect();
+        HarnessBody[] remaining = [crate[0], crate[2]];
+        Expect.True(await WaitUntil(() => Agree(remaining, 1, 0), 3), Describe(remaining));
     }
 }

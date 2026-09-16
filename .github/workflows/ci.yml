@@ -58,3 +58,14 @@ jobs:
         run: dotnet build Netfox.csproj
       - name: Run Godot tests
         run: $GODOT --headless --path . res://test/TestRunner.tscn
+      - name: Playground smoke under the bad profile
+        run: |
+          "$GODOT" --headless --path . res://examples/playground/playground.tscn -- --smoke --host --seconds=30 --profile=bad > pg-host.log 2>&1 &
+          host=$!
+          sleep 8
+          "$GODOT" --headless --path . res://examples/playground/playground.tscn -- --smoke --join --seconds=15 --profile=bad > pg-client.log 2>&1 || true
+          wait $host || true
+          echo "--- host"; grep -E "PLAYGROUND|ERROR|Exception" pg-host.log || cat pg-host.log
+          echo "--- client"; grep -E "PLAYGROUND|ERROR|Exception" pg-client.log || cat pg-client.log
+          # The verdict line, not the exit code: Godot has crashed on shutdown after printing it
+          grep -q "role=host ok=True" pg-host.log && grep -q "role=client ok=True" pg-client.log

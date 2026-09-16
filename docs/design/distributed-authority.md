@@ -110,6 +110,25 @@ false where a continuous value should step. Discrete types (bool, int, enum, str
 10. Two-process smoke with `--profile=realistic`: an object handed from player to player, disagreement measured on
     displayed positions during motion, not at rest.
 
+## Playground
+
+`examples/playground` is where the model gets played, and in time it has to exercise every point above. Iteration 1:
+
+- [x] Players: always their own peer's, played back elsewhere, no collision between players
+- [x] Push another player: an event to their peer, applied as knockback
+- [x] Crates: kinematic where not simulated, touching takes authority, the authority chain on impact, back to the host at rest
+- [x] Grab, carry, throw (ownership)
+- [x] Slow projectiles: spawned by the shooter, hits on crates decided by the shooter, on a player by that player
+- [x] Late join (MultiplayerSpawner plus the host's authority table)
+- [x] A leaving peer's crates go back to the host
+- [x] Two-process smoke (`--smoke`) under a named profile, comparing displayed positions during motion
+- [ ] Soft separation of overlapping players
+- [ ] Standing on and carrying a player (attach to the displayed transform)
+- [ ] Throwing a player: `Transferable` carried by the authority command, so the thrown player can hand itself over
+- [ ] Hitscan
+- [ ] QTE: press together within a window
+- [ ] Steam mesh instead of the ENet star
+
 ## Sources
 
 Gaffer On Games ([networking](https://gafferongames.com/categories/game-networking/),

@@ -30,13 +30,29 @@ public partial class NetworkObject : Node
     [Export] public bool Transferable { get; set; } = true;
 
     /// <summary>The peer holding the object, or 0 when nobody does.</summary>
-    public int Owner { get; private set; }
+    public int Holder { get; private set; }
 
     public int AuthoritySequence { get; private set; }
     public int OwnershipSequence { get; private set; }
 
     /// <summary>Raised after the authority or the owner changed, on every peer.</summary>
     public event Action? AuthorityChanged;
+
+    /// <summary>
+    /// Raised on a peer playing the object back, for every sample of the authority's state it kept: the tick it is
+    /// for. What arrived, as against what was sent - for diagnostics and checks.
+    /// </summary>
+    public event Action<int>? SampleReceived;
+
+    internal void RaiseSampleReceived(int tick) => SampleReceived?.Invoke(tick);
+
+    /// <summary>
+    /// Raised on the authority for every state it sends: the tick. Not every tick - an unchanged object is sent only
+    /// as a heartbeat - so this is the ground truth a check compares playback against.
+    /// </summary>
+    public event Action<int>? SampleSent;
+
+    internal void RaiseSampleSent(int tick) => SampleSent?.Invoke(tick);
 
     internal List<(Node Node, NodePath Property, bool Interpolate)> Properties { get; } = new();
     internal SampleTrack<Sample> Track { get; } = new();
@@ -62,26 +78,26 @@ public partial class NetworkObject : Node
     /// </summary>
     public bool TryTakeAuthority()
     {
-        if (!Transferable || (Owner != 0 && Owner != LocalPeer)) return false;
+        if (!Transferable || (Holder != 0 && Holder != LocalPeer)) return false;
         if (IsAuthority) return true;
-        return Request(LocalPeer, Owner, AuthoritySequence + 1, OwnershipSequence);
+        return Request(LocalPeer, Holder, AuthoritySequence + 1, OwnershipSequence);
     }
 
     /// <summary>Takes ownership and authority. False when someone else holds it.</summary>
     public bool TryGrab()
     {
-        if (!Transferable || (Owner != 0 && Owner != LocalPeer)) return false;
-        if (Owner == LocalPeer) return true;
+        if (!Transferable || (Holder != 0 && Holder != LocalPeer)) return false;
+        if (Holder == LocalPeer) return true;
         return Request(LocalPeer, LocalPeer, AuthoritySequence + 1, OwnershipSequence + 1);
     }
 
     /// <summary>Lets go of a held object. This peer keeps simulating it until someone else touches it.</summary>
     public bool Release()
-        => Owner == LocalPeer && Request(LocalPeer, 0, AuthoritySequence, OwnershipSequence + 1);
+        => Holder == LocalPeer && Request(LocalPeer, 0, AuthoritySequence, OwnershipSequence + 1);
 
     /// <summary>Hands a free object this peer simulates back to the host, typically once it has come to rest.</summary>
     public bool ReturnToHost()
-        => IsAuthority && Owner == 0 && LocalPeer != HostPeer && Request(HostPeer, 0, AuthoritySequence + 1, OwnershipSequence);
+        => IsAuthority && Holder == 0 && LocalPeer != HostPeer && Request(HostPeer, 0, AuthoritySequence + 1, OwnershipSequence);
 
     /// <summary>
     /// Raised on the authority, exactly once per <see cref="SendToAuthority"/> call anywhere: the peer that sent it and
@@ -123,7 +139,7 @@ public partial class NetworkObject : Node
 
     internal void Apply(int authority, int owner, int authoritySequence, int ownershipSequence)
     {
-        var changed = authority != Authority || owner != Owner;
+        var changed = authority != Authority || owner != Holder;
         if (authority != Authority)
         {
             SetAuthority(Root!, authority);
@@ -133,7 +149,7 @@ public partial class NetworkObject : Node
             LastSentBody = null;
         }
 
-        Owner = owner;
+        Holder = owner;
         AuthoritySequence = authoritySequence;
         OwnershipSequence = ownershipSequence;
         if (changed) AuthorityChanged?.Invoke();

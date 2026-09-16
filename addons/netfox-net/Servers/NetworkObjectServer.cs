@@ -95,8 +95,24 @@ public partial class NetworkObjectServer : Node
         Context.NetworkIdentityServer?.DeregisterNode(obj.Root!);
     }
 
-    /// <summary>Forgets a peer's clock. Its objects keep their last displayed state.</summary>
-    public void ErasePeer(int peer) => _clocks.Remove(peer);
+    /// <summary>
+    /// Forgets a peer's clock. On the host, also takes back every object the peer simulated or held and tells everyone:
+    /// otherwise a crate carried out of the session stays with nobody for good.
+    /// </summary>
+    public void ErasePeer(int peer)
+    {
+        _clocks.Remove(peer);
+        if (!Multiplayer.IsServer()) return;
+
+        foreach (var obj in _objects)
+        {
+            if (obj.Authority != peer && obj.Holder != peer) continue;
+            // Players leave with their peer; the game frees them. What is left behind goes back to the host.
+            if (!obj.Transferable) continue;
+            obj.Apply(NetworkObject.HostPeer, 0, obj.AuthoritySequence + 1, obj.OwnershipSequence + 1);
+            SendAuthority(obj, 0);
+        }
+    }
 
     internal void ResetSession()
     {
@@ -127,7 +143,7 @@ public partial class NetworkObjectServer : Node
             // By name, not id: this is reliable and rare, and a name resolves even before ids were exchanged
             NetRef.Encode(Core.Data.NetworkIdentityReference.OfFullName(identifier.FullName), writer);
             VarUint.Encode(obj.Authority, writer);
-            VarUint.Encode(obj.Owner, writer);
+            VarUint.Encode(obj.Holder, writer);
             VarUint.Encode(obj.AuthoritySequence, writer);
             VarUint.Encode(obj.OwnershipSequence, writer);
             _cmdAuthority.Send(writer.ToArray(), target);
@@ -163,7 +179,7 @@ public partial class NetworkObjectServer : Node
 
         var allowed = obj.Transferable
                       && obj.IsNewer(authoritySequence, ownershipSequence)
-                      && (obj.Owner == 0 || obj.Owner == sender)
+                      && (obj.Holder == 0 || obj.Holder == sender)
                       && (authority == sender || (authority == NetworkObject.HostPeer && obj.Authority == sender))
                       && (owner == 0 || owner == sender);
 
@@ -233,20 +249,24 @@ public partial class NetworkObjectServer : Node
         {
             if (!obj.IsAuthority || identities.GetIdentifierOf(obj.Root!) is not { } identifier) continue;
 
+            // Flags: 1 teleport, 2 resumed after a rest - the sender skipped ticks on purpose, which a receiver cannot
+            // tell apart from loss on its own
+            var resumed = obj.LastSentBody is not null && stateTick - obj.LastSentTick > StateIntervalTicks;
             var writer = new ByteWriter();
-            writer.PutU8(obj.TeleportPending ? (byte)1 : (byte)0);
+            writer.PutU8((byte)((obj.TeleportPending ? 1 : 0) | (resumed ? 2 : 0)));
             foreach (var (node, property, _) in obj.Properties)
                 CompactValues.Encode(node.GetValue(property), writer);
             var body = writer.ToArray();
 
             // At rest: nothing new to say, apart from a heartbeat for peers that joined since or lost the last one
-            var unchanged = obj.LastSentBody is { } last && last.AsSpan().SequenceEqual(body);
+            var unchanged = obj.LastSentBody is { } last && last.AsSpan(1).SequenceEqual(body.AsSpan(1));
             if (unchanged && stateTick - obj.LastSentTick < RestHeartbeatTicks) continue;
 
             obj.LastSentBody = body;
             obj.LastSentTick = stateTick;
             obj.TeleportPending = false;
             sending.Add((obj, identifier, body));
+            obj.RaiseSampleSent(stateTick);
         }
         if (sending.Count == 0) return;
 
@@ -305,18 +325,22 @@ public partial class NetworkObjectServer : Node
                 continue;
             }
 
-            var teleport = reader.GetU8() != 0;
+            var flags = reader.GetU8();
+            var teleport = (flags & 1) != 0;
+            var resumed = (flags & 2) != 0;
             var values = new Variant[obj.Properties.Count];
             for (var i = 0; i < values.Length; i++)
                 values[i] = CompactValues.Decode(reader);
             reader.Position = end;
 
             // After a rest the sender skipped ticks on purpose: hold the resting value until just before this sample,
-            // or playback would drift the whole way from where it came to rest
-            if (obj.Track.TryGetNewest(out var newestTick, out var newest) && tick - newestTick > StateIntervalTicks * 3)
+            // or playback would drift the whole way from where it came to rest. After loss it did not, and holding
+            // would freeze the object for the length of the outage and then jump.
+            if (resumed && obj.Track.TryGetNewest(out var newestTick, out var newest) && tick - newestTick > StateIntervalTicks)
                 obj.Track.Push(tick - StateIntervalTicks, new NetworkObject.Sample(newest.Values, false), clock.Tick);
 
-            obj.Track.Push(tick, new NetworkObject.Sample(values, teleport), clock.Tick);
+            if (obj.Track.Push(tick, new NetworkObject.Sample(values, teleport), clock.Tick))
+                obj.RaiseSampleReceived(tick);
         }
     }
 
