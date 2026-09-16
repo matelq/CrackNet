@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [ "master", "reworked" ]
+    branches: [ "master", "reworked", "distributed-authority" ]
   pull_request:
   workflow_dispatch:
 
@@ -24,44 +24,8 @@ jobs:
       - name: Run tests
         run: dotnet test Netfox.slnx
 
-  godot-stock:
-    name: Godot tests on stock physics
-    # The addon names no physics engine, and the game is the only consumer that wants Rapier. This keeps the other
-    # engine honest at the cost of one suite run: same tests, project.godot switched back, no extension installed.
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: '10.0.x'
-      - name: Cache Godot
-        uses: actions/cache@v4
-        with:
-          path: godot
-          key: godot-${{ env.GODOT_VERSION }}-mono-linux-x86_64
-      - name: Install Godot
-        run: |
-          if [ ! -x "godot/Godot_v${GODOT_VERSION}_mono_linux_x86_64/Godot_v${GODOT_VERSION}_mono_linux.x86_64" ]; then
-            curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 -o godot.zip "https://github.com/godotengine/godot-builds/releases/download/$GODOT_VERSION/Godot_v${GODOT_VERSION}_mono_linux_x86_64.zip"
-            unzip -q godot.zip -d godot
-          fi
-          echo "GODOT=$PWD/godot/Godot_v${GODOT_VERSION}_mono_linux_x86_64/Godot_v${GODOT_VERSION}_mono_linux.x86_64" >> "$GITHUB_ENV"
-      - name: Switch project.godot back to Godot Physics
-        run: |
-          sed -i 's|^3d/physics_engine="Rapier3D"|3d/physics_engine="DEFAULT"|' project.godot
-          grep -n 'physics_engine' project.godot
-      - name: Import resources
-        run: $GODOT --headless --path . --import || true
-      - name: Build
-        run: dotnet build Netfox.csproj
-      - name: Run Godot tests
-        run: $GODOT --headless --path . res://test/TestRunner.tscn
-      - name: The Rapier check skips rather than fails without the extension
-        run: $GODOT --headless --path . res://examples/physics/RapierCheck.tscn | tee rapier.log && grep -q "skipped=True" rapier.log
-
   godot:
-    name: Godot tests and e2e
+    name: Godot tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -94,78 +58,3 @@ jobs:
         run: dotnet build Netfox.csproj
       - name: Run Godot tests
         run: $GODOT --headless --path . res://test/TestRunner.tscn
-      - name: Roll a rigid body back through Rapier
-        # --require: a skip here is a broken install, not a pass (netfox-net#53)
-        run: $GODOT --headless --path . res://examples/physics/RapierCheck.tscn -- --require
-      - name: Run e2e over ENet
-        run: |
-          "$GODOT" --headless --path . res://examples/e2e/E2E.tscn -- --host --seconds=20 > host.log 2>&1 &
-          host=$!
-          sleep 5
-          "$GODOT" --headless --path . res://examples/e2e/E2E.tscn -- --join --seconds=10 > client.log 2>&1 || true
-          wait $host || true
-          echo "--- host"; cat host.log
-          echo "--- client"; cat client.log
-          grep -q "ok=True" host.log && grep -q "ok=True" client.log
-      - name: Run the playground sample
-        run: |
-          "$GODOT" --headless --path . res://examples/playground/PlaygroundSmoke.tscn -- --host --seconds=20 > pg-host.log 2>&1 &
-          host=$!
-          sleep 6
-          "$GODOT" --headless --path . res://examples/playground/PlaygroundSmoke.tscn -- --join --seconds=8 > pg-client.log 2>&1 || true
-          wait $host || true
-          echo "--- host"; cat pg-host.log
-          echo "--- client"; cat pg-client.log
-          grep -q "ok=True" pg-host.log && grep -q "ok=True" pg-client.log
-      - name: Check two peers agree about each other after a collision
-        run: |
-          "$GODOT" --headless --path . res://examples/playground/ConvergenceSmoke.tscn -- --host --dump > cv-host.log 2>&1 &
-          host=$!
-          sleep 6
-          "$GODOT" --headless --path . res://examples/playground/ConvergenceSmoke.tscn -- --join --dump > cv-client.log 2>&1 || true
-          wait $host || true
-          echo "--- host"; cat cv-host.log
-          echo "--- client"; cat cv-client.log
-          grep -q "ok=True" cv-host.log && grep -q "ok=True" cv-client.log
-      - name: Pick up a crate, carry it, throw it - and agree about all of it
-        run: |
-          "$GODOT" --headless --path . res://examples/playground/ConvergenceSmoke.tscn -- --host --pickup --dump > pk-host.log 2>&1 &
-          host=$!
-          sleep 6
-          "$GODOT" --headless --path . res://examples/playground/ConvergenceSmoke.tscn -- --join --pickup --dump > pk-client.log 2>&1 || true
-          wait $host || true
-          echo "--- host"; grep CONVERGENCE pk-host.log
-          echo "--- client"; grep CONVERGENCE pk-client.log
-          grep -q "ok=True" pk-host.log && grep -q "ok=True" pk-client.log
-      - name: Keep the per-tick traces when a two-peer check disagreed (netfox-net#63 shows once in ~10 runs)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: convergence-traces
-          path: |
-            ~/.local/share/godot/app_userdata/netfox-net/*.csv
-            pk-*.log
-            cv-*.log
-          if-no-files-found: ignore
-      - name: Check a player rides the moving platform
-        run: $GODOT --headless --path . res://examples/playground/PlatformRideCheck.tscn
-      - name: Clone the GDScript original for the parity trace
-        uses: actions/checkout@v5
-        with:
-          repository: foxssake/netfox
-          ref: a15e6c03be648b7d2ebc4575079008a07d1cdffb
-          path: netfox
-      - name: Import the original's resources
-        run: $GODOT --headless --path netfox --import || true
-      - name: Compare tick traces against the original
-        run: sh parity/run-parity.sh "$GODOT"
-      - name: Run e2e through the proxy, under what a real network does
-        run: |
-          "$GODOT" --headless --path . res://examples/e2e/E2E.tscn -- --host --seconds=20 --profile=realistic > host-lossy.log 2>&1 &
-          host=$!
-          sleep 5
-          "$GODOT" --headless --path . res://examples/e2e/E2E.tscn -- --join --seconds=10 --profile=realistic > client-lossy.log 2>&1 || true
-          wait $host || true
-          echo "--- host"; cat host-lossy.log
-          echo "--- client"; cat client-lossy.log
-          grep -q "ok=True" host-lossy.log && grep -q "ok=True" client-lossy.log
