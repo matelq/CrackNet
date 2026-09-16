@@ -79,6 +79,25 @@ public partial class NetworkObject : Node
     public bool ReturnToHost()
         => IsAuthority && Owner == 0 && LocalPeer != HostPeer && Request(HostPeer, 0, AuthoritySequence + 1, OwnershipSequence);
 
+    /// <summary>
+    /// Raised on the authority, exactly once per <see cref="SendToAuthority"/> call anywhere: the peer that sent it and
+    /// what it sent. A push, damage, "this projectile hit me".
+    /// </summary>
+    public event Action<int, Variant>? EventReceived;
+
+    /// <summary>
+    /// Delivers <paramref name="payload"/> to whoever is this object's authority, reliably and exactly once, even if
+    /// authority moves while it is on its way: the transport does not duplicate, and a peer that is no longer the
+    /// authority passes the event on instead of raising it. On the authority itself it is raised at once.
+    /// </summary>
+    public void SendToAuthority(Variant payload)
+    {
+        if (IsAuthority) Receive(LocalPeer, payload);
+        else Context.NetworkObjectServer.SendEvent(this, Authority, LocalPeer, payload, hops: 0);
+    }
+
+    internal void Receive(int origin, Variant payload) => EventReceived?.Invoke(origin, payload);
+
     internal const int HostPeer = 1;
 
     private bool Request(int authority, int owner, int authoritySequence, int ownershipSequence)

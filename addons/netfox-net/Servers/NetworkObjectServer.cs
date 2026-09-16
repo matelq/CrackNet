@@ -34,6 +34,7 @@ public partial class NetworkObjectServer : Node
     private readonly int _maxPacketSize = NetfoxSettings.Instance.MaxSyncPacketSize;
     private NetworkCommandServer.Command _cmdState = null!;
     private NetworkCommandServer.Command _cmdAuthority = null!;
+    private NetworkCommandServer.Command _cmdEvent = null!;
 
     public override void _EnterTree()
     {
@@ -47,6 +48,7 @@ public partial class NetworkObjectServer : Node
     {
         _cmdState = Context.NetworkCommandServer.RegisterCommandAt(CommandIds.ObjectState, HandleState, MultiplayerPeer.TransferModeEnum.Unreliable);
         _cmdAuthority = Context.NetworkCommandServer.RegisterCommandAt(CommandIds.ObjectAuthority, HandleAuthority, MultiplayerPeer.TransferModeEnum.Reliable);
+        _cmdEvent = Context.NetworkCommandServer.RegisterCommandAt(CommandIds.ObjectEvent, HandleEvent, MultiplayerPeer.TransferModeEnum.Reliable);
         Context.NetworkTime.AfterTick += SendState;
         Context.NetworkEvents.OnPeerLeave += ErasePeer;
     }
@@ -150,6 +152,41 @@ public partial class NetworkObjectServer : Node
             Logger.Debug("Rejected authority change on {0} from #{1}", identifier.FullName, sender);
             SendAuthority(obj, sender);
         }
+    }
+
+    // Two peers that briefly disagree about the authority would pass an event back and forth until they agree
+    private const int MaxEventHops = 8;
+
+    internal void SendEvent(NetworkObject obj, int target, int origin, Variant payload, int hops)
+    {
+        if (Context.NetworkIdentityServer.GetIdentifierOf(obj.Root!) is not { } identifier) return;
+        var writer = new ByteWriter();
+        NetRef.Encode(Core.Data.NetworkIdentityReference.OfFullName(identifier.FullName), writer);
+        VarUint.Encode(origin, writer);
+        VarUint.Encode(hops, writer);
+        Values.Encode(payload, writer);
+        _cmdEvent.Send(writer.ToArray(), target);
+    }
+
+    /// <summary>Raises an event on its object if this peer is the authority, and passes it on to the authority otherwise.</summary>
+    private void HandleEvent(int sender, byte[] data)
+    {
+        var reader = new ByteReader(data);
+        var reference = NetRef.Decode(reader);
+        var origin = VarUint.DecodeInt(reader);
+        var hops = VarUint.DecodeInt(reader);
+        var payload = Values.Decode(reader);
+
+        if (Context.NetworkIdentityServer.ResolveReference(sender, reference, allowQueue: false) is not { } identifier
+            || !_byRoot.TryGetValue(identifier.Subject, out var obj))
+            return;
+
+        if (obj.IsAuthority)
+            obj.Receive(origin, payload);
+        else if (hops < MaxEventHops)
+            SendEvent(obj, obj.Authority, origin, payload, hops + 1);
+        else
+            Logger.Warning("Dropped an event for {0} after {1} hops: peers disagree about its authority", identifier.FullName, hops);
     }
 
     private void SendState(double delta, int tick)

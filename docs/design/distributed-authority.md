@@ -59,15 +59,16 @@ simulation.
 
 **Players and contact.** Players do not collide with each other physically: each peer would push against the other in
 the past. Instead:
-- a push is a reliable event "apply impulse X" to the pushed player's peer, applied once (by id) as knockback in its
-  controller; the pusher sees the result one round trip later;
+- a push is an event "apply impulse X" to the pushed player's authority (`SendToAuthority`), applied as knockback in
+  its controller; the pusher sees the result one round trip later;
 - overlapping players are separated softly, each peer nudging its own character away from the displayed neighbour;
 - standing on or carrying a player attaches to the carrier's displayed transform, like a held object (#59).
 
 **Projectiles.** A projectile, fast or slow, belongs to its shooter and appears at once for them; other peers play it in
 the shooter's timeline. A hit on my own player is decided by my peer, against what I see, so a dodge on my screen
 counts. A hit on anything else is decided by the projectile's owner. Hitscan is decided by the shooter. Damage and
-"projectile consumed" are reliable events deduplicated by id; the first one the host receives wins. Physical
+"projectile consumed" are events to the authority of the target or the projectile (`SendToAuthority`): reliable,
+passed on if the authority moved on the way, and handled in arrival order there, so the first "consumed" wins. Physical
 projectiles (a grenade, a thrown crate) are ordinary physics objects.
 
 **QTE.** The host announces a QTE with its start tick. Each participant judges its own input locally, relative to when
@@ -95,7 +96,7 @@ false where a continuous value should step. Discrete types (bool, int, enum, str
 3. Authority returns to the host after rest.
 4. State from a peer that no longer has authority is not shown, nor blended into the new authority's.
 5. Playback: one peer's objects show the same tick; underrun without freezing; a late packet does not rewrite the past.
-6. A push event is applied exactly once.
+6. A push event is applied exactly once, and an event follows an authority that moved while it was on its way.
 7. A projectile appears on other peers at its firing tick; damage reaches the target's peer exactly once, including when
    the target decides.
 8. Late join: the full world and its owners.

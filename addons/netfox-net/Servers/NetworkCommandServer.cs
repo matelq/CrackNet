@@ -14,6 +14,7 @@ public static class CommandIds
     public const int SetTime = 3;
     public const int ObjectState = 4;
     public const int ObjectAuthority = 5;
+    public const int ObjectEvent = 6;
     public const int Identities = 9;
 
     /// <summary>First id handed out by RegisterCommand for user commands.</summary>
