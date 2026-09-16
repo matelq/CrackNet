@@ -1,4 +1,5 @@
 using Godot;
+using Netfox.Core.Data;
 using Netfox.Core.Logging;
 using Netfox.Core.Serialization;
 using Netfox.Core.Time;
@@ -39,6 +40,11 @@ public partial class NetworkObjectServer : Node
     private readonly List<NetworkObject> _objects = new();
     private readonly Dictionary<Node, NetworkObject> _byRoot = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<int, PlaybackClock> _clocks = new();
+
+    private const int MaxPendingSamples = 256;
+    private const ulong PendingSampleAgeMs = 5_000;
+    private readonly List<PendingSample> _pendingSamples = [];
+    private sealed record PendingSample(int Sender, NetworkIdentityReference Reference, int Tick, byte[] Body, ulong ReceivedAt);
 
     /// <summary>
     /// What the host said about objects this guest does not have yet. A late joiner hears about every object as it
@@ -89,6 +95,8 @@ public partial class NetworkObjectServer : Node
         if (Context.NetworkIdentityServer.GetIdentifierOf(obj.Root!) is { } identifier
             && _pendingAuthority.Remove(identifier.FullName, out var pending))
             obj.Apply(pending.Authority, pending.Owner, pending.AuthoritySequence, pending.OwnershipSequence);
+
+        ApplyPendingSamples(obj);
     }
 
     internal void Deregister(NetworkObject obj)
@@ -121,7 +129,13 @@ public partial class NetworkObjectServer : Node
     {
         _clocks.Clear();
         _pendingAuthority.Clear();
-        foreach (var obj in _objects) obj.Track.Clear();
+        _pendingSamples.Clear();
+        foreach (var obj in _objects)
+        {
+            obj.Track.Clear();
+            obj.PlaybackCursor.Reset();
+            obj.PlaybackStarted = false;
+        }
     }
 
     /// <summary>The display tick for objects of <paramref name="peer"/>, or null before anything arrived from it.</summary>
@@ -327,34 +341,79 @@ public partial class NetworkObjectServer : Node
         {
             var reference = NetRef.Decode(reader);
             var length = VarUint.DecodeInt(reader);
-            var end = reader.Position + length;
+            var body = reader.GetData(length).ToArray();
 
             var identifier = Context.NetworkIdentityServer.ResolveReference(sender, reference);
             if (identifier is null
-                || !_byRoot.TryGetValue(identifier.Subject, out var obj)
-                || obj.Root!.GetMultiplayerAuthority() != sender)
+                || !_byRoot.TryGetValue(identifier.Subject, out var obj))
             {
-                reader.Position = end;
+                BufferPendingSample(sender, reference, tick, body);
+                continue;
+            }
+            if (obj.Root!.GetMultiplayerAuthority() != sender) continue;
+
+            KeepSample(obj, clock, tick, body);
+        }
+    }
+
+    private void BufferPendingSample(int sender, NetworkIdentityReference reference, int tick, byte[] body)
+    {
+        var now = Time.GetTicksMsec();
+        PrunePendingSamples(now);
+        _pendingSamples.Add(new PendingSample(sender, reference, tick, body, now));
+        while (_pendingSamples.Count > MaxPendingSamples) _pendingSamples.RemoveAt(0);
+    }
+
+    private void PrunePendingSamples(ulong now)
+        => _pendingSamples.RemoveAll(sample => now - sample.ReceivedAt > PendingSampleAgeMs);
+
+    private void ApplyPendingSamples(NetworkObject? only = null)
+    {
+        PrunePendingSamples(Time.GetTicksMsec());
+        for (var i = 0; i < _pendingSamples.Count;)
+        {
+            var pending = _pendingSamples[i];
+            var identifier = Context.NetworkIdentityServer.ResolveReference(pending.Sender, pending.Reference, allowQueue: false);
+            if (identifier is null || !_byRoot.TryGetValue(identifier.Subject, out var obj) || only is not null && obj != only)
+            {
+                i++;
                 continue;
             }
 
-            var flags = reader.GetU8();
-            var teleport = (flags & 1) != 0;
-            var resumed = (flags & 2) != 0;
-            var values = new Variant[obj.Properties.Count];
-            for (var i = 0; i < values.Length; i++)
-                values[i] = CompactValues.Decode(reader);
-            reader.Position = end;
-
-            // After a rest the sender skipped ticks on purpose: hold the resting value until just before this sample,
-            // or playback would drift the whole way from where it came to rest. After loss it did not, and holding
-            // would freeze the object for the length of the outage and then jump.
-            if (resumed && obj.Track.TryGetNewest(out var newestTick, out var newest) && tick - newestTick > StateIntervalTicks)
-                obj.Track.Push(tick - StateIntervalTicks, new NetworkObject.Sample(newest.Values, false), clock.Tick);
-
-            if (obj.Track.Push(tick, new NetworkObject.Sample(values, teleport), clock.Tick))
-                obj.RaiseSampleReceived(tick);
+            _pendingSamples.RemoveAt(i);
+            if (obj.Root!.GetMultiplayerAuthority() != pending.Sender
+                || !_clocks.TryGetValue(pending.Sender, out var clock))
+                continue;
+            KeepSample(obj, clock, pending.Tick, pending.Body);
         }
+    }
+
+    private static void KeepSample(NetworkObject obj, PlaybackClock clock, int tick, byte[] body)
+    {
+        var reader = new ByteReader(body);
+
+        var flags = reader.GetU8();
+        var teleport = (flags & 1) != 0;
+        var resumed = (flags & 2) != 0;
+        var values = new Variant[obj.Properties.Count];
+        for (var i = 0; i < values.Length; i++)
+            values[i] = CompactValues.Decode(reader);
+
+        var shown = clock.Tick;
+        if (obj.Track.Count == 0 && shown is { } shared)
+        {
+            shown = obj.PlaybackCursor.Start(tick, shared);
+            obj.PlaybackStarted = true;
+        }
+
+        // After a rest the sender skipped ticks on purpose: hold the resting value until just before this sample,
+        // or playback would drift the whole way from where it came to rest. After loss it did not, and holding
+        // would freeze the object for the length of the outage and then jump.
+        if (resumed && obj.Track.TryGetNewest(out var newestTick, out var newest) && tick - newestTick > StateIntervalTicks)
+            obj.Track.Push(tick - StateIntervalTicks, new NetworkObject.Sample(newest.Values, false), shown);
+
+        if (obj.Track.Push(tick, new NetworkObject.Sample(values, teleport), shown))
+            obj.RaiseSampleReceived(tick);
     }
 
     public override void _Process(double delta)
@@ -363,11 +422,14 @@ public partial class NetworkObjectServer : Node
         foreach (var clock in _clocks.Values)
             clock.Advance(elapsedTicks);
 
+        if (_pendingSamples.Count > 0) ApplyPendingSamples();
+
         foreach (var obj in _objects)
         {
             if (obj.IsAuthority) continue;
             if (!_clocks.TryGetValue(obj.Root!.GetMultiplayerAuthority(), out var clock) || clock.Tick is not { } shown) continue;
-            if (!obj.Track.TrySample(shown, out var from, out var to, out var fraction)) continue;
+            var objectTick = obj.PlaybackStarted ? obj.PlaybackCursor.Advance(shown, elapsedTicks) : shown;
+            if (!obj.Track.TrySample(objectTick, out var from, out var to, out var fraction)) continue;
             Apply(obj, from, to, fraction);
         }
     }

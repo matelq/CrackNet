@@ -23,7 +23,10 @@ public sealed class SampleTrack<T>
     /// </summary>
     public bool Push(int tick, T value, double? shownTick)
     {
-        if (shownTick is { } shown && tick < shown) return false;
+        // The first sample is the object's beginning, even if its peer's already-running shared clock passed it. The
+        // caller gives that object a private catch-up cursor; once there is history, the usual no-rewritten-past rule
+        // applies again.
+        if (_samples.Count > 0 && shownTick is { } shown && tick < shown) return false;
         _samples[tick] = value;
         while (_samples.Count > _capacity) _samples.RemoveAt(0);
         return true;

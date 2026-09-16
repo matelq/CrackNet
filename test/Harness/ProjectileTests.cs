@@ -66,6 +66,29 @@ public partial class ProjectileTests : HarnessSuite
     }
 
     [Test]
+    public async Task AProjectileKeepsItsMuzzleSamplesWhenStateBeatsSpawn()
+    {
+        Network.LatencyMs = 10;
+        Network.ReliableExtraLatencyMs = 300;
+        Fire("DelayedSpawn");
+
+        HarnessBody? onHost = null;
+        for (var frame = 0; frame < 300; frame++)
+        {
+            await NextFrame();
+            onHost ??= Host.GetNodeOrNull<HarnessBody>("DelayedSpawn");
+            if (onHost is not { Visible: true }) continue;
+
+            var perTick = Speed.X / Host.Context.NetworkTime.Tickrate;
+            Expect.True(onHost.Location.X < perTick * 3,
+                $"first displayed at {onHost.Location.X:F2}, after the muzzle samples were sent");
+            return;
+        }
+
+        Expect.True(false, "delayed projectile never became visible");
+    }
+
+    [Test]
     public async Task AHitDecidedByTheTargetAndOneByTheShooterConsumeTheProjectileOnce()
     {
         var fired = Fire("Rocket");

@@ -432,6 +432,16 @@ Wall-clock time sources. Port of time/network-clocks.gd.
 |---|---|---|
 | method | `UnixTime` | Unix time in seconds with Stopwatch resolution. Equivalent of Time.get_unix_time_from_system(). |
 
+### ObjectPlaybackCursor
+
+A newly seen object's display position. It begins at that object's first sample even when its peer's shared clock is already ahead, then runs faster until it can rejoin the shared clock without skipping its opening motion.
+
+| | Member | Summary |
+|---|---|---|
+| property | `IsCatchingUp` | Whether this object is still behind the peer's shared display clock. |
+| method | `Advance(System.Double,System.Double)` | Advances the private opening timeline, returning to the shared tick as soon as it reaches it. |
+| method | `Start(System.Int32,System.Double)` | Starts at the first sample, or at the shared clock when that sample is not in its past. |
+
 ### PlaybackClock
 
 The display tick for everything one remote peer sends. One clock per peer, not per object, so a stack of crates or a character and what it holds are always shown at the same moment. The clock trails the newest tick heard from the peer by a fixed delay and slews its rate to hold that depth, rather than jumping when packet spacing changes. The display never runs past the newest tick, but the clock's own time keeps going while nothing arrives: a resting peer sends only heartbeats, and motion after a rest must show at the normal depth at once, not a heartbeat late. After an outage that means a skip forward to where the data is, as Source does, rather than seconds of added delay draining at a few percent. It never runs backwards.

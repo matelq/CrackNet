@@ -78,6 +78,30 @@ public class PlaybackTests
     }
 
     [Fact]
+    public void ANewTrackKeepsItsFirstSampleEvenWhenThePeerClockPassedIt()
+    {
+        var track = new SampleTrack<double>();
+
+        Assert.True(track.Push(10, 10, shownTick: 50));
+        Assert.False(track.Push(9, 9, shownTick: 10));
+        Assert.Equal(10, Sample(track, 10));
+    }
+
+    [Fact]
+    public void ANewObjectPlaysItsOwnStartThenCatchesTheSharedClock()
+    {
+        var cursor = new ObjectPlaybackCursor(catchUpRate: 2);
+
+        Assert.Equal(10, cursor.Start(firstTick: 10, sharedTick: 20));
+        Assert.Equal(12, cursor.Advance(sharedTick: 21, elapsedTicks: 1));
+        Assert.Equal(14, cursor.Advance(sharedTick: 22, elapsedTicks: 1));
+        for (var shared = 23; shared <= 32; shared++) cursor.Advance(shared, elapsedTicks: 1);
+
+        Assert.False(cursor.IsCatchingUp);
+        Assert.Equal(32, cursor.Advance(sharedTick: 32, elapsedTicks: 0));
+    }
+
+    [Fact]
     public void JitterAndLossKeepMotionMonotonicAndLatencyBounded()
     {
         var clock = new PlaybackClock(delayTicks: 4);

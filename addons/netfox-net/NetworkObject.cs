@@ -56,6 +56,8 @@ public partial class NetworkObject : Node
 
     internal List<(Node Node, NodePath Property, bool Interpolate)> Properties { get; } = new();
     internal SampleTrack<Sample> Track { get; } = new();
+    internal ObjectPlaybackCursor PlaybackCursor { get; } = new();
+    internal bool PlaybackStarted { get; set; }
     internal bool TeleportPending { get; set; }
 
     /// <summary>What this peer last sent for the object, and when: an unchanged object is not sent again for a while.</summary>
@@ -146,6 +148,8 @@ public partial class NetworkObject : Node
             if (IsAuthority && !Shown) SetShown(true);
             // Samples are stamped on the previous authority's clock; the new one sends its own, at once even at rest
             Track.Clear();
+            PlaybackCursor.Reset();
+            PlaybackStarted = false;
             LastSentBody = null;
         }
 
