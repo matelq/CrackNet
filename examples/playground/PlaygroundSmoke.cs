@@ -5,10 +5,11 @@ using FileAccess = Godot.FileAccess;
 namespace Netfox.Examples.Playground;
 
 /// <summary>
-/// Drives the playground headless and checks it. Run the host first, it has to outlive the client:
-///   godot --headless --path . res://examples/playground/playground.tscn -- --smoke --host --seconds=22
-///   godot --headless --path . res://examples/playground/playground.tscn -- --smoke --join --seconds=14
-/// Both under the same network profile (the project setting, or --profile=name on both).
+/// Drives the playground headless and checks it. Run a host, client A, then client B; the host must outlive both:
+///   godot --headless --path . res://examples/playground/playground.tscn -- --smoke --host --seconds=36
+///   godot --headless --path . res://examples/playground/playground.tscn -- --smoke --join --smoke-client=a --seconds=22
+///   godot --headless --path . res://examples/playground/playground.tscn -- --smoke --join --smoke-client=b --seconds=18
+/// All use the same network profile.
 /// <para>
 /// The client's player walks into a crate, which takes the crate over, then grabs it, carries it and throws it. The
 /// client writes down every state it sent for the crate; the host writes down what it displayed for the crate each
@@ -24,6 +25,7 @@ public partial class PlaygroundSmoke : Node
     private const double MaxDisplayError = 0.25;
 
     private bool _isHost;
+    private bool _isObserver;
     private double _seconds = 12;
     private double _elapsed;
     private double _botClock = -1;
@@ -33,6 +35,7 @@ public partial class PlaygroundSmoke : Node
     private Vector3 _crateStart;
     private double _crateMaxTravel;
     private int _clientPeer;
+    private bool _sawGuestCrate;
 
     private readonly List<(int Tick, Vector3 Position)> _sent = new();
     private readonly List<(double Tick, Vector3 Position)> _displayed = new();
@@ -42,13 +45,14 @@ public partial class PlaygroundSmoke : Node
     {
         var args = OS.GetCmdlineUserArgs();
         _isHost = args.Contains("--host");
+        _isObserver = args.Contains("--smoke-client=b");
         foreach (var arg in args)
             if (arg.StartsWith("--seconds=")) _seconds = double.Parse(arg["--seconds=".Length..], CultureInfo.InvariantCulture);
 
         _playground = GetParent<Playground>();
         _crate = _playground.GetNode<PlaygroundCrate>($"Crates/{CrateName}");
         _crateStart = _crate.GlobalPosition;
-        PlaygroundPlayer.Bot = _isHost ? _ => default : Drive;
+        PlaygroundPlayer.Bot = !_isHost && !_isObserver ? Drive : _ => default;
         // A trace left by an earlier run would be compared against this one's ticks
         if (!_isHost && FileAccess.FileExists(TracePath)) DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath(TracePath));
         _crate.Object.SampleSent += RecordSent;
@@ -96,6 +100,8 @@ public partial class PlaygroundSmoke : Node
             if (NetworkObjectServer.Instance.GetDisplayTick(_clientPeer) is { } shown && _crate.Visible)
                 _displayed.Add((shown, _crate.GlobalPosition));
         }
+        if (_isObserver && _crate.Object.Authority is not 1 && !_crate.Object.IsAuthority && _crate.Visible)
+            _sawGuestCrate = true;
 
         if (_elapsed >= _seconds) Finish();
     }
@@ -114,15 +120,23 @@ public partial class PlaygroundSmoke : Node
             ok = _clientPeer != 0 && _crateMaxTravel > 1.5 && compared > 20 && maxError < MaxDisplayError && backToHost;
             detail = $"clientTookIt={_clientPeer != 0} travel={_crateMaxTravel:F2} compared={compared} maxError={maxError:F3} backToHost={backToHost}";
         }
-        else
+        else if (!_isObserver)
         {
             WriteTrace();
             var sawHost = _playground.Players.GetNodeOrNull<PlaygroundPlayer>("Player1") is { Visible: true };
             ok = sawHost && _sent.Count > 20 && _crateMaxTravel > 1.5 && backToHost;
             detail = $"sawHost={sawHost} sent={_sent.Count} travel={_crateMaxTravel:F2} backToHost={backToHost}";
         }
+        else
+        {
+            var sawDriver = _playground.Players.GetChildren().OfType<PlaygroundPlayer>()
+                .Any(player => player.Peer != 1 && player.Peer != Multiplayer.GetUniqueId() && player.Visible);
+            ok = sawDriver && _sawGuestCrate && _received.Count > 20 && _crateMaxTravel > 1.5 && backToHost;
+            detail = $"sawDriver={sawDriver} sawGuestCrate={_sawGuestCrate} received={_received.Count} travel={_crateMaxTravel:F2} backToHost={backToHost}";
+        }
 
-        GD.Print($"PLAYGROUND SMOKE role={(_isHost ? "host" : "client")} ok={ok} {detail}");
+        var role = _isHost ? "host" : _isObserver ? "client-b" : "client-a";
+        GD.Print($"PLAYGROUND SMOKE role={role} ok={ok} {detail}");
         GetTree().Quit(ok ? 0 : 1);
     }
 

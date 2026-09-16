@@ -60,12 +60,19 @@ jobs:
         run: $GODOT --headless --path . res://test/TestRunner.tscn
       - name: Playground smoke under the bad profile
         run: |
-          "$GODOT" --headless --path . res://examples/playground/playground.tscn -- --smoke --host --seconds=30 --profile=bad > pg-host.log 2>&1 &
+          "$GODOT" --headless --path . res://examples/playground/playground.tscn -- --smoke --host --seconds=40 --profile=bad > pg-host.log 2>&1 &
           host=$!
           sleep 8
-          "$GODOT" --headless --path . res://examples/playground/playground.tscn -- --smoke --join --seconds=15 --profile=bad > pg-client.log 2>&1 || true
+          "$GODOT" --headless --path . res://examples/playground/playground.tscn -- --smoke --join --smoke-client=a --seconds=24 --profile=bad > pg-client-a.log 2>&1 &
+          client_a=$!
+          sleep 2
+          "$GODOT" --headless --path . res://examples/playground/playground.tscn -- --smoke --join --smoke-client=b --seconds=20 --profile=bad > pg-client-b.log 2>&1 || true
+          wait $client_a || true
           wait $host || true
           echo "--- host"; grep -E "PLAYGROUND|ERROR|Exception" pg-host.log || cat pg-host.log
-          echo "--- client"; grep -E "PLAYGROUND|ERROR|Exception" pg-client.log || cat pg-client.log
+          echo "--- client A"; grep -E "PLAYGROUND|ERROR|Exception" pg-client-a.log || cat pg-client-a.log
+          echo "--- client B"; grep -E "PLAYGROUND|ERROR|Exception" pg-client-b.log || cat pg-client-b.log
           # The verdict line, not the exit code: Godot has crashed on shutdown after printing it
-          grep -q "role=host ok=True" pg-host.log && grep -q "role=client ok=True" pg-client.log
+          grep -q "role=host ok=True" pg-host.log \
+            && grep -q "role=client-a ok=True" pg-client-a.log \
+            && grep -q "role=client-b ok=True" pg-client-b.log

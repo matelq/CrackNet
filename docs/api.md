@@ -478,23 +478,21 @@ The arithmetic of the NetworkTime tick loop without any side effects: clock stre
 
 ### NetworkSimulator
 
-Editor convenience: the first launched instance hosts, later ones join, optionally through a UDP proxy that injects latency and packet loss. ENet only. Port of netfox.extras/network-simulator.gd.
+Editor convenience: the first launched instance hosts and later ones join. Link conditions are applied in process by `SimulatedMultiplayerPeer`, once as each packet leaves for a remote peer.
 
 | | Member | Summary |
 |---|---|---|
-| property | `Conditions` | Jitter and burst loss on top of `LatencyMs` and `PacketLossPercent`. |
-| property | `ConnectPort` | The port to actually dial: the proxy's when it is running, the server's otherwise. |
-| property | `HostPeerFactory` | Creates the peer to host with, or null when this instance could not take the host role - which is what makes the next one join instead. Upstream hardcodes `ENetMultiplayerPeer` (network-simulator.gd:70), so autoconnect is unusable with a Steam or loopback peer. Replace these before the simulator enters the tree to autoconnect over any transport. The UDP proxy only applies to ENet and is skipped for anything else, since it forwards real UDP packets. |
-| property | `JoinPeerFactory` | Creates the peer to join with. See `HostPeerFactory`. |
-| property | `Peer` | The peer the last autoconnect produced, or null if it never got one. |
-| property | `ProxyCounts` | Packets the proxy passed through, and the two ways it did not. Zero bursts means no burst fired. |
-| property | `ProxyPort` | Port clients connect to when the latency and loss proxy is in the way; otherwise `ServerPort`. |
-| method | `Connect` | The autoconnect itself, without the editor and environment guards around it: host if nothing else has, join if something has. Assigns the resulting peer to the multiplayer API. |
-| method | `InLossBurst(Netfox.Extras.NetworkSimulator.Profile,System.UInt64)` | Whether the link is in one of its outages. Derived from the clock rather than scheduled, so it needs no state and both directions go out together - which is what an outage is, as against loss on one path. |
-| method | `OscillatingJitter(Netfox.Extras.NetworkSimulator.Profile,System.UInt64)` | A raised cosine over the period, so the delay drifts up and back down rather than jumping. |
-| method | `ScheduleOrDrop(System.UInt64)` | When a packet entering the link now should come out the other end, or null if it never does. Both are decided here rather than on the way out: a packet lost on the wire was lost when it was sent, and a delay that is rolled per packet is what lets a later one arrive first. |
-| method | `StartProxy(System.Int32,Netfox.Extras.NetworkSimulator.Profile,System.String)` | Starts the proxy with jitter and burst loss as well as the constant delay and even loss. `Realistic` is the one worth running against. |
-| method | `StartProxy(System.Int32,System.Int32,System.Double,System.String)` | Starts only the latency and loss proxy, without the autoconnect flow that is limited to the editor, and returns the port clients should connect to. Upstream has no such entry point: its proxy is reachable only through autoconnect, which is why it was never covered by a headless run. |
+| property | `Conditions` | Conditions applied by the in-process wrapper. |
+| property | `HostPeerFactory` | Creates the peer used to elect the first editor instance as host. |
+| property | `JoinPeerFactory` | Creates the peer used when the hosting port was already taken. |
+| property | `Peer` | The peer produced by autoconnect, wrapped with this instance's link conditions. |
+| method | `Connect` | Hosts if the configured port is free, otherwise joins, then installs the simulated peer. |
+| method | `InLossBurst(Netfox.Extras.NetworkSimulator.Profile,System.UInt64)` | Whether an unreliable packet sent now falls inside a periodic link outage. |
+| method | `OscillatingJitter(Netfox.Extras.NetworkSimulator.Profile,System.UInt64)` | A raised cosine over the period, so delay drifts instead of jumping. |
+
+### SimulatedMultiplayerPeer
+
+A transport wrapper that applies a `Profile` once, on the sending side of each remote link. Reliable packets are delayed but never lost; unreliable packets also see the profile's steady and burst loss. The wrapped transport still owns connection establishment and packet delivery.
 
 ### WindowTiler
 

@@ -48,13 +48,49 @@ public partial class NetworkSimulatorTests : TestSuite
         return simulator;
     }
 
+    [Test]
+    public async Task InProcessSimulationDelaysReliableAndDropsOnlyUnreliablePackets()
+    {
+        var senderInner = _network.CreatePeer(10);
+        var receiverInner = _network.CreatePeer(11);
+        var profile = new NetworkSimulator.Profile(LatencyMs: 40, PacketLossPercent: 100);
+        var sender = new SimulatedMultiplayerPeer(senderInner, profile, randomSeed: 7);
+        var receiver = new SimulatedMultiplayerPeer(receiverInner, profile, randomSeed: 8);
+        _network.Connect();
+
+        sender.SetTargetPeer(11);
+        sender.TransferMode = MultiplayerPeer.TransferModeEnum.Unreliable;
+        sender.PutPacket([1]);
+        for (var i = 0; i < 5; i++)
+        {
+            sender.Poll();
+            receiver.Poll();
+            await NextFrame();
+        }
+        Expect.Equal(0, receiver.GetAvailablePacketCount());
+
+        sender.TransferMode = MultiplayerPeer.TransferModeEnum.Reliable;
+        sender.PutPacket([2]);
+        sender.Poll();
+        receiver.Poll();
+        Expect.Equal(0, receiver.GetAvailablePacketCount(), "reliable packet arrived without the link delay");
+
+        Expect.True(await WaitUntil(() =>
+        {
+            sender.Poll();
+            receiver.Poll();
+            return receiver.GetAvailablePacketCount() == 1;
+        }, 2), "reliable packet was lost");
+        Expect.SequenceEqual(new byte[] { 2 }, receiver.GetPacket());
+    }
+
     /// <summary>
     /// The editor setting is a chance, 0 to 1; the proxy counts in percent. Upstream reads one into the other as-is,
     /// so "0.3" in the editor dropped 0.3% of packets, and a four-window playtest believed to run under 30% loss ran
     /// under almost none. The two must meet in the middle exactly once.
     /// </summary>
     [Test]
-    public async Task TheLossSettingIsAChanceAndTheProxyCountsPercent()
+    public async Task TheLossSettingIsAChanceAndProfilesCountPercent()
     {
         var backup = NetfoxSettings.Instance;
         var settings = NetfoxSettings.Load();
@@ -87,7 +123,8 @@ public partial class NetworkSimulatorTests : TestSuite
 
         Expect.Equal(1, hosted);
         Expect.Equal(0, joined);
-        Expect.True(simulator.Peer is LoopbackMultiplayerPeer, $"expected the injected peer, got {simulator.Peer}");
+        Expect.True(simulator.Peer is SimulatedMultiplayerPeer, $"expected the simulated wrapper, got {simulator.Peer}");
+        Expect.Equal(1, simulator.Peer!.GetUniqueId());
         Expect.True(ReferenceEquals(simulator.Peer, simulator.Multiplayer.MultiplayerPeer), "the peer should be assigned to the API");
     }
 
@@ -122,28 +159,6 @@ public partial class NetworkSimulatorTests : TestSuite
         // A MultiplayerAPI without a peer reports the offline one, so "nothing was assigned" looks like this
         Expect.True(simulator.Multiplayer.MultiplayerPeer is OfflineMultiplayerPeer,
             $"nothing should have been assigned, got {simulator.Multiplayer.MultiplayerPeer}");
-    }
-
-    /// <summary>The proxy is a UDP forwarder, so a non-ENet peer must not be sent through its port.</summary>
-    [Test]
-    public async Task ConnectPortSkipsTheProxyWhenThereIsNothingToSimulate()
-    {
-        var backup = NetfoxSettings.Instance;
-        var settings = NetfoxSettings.Load();
-        settings.SimulatedProfile = "Clear";
-        NetfoxSettings.Instance = settings;
-        try
-        {
-            var simulator = await Simulator("Direct Simulator");
-            NetworkSimulator.HostPeerFactory = _ => _network.CreatePeer(1);
-            simulator.Connect();
-
-            Expect.Equal(simulator.ServerPort, simulator.ConnectPort);
-        }
-        finally
-        {
-            NetfoxSettings.Instance = backup;
-        }
     }
 
     [Test]

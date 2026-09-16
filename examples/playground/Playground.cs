@@ -8,8 +8,8 @@ namespace Netfox.Examples.Playground;
 /// is a <see cref="NetworkObject"/>; crates are tinted with the colour of the peer that simulates them right now.
 /// <para>
 /// Run two or more windows (Debug > Customize Run Instances), Host in one and Join in the others. The host puts a
-/// network simulator between itself and the others with the profile from Project Settings > Netfox > Autoconnect >
-/// Simulated Profile, or <c>-- --profile=bad</c> on the command line.
+/// in-process link simulator on each mesh connection with the profile from Project Settings &gt; Netfox &gt;
+/// Autoconnect &gt; Simulated Profile, or <c>-- --profile=bad</c> on the command line.
 /// </para>
 /// </summary>
 public partial class Playground : Node3D
@@ -47,6 +47,7 @@ public partial class Playground : Node3D
     private Label _status = null!;
     private Camera3D _camera = null!;
     private MultiplayerSpawner _playerSpawner = null!;
+    private PlaygroundMesh _mesh = null!;
     private NetworkSimulator.Profile _profile = NetworkSimulator.Profile.Default;
 
     public override void _Ready()
@@ -55,12 +56,30 @@ public partial class Playground : Node3D
         BuildWorld();
         BuildUi();
 
+        _mesh = new PlaygroundMesh { Name = "Mesh" };
+        _mesh.MeshReady += id =>
+        {
+            _menu.Hide();
+            if (id == 1) StartHosting();
+        };
+        AddChild(_mesh);
+
         // Editor autoconnect (Project Settings > Netfox > Autoconnect > Enabled): the first instance hosts, the rest
-        // join, through the simulator with the profile set there. The peer is assigned after these events fire.
+        // join. The simulator's temporary star elects the role, then the playground replaces it with its ENet mesh.
         if (GetNodeOrNull<NetworkSimulator>("/root/NetworkSimulator") is { } simulator)
         {
-            simulator.ServerCreated += () => Callable.From(StartHosting).CallDeferred();
-            simulator.ClientConnected += () => _menu.Hide();
+            simulator.ServerCreated += () => Callable.From(() =>
+            {
+                Multiplayer.MultiplayerPeer?.Close();
+                Multiplayer.MultiplayerPeer = null;
+                StartMeshHost(simulator.Conditions);
+            }).CallDeferred();
+            simulator.ClientConnected += () => Callable.From(() =>
+            {
+                Multiplayer.MultiplayerPeer?.Close();
+                Multiplayer.MultiplayerPeer = null;
+                StartMeshClient(simulator.Hostname, simulator.Conditions);
+            }).CallDeferred();
         }
 
         if (OS.GetCmdlineUserArgs().Contains("--smoke")) AddChild(new PlaygroundSmoke { Name = "Smoke" });
@@ -80,17 +99,13 @@ public partial class Playground : Node3D
 
     public void Host()
     {
-        var peer = new ENetMultiplayerPeer();
-        var error = peer.CreateServer(Port, 8);
-        if (error != Error.Ok)
-        {
-            _status.Text = $"Hosting failed: {error}";
-            return;
-        }
+        StartMeshHost(_profile);
+    }
 
-        Multiplayer.MultiplayerPeer = peer;
-        if (ThroughSimulator) GetNode<NetworkSimulator>("/root/NetworkSimulator").StartProxy(Port, _profile);
-        StartHosting();
+    private void StartMeshHost(NetworkSimulator.Profile profile)
+    {
+        var error = _mesh.Host(Port, profile);
+        if (error != Error.Ok) _status.Text = $"Hosting failed: {error}";
     }
 
     /// <summary>Once this peer is the server, by the Host button or by autoconnect: players for everyone who joins.</summary>
@@ -104,17 +119,14 @@ public partial class Playground : Node3D
 
     public void Join(string address)
     {
-        var peer = new ENetMultiplayerPeer();
-        // The simulator listens one port up; the host started it with the same project settings
-        var error = peer.CreateClient(address, ThroughSimulator ? Port + 1 : Port);
-        if (error != Error.Ok)
-        {
-            _status.Text = $"Joining failed: {error}";
-            return;
-        }
+        StartMeshClient(address, _profile);
+    }
 
-        Multiplayer.MultiplayerPeer = peer;
-        _menu.Hide();
+    private void StartMeshClient(string address, NetworkSimulator.Profile profile)
+    {
+        var error = _mesh.Join(address, Port, profile);
+        if (error != Error.Ok) _status.Text = $"Joining failed: {error}";
+        else _menu.Hide();
     }
 
     /// <summary>The lowest free slot, so a player who leaves hands their colour to the next one to join.</summary>
