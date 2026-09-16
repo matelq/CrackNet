@@ -21,13 +21,6 @@ public sealed class NetfoxContext
     public NetworkTimeSynchronizer NetworkTimeSynchronizer { get; internal set; } = null!;
     public NetworkEvents NetworkEvents { get; internal set; } = null!;
     public NetworkIdentityServer NetworkIdentityServer { get; internal set; } = null!;
-    public RollbackLivenessServer RollbackLivenessServer { get; internal set; } = null!;
-    public NetworkHistoryServer NetworkHistoryServer { get; internal set; } = null!;
-    public RollbackSimulationServer RollbackSimulationServer { get; internal set; } = null!;
-    public NetworkSynchronizationServer NetworkSynchronizationServer { get; internal set; } = null!;
-    public NetworkRollback NetworkRollback { get; internal set; } = null!;
-    public NetworkPerformance NetworkPerformance { get; internal set; } = null!;
-    public InterpolationServer InterpolationServer { get; internal set; } = null!;
 
     /// <summary>True for the context the autoloads live in; only its servers are published as <c>Instance</c>.</summary>
     public bool IsDefault => ReferenceEquals(this, Default);
@@ -49,12 +42,6 @@ public sealed class NetfoxContext
     /// </summary>
     public void ResetSession()
     {
-        // Rollback first: the others derive ticks from it
-        NetworkRollback?.ResetSession();
-        NetworkHistoryServer?.ResetSession();
-        NetworkSynchronizationServer?.ResetSession();
-        RollbackSimulationServer?.ResetSession();
-        RollbackLivenessServer?.ResetSession();
         NetworkIdentityServer?.ResetSession();
 
         SessionReset?.Invoke();
@@ -92,13 +79,6 @@ public sealed class NetfoxContext
             new NetworkTimeSynchronizer(),
             new NetworkEvents(),
             new NetworkIdentityServer(),
-            new RollbackLivenessServer(),
-            new NetworkHistoryServer(),
-            new RollbackSimulationServer(),
-            new NetworkSynchronizationServer(),
-            new NetworkRollback(),
-            new NetworkPerformance(),
-            new InterpolationServer(),
         })
         {
             server.Name = server.GetType().Name;

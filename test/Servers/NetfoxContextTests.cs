@@ -12,7 +12,7 @@ public partial class NetfoxContextTests : TestSuite
     public void AutoloadsRegisterIntoTheDefaultContext()
     {
         Expect.True(ReferenceEquals(NetworkTime.Instance, NetfoxContext.Default.NetworkTime));
-        Expect.True(ReferenceEquals(NetworkRollback.Instance, NetfoxContext.Default.NetworkRollback));
+        Expect.True(ReferenceEquals(NetworkEvents.Instance, NetfoxContext.Default.NetworkEvents));
         Expect.True(NetworkTime.Instance.Context.IsDefault);
     }
 
@@ -22,7 +22,7 @@ public partial class NetfoxContextTests : TestSuite
         var stack = await Mount(new NetfoxContextRoot { Name = "Stack" });
 
         Expect.NotNull(stack.Context.NetworkTime);
-        Expect.NotNull(stack.Context.NetworkRollback);
+        Expect.NotNull(stack.Context.NetworkEvents);
         Expect.False(stack.Context.IsDefault);
         Expect.False(ReferenceEquals(stack.Context.NetworkTime, NetworkTime.Instance));
 

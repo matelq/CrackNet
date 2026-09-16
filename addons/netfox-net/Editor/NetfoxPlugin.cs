@@ -78,13 +78,6 @@ public partial class NetfoxPlugin : EditorPlugin
         ("NetworkTimeSynchronizer", Root + "/NetworkTimeSynchronizer.cs"),
         ("NetworkEvents", Root + "/NetworkEvents.cs"),
         ("NetworkIdentityServer", Root + "/Servers/NetworkIdentityServer.cs"),
-        ("RollbackLivenessServer", Root + "/Servers/RollbackLivenessServer.cs"),
-        ("NetworkHistoryServer", Root + "/Servers/NetworkHistoryServer.cs"),
-        ("RollbackSimulationServer", Root + "/Servers/RollbackSimulationServer.cs"),
-        ("NetworkSynchronizationServer", Root + "/Servers/NetworkSynchronizationServer.cs"),
-        ("NetworkRollback", Root + "/Rollback/NetworkRollback.cs"),
-        ("NetworkPerformance", Root + "/NetworkPerformance.cs"),
-        ("InterpolationServer", Root + "/Servers/InterpolationServer.cs"),
         ("WindowTiler", Root + "/Extras/WindowTiler.cs"),
         ("NetworkSimulator", Root + "/Extras/NetworkSimulator.cs"),
     ];

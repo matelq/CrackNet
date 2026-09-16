@@ -234,7 +234,6 @@ public partial class NetworkTime : Node
         if (_state != State.Active) return;
 
         if (!SyncToPhysics) Loop();
-        Context.InterpolationServer?.Interpolate(TickFactor);
     }
 
     public override void _PhysicsProcess(double delta)
@@ -263,9 +262,6 @@ public partial class NetworkTime : Node
                 OnTick?.Invoke(delta, tick);
                 AfterTick?.Invoke(delta, tick);
 
-                Context.NetworkRollback?.AfterTick(tick);
-                Context.NetworkHistoryServer?.RecordSyncState(tick + 1);
-                Context.NetworkSynchronizationServer?.SynchronizeSyncState(tick + 1);
 
                 _clock.CompleteTick();
             }
@@ -279,18 +275,13 @@ public partial class NetworkTime : Node
     /// <summary>Test hook: runs the pre-loop stage and emits BeforeTickLoop.</summary>
     internal void RunBeforeTickLoop()
     {
-        Context.InterpolationServer?.ClearTeleports();
-        Context.InterpolationServer?.ApplyTargetState();
         BeforeTickLoop?.Invoke();
     }
 
     /// <summary>Test hook: runs the rollback loop and post-loop stage, emits AfterTickLoop.</summary>
     internal void RunAfterTickLoop()
     {
-        Context.NetworkRollback?.Rollback();
         AfterTickLoop?.Invoke();
-        Context.NetworkHistoryServer?.RestoreSynchronizerState(Tick);
-        Context.InterpolationServer?.RecordNextState();
     }
 
     /// <summary>Test hook: emits the per-tick events for the current tick and advances it.</summary>

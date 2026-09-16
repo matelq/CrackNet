@@ -18,8 +18,6 @@ public partial class PeerVisibilityFilter : Node
         PerTickLoop,
         /// <summary>Update visibility before each network tick.</summary>
         PerTick,
-        /// <summary>Update visibility after each rollback tick.</summary>
-        PerRollbackTick,
     }
 
     [Export] public bool DefaultVisibility { get; set; } = true;
@@ -138,9 +136,6 @@ public partial class PeerVisibilityFilter : Node
             case UpdateModeEnum.PerTick:
                 Context.NetworkTime.BeforeTick += HandleTick;
                 break;
-            case UpdateModeEnum.PerRollbackTick:
-                Context.NetworkRollback.AfterProcessTick += HandleRollbackTick;
-                break;
         }
     }
 
@@ -161,14 +156,10 @@ public partial class PeerVisibilityFilter : Node
             case UpdateModeEnum.PerTick:
                 if (Context.NetworkTime is not null) Context.NetworkTime.BeforeTick -= HandleTick;
                 break;
-            case UpdateModeEnum.PerRollbackTick:
-                if (Context.NetworkRollback is not null) Context.NetworkRollback.AfterProcessTick -= HandleRollbackTick;
-                break;
         }
     }
 
     private void HandlePeer(long _) => UpdateVisibility();
     private void HandleTickLoop() => UpdateVisibility();
     private void HandleTick(double _, int __) => UpdateVisibility();
-    private void HandleRollbackTick(int _) => UpdateVisibility();
 }
