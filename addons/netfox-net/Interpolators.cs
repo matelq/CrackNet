@@ -2,7 +2,10 @@ using Godot;
 
 namespace Netfox;
 
-/// <summary>Registry of value interpolators by type. Port of interpolators.gd.</summary>
+/// <summary>
+/// Registry of value interpolators by type. Discrete types (bool, integers, integer vectors, strings, references) have
+/// none on purpose: they step.
+/// </summary>
 public static class Interpolators
 {
     public sealed class Interpolator
@@ -42,15 +45,10 @@ public static class Interpolators
     static Interpolators()
     {
         RegisterType(Variant.Type.Float, (a, b, f) => Mathf.Lerp(a.AsDouble(), b.AsDouble(), f));
-        RegisterType(Variant.Type.Int, (a, b, f) => (long)Mathf.Lerp(a.AsInt64(), b.AsInt64(), f));
 
         RegisterType(Variant.Type.Vector2, (a, b, f) => a.AsVector2().Lerp(b.AsVector2(), (float)f));
         RegisterType(Variant.Type.Vector3, (a, b, f) => a.AsVector3().Lerp(b.AsVector3(), (float)f));
         RegisterType(Variant.Type.Vector4, (a, b, f) => a.AsVector4().Lerp(b.AsVector4(), (float)f));
-
-        RegisterType(Variant.Type.Vector2I, (a, b, f) => (Vector2I)((Vector2)a.AsVector2I()).Lerp(b.AsVector2I(), (float)f));
-        RegisterType(Variant.Type.Vector3I, (a, b, f) => (Vector3I)((Vector3)a.AsVector3I()).Lerp(b.AsVector3I(), (float)f));
-        RegisterType(Variant.Type.Vector4I, (a, b, f) => (Vector4I)((Vector4)a.AsVector4I()).Lerp(b.AsVector4I(), (float)f));
 
         RegisterType(Variant.Type.Transform2D, (a, b, f) => a.AsTransform2D().InterpolateWith(b.AsTransform2D(), (float)f));
         RegisterType(Variant.Type.Transform3D, (a, b, f) => a.AsTransform3D().InterpolateWith(b.AsTransform3D(), (float)f));

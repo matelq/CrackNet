@@ -12,15 +12,8 @@ public static class CommandIds
     public const int Pong = 1;
     public const int RequestTime = 2;
     public const int SetTime = 3;
-    public const int Input = 4;
-    public const int FullState = 5;
-    public const int DiffState = 6;
-    public const int FullSyncState = 7;
-    public const int DiffSyncState = 8;
+    public const int ObjectState = 4;
     public const int Identities = 9;
-
-    /// <summary>Reworked only: the newest input tick a peer has, below which nothing is missing. See netfox-net#40.</summary>
-    public const int InputAck = 10;
 
     /// <summary>First id handed out by RegisterCommand for user commands.</summary>
     public const int FirstUserCommand = 32;

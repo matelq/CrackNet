@@ -30,8 +30,8 @@ public sealed class SampleTrack<T>
     }
 
     /// <summary>
-    /// The samples around <paramref name="tick"/> and how far between them it is. Before the first sample and after the
-    /// last, both are the nearest sample. Drops samples that no later tick can need.
+    /// The samples around <paramref name="tick"/> and how far between them it is; false before the first sample, and
+    /// both the newest after the last. Drops samples that no later tick can need.
     /// </summary>
     public bool TrySample(double tick, out T from, out T to, out double fraction)
     {
@@ -39,8 +39,11 @@ public sealed class SampleTrack<T>
         fraction = 0;
         if (_samples.Count == 0) return false;
 
+        // Before the first sample there is nothing to show yet: showing that sample early would put this object ahead
+        // of everything else its peer sends
         var keys = _samples.Keys;
-        if (tick <= keys[0])
+        if (tick < keys[0]) return false;
+        if (tick == keys[0])
         {
             from = to = _samples.Values[0];
             return true;

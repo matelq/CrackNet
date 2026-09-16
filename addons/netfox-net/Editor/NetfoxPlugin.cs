@@ -64,6 +64,7 @@ public partial class NetfoxPlugin : EditorPlugin
         ("NetworkTimeSynchronizer", Root + "/NetworkTimeSynchronizer.cs"),
         ("NetworkEvents", Root + "/NetworkEvents.cs"),
         ("NetworkIdentityServer", Root + "/Servers/NetworkIdentityServer.cs"),
+        ("NetworkObjectServer", Root + "/Servers/NetworkObjectServer.cs"),
         ("WindowTiler", Root + "/Extras/WindowTiler.cs"),
         ("NetworkSimulator", Root + "/Extras/NetworkSimulator.cs"),
     ];
