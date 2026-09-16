@@ -25,8 +25,13 @@ public partial class NetworkObjectServer : Node
     /// <summary>How many ticks behind the newest sample remote objects are shown.</summary>
     public double PlaybackDelayTicks { get; set; } = 3;
 
+    /// <summary>State goes out every this many ticks: 2 at 30 Hz is 15 snapshots a second.</summary>
+    public const int StateIntervalTicks = 2;
+
+    /// <summary>An object whose state has not changed is sent again only this often.</summary>
+    public const int RestHeartbeatTicks = 30;
+
     private static readonly NetfoxLogger Logger = NetfoxLogger.ForNetfox("NetworkObjectServer");
-    private static readonly NetworkSchemaSerializer Values = NetworkSchemas.Variant();
 
     private readonly List<NetworkObject> _objects = new();
     private readonly Dictionary<Node, NetworkObject> _byRoot = new(ReferenceEqualityComparer.Instance);
@@ -191,7 +196,7 @@ public partial class NetworkObjectServer : Node
         NetRef.Encode(Core.Data.NetworkIdentityReference.OfFullName(identifier.FullName), writer);
         VarUint.Encode(origin, writer);
         VarUint.Encode(hops, writer);
-        Values.Encode(payload, writer);
+        CompactValues.Encode(payload, writer);
         _cmdEvent.Send(writer.ToArray(), target);
     }
 
@@ -202,7 +207,7 @@ public partial class NetworkObjectServer : Node
         var reference = NetRef.Decode(reader);
         var origin = VarUint.DecodeInt(reader);
         var hops = VarUint.DecodeInt(reader);
-        var payload = Values.Decode(reader);
+        var payload = CompactValues.Decode(reader);
 
         if (Context.NetworkIdentityServer.ResolveReference(sender, reference, allowQueue: false) is not { } identifier
             || !_byRoot.TryGetValue(identifier.Subject, out var obj))
@@ -218,42 +223,55 @@ public partial class NetworkObjectServer : Node
 
     private void SendState(double delta, int tick)
     {
+        var stateTick = tick + 1;
+        if (stateTick % StateIntervalTicks != 0) return;
         if (Multiplayer.MultiplayerPeer is null or OfflineMultiplayerPeer) return;
 
         var identities = Context.NetworkIdentityServer;
+        var sending = new List<(NetworkObject Object, NetworkIdentifier Identifier, byte[] Body)>();
+        foreach (var obj in _objects)
+        {
+            if (!obj.IsAuthority || identities.GetIdentifierOf(obj.Root!) is not { } identifier) continue;
+
+            var writer = new ByteWriter();
+            writer.PutU8(obj.TeleportPending ? (byte)1 : (byte)0);
+            foreach (var (node, property, _) in obj.Properties)
+                CompactValues.Encode(node.GetValue(property), writer);
+            var body = writer.ToArray();
+
+            // At rest: nothing new to say, apart from a heartbeat for peers that joined since or lost the last one
+            var unchanged = obj.LastSentBody is { } last && last.AsSpan().SequenceEqual(body);
+            if (unchanged && stateTick - obj.LastSentTick < RestHeartbeatTicks) continue;
+
+            obj.LastSentBody = body;
+            obj.LastSentTick = stateTick;
+            obj.TeleportPending = false;
+            sending.Add((obj, identifier, body));
+        }
+        if (sending.Count == 0) return;
+
         var block = new ByteWriter();
         foreach (var peer in Multiplayer.GetPeers())
         {
-            var packet = NewPacket(tick + 1);
+            var packet = NewPacket(stateTick);
             var hasObjects = false;
-
-            foreach (var obj in _objects)
+            foreach (var (_, identifier, body) in sending)
             {
-                if (!obj.IsAuthority || identities.GetIdentifierOf(obj.Root!) is not { } identifier) continue;
-
                 block.Clear();
                 NetRef.Encode(identifier.ReferenceFor(peer), block);
-                var body = new ByteWriter();
-                body.PutU8(obj.TeleportPending ? (byte)1 : (byte)0);
-                foreach (var (node, property, _) in obj.Properties)
-                    Values.Encode(node.GetValue(property), body);
-                block.PutU16((ushort)body.WrittenSpan.Length);
-                block.PutData(body.WrittenSpan);
+                VarUint.Encode(body.Length, block);
+                block.PutData(body);
 
                 if (hasObjects && packet.WrittenSpan.Length + block.WrittenSpan.Length > _maxPacketSize)
                 {
                     _cmdState.Send(packet.ToArray(), peer);
-                    packet = NewPacket(tick + 1);
+                    packet = NewPacket(stateTick);
                 }
                 packet.PutData(block.WrittenSpan);
                 hasObjects = true;
             }
-
-            if (hasObjects) _cmdState.Send(packet.ToArray(), peer);
+            _cmdState.Send(packet.ToArray(), peer);
         }
-
-        foreach (var obj in _objects)
-            if (obj.IsAuthority) obj.TeleportPending = false;
     }
 
     private static ByteWriter NewPacket(int tick)
@@ -275,7 +293,7 @@ public partial class NetworkObjectServer : Node
         while (reader.AvailableBytes > 0)
         {
             var reference = NetRef.Decode(reader);
-            var length = reader.GetU16();
+            var length = VarUint.DecodeInt(reader);
             var end = reader.Position + length;
 
             var identifier = Context.NetworkIdentityServer.ResolveReference(sender, reference);
@@ -290,9 +308,15 @@ public partial class NetworkObjectServer : Node
             var teleport = reader.GetU8() != 0;
             var values = new Variant[obj.Properties.Count];
             for (var i = 0; i < values.Length; i++)
-                values[i] = Values.Decode(reader);
-            obj.Track.Push(tick, new NetworkObject.Sample(values, teleport), clock.Tick);
+                values[i] = CompactValues.Decode(reader);
             reader.Position = end;
+
+            // After a rest the sender skipped ticks on purpose: hold the resting value until just before this sample,
+            // or playback would drift the whole way from where it came to rest
+            if (obj.Track.TryGetNewest(out var newestTick, out var newest) && tick - newestTick > StateIntervalTicks * 3)
+                obj.Track.Push(tick - StateIntervalTicks, new NetworkObject.Sample(newest.Values, false), clock.Tick);
+
+            obj.Track.Push(tick, new NetworkObject.Sample(values, teleport), clock.Tick);
         }
     }
 

@@ -106,4 +106,37 @@ public partial class NetworkObjectTests : HarnessSuite
         Expect.True(landed, $"client {onClient.Location}");
         Expect.Equal(0, inBetween);
     }
+
+    [Test]
+    public async Task AnObjectThatRestedStartsMovingWhenItsAuthorityDid()
+    {
+        var rest = new Vector3(5, 0, 0);
+        var onHost = HarnessBody.Spawn(Host, "Crate", 1, Vector3.Zero, rest);
+        var onClient = HarnessBody.Spawn(Client, "Crate", 1, Vector3.Zero, rest);
+        onHost.CountsTicks = onClient.CountsTicks = false;
+        Expect.True(await WaitUntil(() => onClient.Visible, 5), "never shown");
+
+        // Long enough at rest that the host stops sending anything but heartbeats
+        for (var i = 0; i < 90; i++) await NextFrame();
+        var startedAt = Host.Context.NetworkTime.Tick;
+        onHost.Velocity = Speed;
+
+        // Motion on the client starts when playback reaches the tick the host started at, not by creeping over the
+        // whole rest as if the crate had been moving since its last heartbeat
+        var previous = onClient.Location.X;
+        var moved = false;
+        for (var frame = 0; frame < 120; frame++)
+        {
+            await NextFrame();
+            if (onClient.Location.X > previous && !moved)
+            {
+                moved = true;
+                var shown = Client.Context.NetworkObjectServer.GetDisplayTick(1) ?? -1;
+                Expect.True(shown >= startedAt - NetworkObjectServer.StateIntervalTicks,
+                    $"client started moving at display tick {shown:F1}, the host at {startedAt}");
+            }
+            previous = onClient.Location.X;
+        }
+        Expect.True(moved, $"client never moved: {onClient.Location}");
+    }
 }

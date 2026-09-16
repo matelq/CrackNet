@@ -69,5 +69,16 @@ public sealed class SampleTrack<T>
         return true;
     }
 
+    /// <summary>The newest sample, if any.</summary>
+    public bool TryGetNewest(out int tick, out T value)
+    {
+        tick = 0;
+        value = default!;
+        if (_samples.Count == 0) return false;
+        tick = _samples.Keys[^1];
+        value = _samples.Values[^1];
+        return true;
+    }
+
     public void Clear() => _samples.Clear();
 }

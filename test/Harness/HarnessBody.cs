@@ -9,6 +9,9 @@ public partial class HarnessBody : Node3D
     [Synced] public int Ticks { get; set; }
 
     public Vector3 Velocity { get; set; }
+
+    /// <summary>Off for a body that should be truly at rest: counting ticks is a change every tick.</summary>
+    public bool CountsTicks { get; set; } = true;
     public NetworkObject Object { get; private set; } = null!;
 
     private NetworkTime _time = null!;
@@ -43,6 +46,6 @@ public partial class HarnessBody : Node3D
     {
         if (!IsMultiplayerAuthority()) return;
         Location += Velocity * (float)delta;
-        Ticks++;
+        if (CountsTicks) Ticks++;
     }
 }

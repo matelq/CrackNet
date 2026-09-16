@@ -42,6 +42,10 @@ public partial class NetworkObject : Node
     internal SampleTrack<Sample> Track { get; } = new();
     internal bool TeleportPending { get; set; }
 
+    /// <summary>What this peer last sent for the object, and when: an unchanged object is not sent again for a while.</summary>
+    internal byte[]? LastSentBody { get; set; }
+    internal int LastSentTick { get; set; }
+
     /// <summary>True when this peer simulates the object and sends its state.</summary>
     public bool IsAuthority => Root!.IsMultiplayerAuthority();
 
@@ -124,8 +128,9 @@ public partial class NetworkObject : Node
         {
             SetAuthority(Root!, authority);
             if (IsAuthority && !Shown) SetShown(true);
-            // Samples are stamped on the previous authority's clock; the new one sends its own
+            // Samples are stamped on the previous authority's clock; the new one sends its own, at once even at rest
             Track.Clear();
+            LastSentBody = null;
         }
 
         Owner = owner;

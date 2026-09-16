@@ -81,8 +81,12 @@ it saw the start, and reports the result; the host only collects and announces t
 (`SteamMultiplayerPeer` joins all lobby members), so state goes directly to observers; ownership, events and QTEs go
 through the host. Over ENet, `SceneMultiplayer.server_relay` gives a star with the same code.
 
-**Bandwidth.** Quantization, one bit for bodies at rest, delta against the last acknowledged baseline. A priority
-accumulator only once measurements ask for it.
+**Bandwidth.** State goes out every 2 ticks (15 Hz). Values are written compactly (a type byte, floats). An object
+whose state has not changed is sent only as a heartbeat once a second; a receiver that sees a sample after such a gap
+holds the resting value until just before it, so the object starts moving when its authority did. Measured by
+`BandwidthTests`: 50 moving and 150 resting objects cost about 136 kbit/s of state payload per peer (was 1.8 Mbit/s).
+Delta against an acknowledged baseline, quantization per property and a priority accumulator only once measurements
+ask for them.
 
 ## API
 
