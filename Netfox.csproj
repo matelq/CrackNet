@@ -11,8 +11,8 @@
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Remove="Netfox.Core/**;Netfox.Core.Tests/**;Netfox.Core.Benchmarks/**;Netfox.SourceGenerators/**;netfox/**;.tools/**;.godot/**" />
-    <None Remove="Netfox.Core/**;Netfox.Core.Tests/**;Netfox.Core.Benchmarks/**;Netfox.SourceGenerators/**;netfox/**;.tools/**;.godot/**" />
+    <Compile Remove="Netfox.Core/**;Netfox.Core.Tests/**;Netfox.SourceGenerators/**;netfox/**;.tools/**;.godot/**" />
+    <None Remove="Netfox.Core/**;Netfox.Core.Tests/**;Netfox.SourceGenerators/**;netfox/**;.tools/**;.godot/**" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="Netfox.Core/Netfox.Core.csproj" />
