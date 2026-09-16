@@ -150,9 +150,9 @@ public partial class NetfoxPlugin : EditorPlugin
 
     private static void AddSetting(Setting setting)
     {
-        if (ProjectSettings.HasSetting(setting.Name)) return;
-
-        ProjectSettings.SetSetting(setting.Name, setting.Value);
+        // The type and hint are not saved to project.godot, so they have to be registered on every load: skipping a
+        // setting that already has a value left an enum as a bare string field
+        if (!ProjectSettings.HasSetting(setting.Name)) ProjectSettings.SetSetting(setting.Name, setting.Value);
         ProjectSettings.SetInitialValue(setting.Name, setting.Value);
         ProjectSettings.AddPropertyInfo(new Dictionary
         {
