@@ -35,7 +35,10 @@ public partial class PlaygroundSmoke : Node
     private Vector3 _crateStart;
     private double _crateMaxTravel;
     private PlaygroundCrate _target = null!;
+    private PlaygroundCrate _onTop = null!;
     private bool _watchingShot;
+    private int _stackHangingFrames;
+    private const int MaxStackHangingFrames = 6;
     private bool _shotTookCrate;
     private bool _returnedWhileGuestConnected;
 
@@ -64,6 +67,7 @@ public partial class PlaygroundSmoke : Node
         // A trace left by an earlier run would be compared against this one's ticks
         if (!_isHost && FileAccess.FileExists(TracePath)) DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath(TracePath));
         _crate.Object.SampleSent += RecordSent;
+        _onTop = _playground.GetNode<PlaygroundCrate>("Crates/Crate4");
         // Handing everything back when a guest leaves also returns the crate to the host, so only a return while the
         // thrower is still here proves the crate came back because it came to rest
         _crate.Object.AuthorityChanged += () =>
@@ -83,11 +87,30 @@ public partial class PlaygroundSmoke : Node
         if (!_watchingShot)
         {
             _watchingShot = true;
-            foreach (var crate in _playground.GetNode("Crates").GetChildren().OfType<PlaygroundCrate>())
+            // A crate still under this peer's authority is taken without any change to see, and one behind another is
+            // never reached: pick a host crate at chest height with nothing else on the line
+            var crates = _playground.GetNode("Crates").GetChildren().OfType<PlaygroundCrate>().ToList();
+            _target = crates
+                .Where(crate => crate.Object.Authority == 1 && crate.GlobalPosition.Y < 1.2f)
+                .Where(crate => crates.All(other => other == crate || !Blocks(me.GlobalPosition, crate.GlobalPosition, other.GlobalPosition)))
+                .OrderBy(crate => crate.GlobalPosition.DistanceTo(me.GlobalPosition))
+                .FirstOrDefault() ?? _target;
+            foreach (var crate in crates)
                 crate.Object.AuthorityChanged += () =>
                     _shotTookCrate |= crate.Object.IsAuthority && crate.Object.SpreadCause.Contains("/Shots/");
         }
         return (FlatTo(_target, me) * 0.05f, false, false, false);
+    }
+
+    /// <summary>Whether <paramref name="obstacle"/> sits within reach of the flat line from a shooter to a target.</summary>
+    private static bool Blocks(Vector3 from, Vector3 to, Vector3 obstacle)
+    {
+        var a = new Vector2(from.X, from.Z);
+        var b = new Vector2(to.X, to.Z);
+        var c = new Vector2(obstacle.X, obstacle.Z);
+        var along = (c - a).Dot((b - a).Normalized());
+        if (along <= 0 || along >= a.DistanceTo(b)) return false;
+        return (a + (b - a).Normalized() * along).DistanceTo(c) < 1.0f && obstacle.Y < 1.5f;
     }
 
     private static Vector3 FlatTo(Node3D target, Node3D from)
@@ -136,6 +159,12 @@ public partial class PlaygroundSmoke : Node
         _elapsed += delta;
         _crateMaxTravel = Math.Max(_crateMaxTravel, _crate.GlobalPosition.DistanceTo(_crateStart));
 
+        // Crate4 stood on Crate0. Once Crate0 has been taken from under it, a Crate4 still up there and frozen here is
+        // hanging over nothing, waiting for the host's word that it fell
+        var underneathGone = new Vector2(_crate.GlobalPosition.X - _onTop.GlobalPosition.X, _crate.GlobalPosition.Z - _onTop.GlobalPosition.Z).Length() > 1.0f;
+        if (!_isHost && !_isObserver && underneathGone && _onTop.GlobalPosition.Y > 1.2f && _onTop.Freeze && !_onTop.Object.IsAuthority)
+            _stackHangingFrames++;
+
         if (_isHost && !_crate.Object.IsAuthority)
         {
             _clientPeer = _crate.Object.Authority;
@@ -167,8 +196,9 @@ public partial class PlaygroundSmoke : Node
         {
             WriteTrace();
             var sawHost = _playground.Players.GetNodeOrNull<PlaygroundPlayer>("Player1") is { Visible: true };
-            ok = sawHost && _sent.Count > 20 && _crateMaxTravel is > 1.5 and < MaxCrateTravel && backToHost && _shotTookCrate;
-            detail = $"sawHost={sawHost} sent={_sent.Count} travel={_crateMaxTravel:F2} backToHost={backToHost} shotHitCrate={_shotTookCrate}";
+            ok = sawHost && _sent.Count > 20 && _crateMaxTravel is > 1.5 and < MaxCrateTravel && backToHost && _shotTookCrate
+                 && _stackHangingFrames <= MaxStackHangingFrames;
+            detail = $"sawHost={sawHost} sent={_sent.Count} travel={_crateMaxTravel:F2} backToHost={backToHost} shotHitCrate={_shotTookCrate} stackHangingFrames={_stackHangingFrames}";
         }
         else
         {

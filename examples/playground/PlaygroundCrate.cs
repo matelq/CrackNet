@@ -36,6 +36,7 @@ public partial class PlaygroundCrate : RigidBody3D
     {
         FreezeMode = FreezeModeEnum.Kinematic;
         Object.AuthorityChanged += Refresh;
+        Object.AuthorityChanged += TakeTouching;
         Object.EventReceived += (_, payload) => ApplyCentralImpulse(payload.AsVector3());
         BodyEntered += OnBodyEntered;
         Playground.SlotsChanged += Refresh;
@@ -45,6 +46,29 @@ public partial class PlaygroundCrate : RigidBody3D
     public override void _ExitTree() => Playground.SlotsChanged -= Refresh;
 
     /// <summary>Simulated only where authoritative and not held; tinted with the simulating peer's colour.</summary>
+    /// <summary>
+    /// Whoever takes this crate takes the crates it rests against too, as a chain: a stack follows its bottom crate.
+    /// Otherwise the crates above stay kinematic here, held in the air by the host's simulation, until the host's state
+    /// saying they fell arrives - a stack hanging over nothing on a bad link. Resting contacts raise no collision
+    /// events for a frozen body, so they are found by position.
+    /// </summary>
+    private void TakeTouching()
+    {
+        if (!Object.IsAuthority || Multiplayer.IsServer()) return;
+        foreach (var other in GetTree().GetNodesInGroup("crates").OfType<PlaygroundCrate>())
+        {
+            if (other == this || other.Object.IsAuthority || !IsTouching(other)) continue;
+            Object.Touch(other.Object);
+        }
+    }
+
+    private bool IsTouching(PlaygroundCrate other)
+    {
+        var offset = (other.GlobalPosition - GlobalPosition).Abs();
+        const float reach = 1.05f;
+        return offset.X <= reach && offset.Y <= reach && offset.Z <= reach;
+    }
+
     public void Refresh()
     {
         SetFrozen(!Object.IsAuthority || Object.Holder != 0);
