@@ -174,8 +174,7 @@ public partial class PlaygroundMesh : Node
     public override void _ExitTree()
     {
         _lobby?.Close();
-        Multiplayer.MultiplayerPeer?.Close();
-        foreach (var connection in _waiting.Select(entry => entry.Connection).Concat(_activeConnections))
-            connection.Destroy();
+        // The MultiplayerAPI still belongs to the exiting scene and other siblings query it from their _ExitTree.
+        // Let Godot release the mesh and its ENetConnection resources after the tree has finished unwinding.
     }
 }

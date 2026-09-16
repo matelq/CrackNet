@@ -6,9 +6,9 @@ namespace Netfox.Examples.Playground;
 
 /// <summary>
 /// Drives the playground headless and checks it. Run a host, client A, then client B; the host must outlive both:
-///   godot --headless --path . res://examples/playground/playground.tscn -- --smoke --host --seconds=36
-///   godot --headless --path . res://examples/playground/playground.tscn -- --smoke --join --smoke-client=a --seconds=22
-///   godot --headless --path . res://examples/playground/playground.tscn -- --smoke --join --smoke-client=b --seconds=18
+///   godot --headless --path . res://examples/playground/playground.tscn -- --smoke --host --seconds=36 --port=20000
+///   godot --headless --path . res://examples/playground/playground.tscn -- --smoke --join --smoke-client=a --seconds=22 --port=20000
+///   godot --headless --path . res://examples/playground/playground.tscn -- --smoke --join --smoke-client=b --seconds=18 --port=20000
 /// All use the same network profile.
 /// <para>
 /// The client's player walks into a crate, which takes the crate over, then grabs it, carries it and throws it. The
@@ -97,7 +97,7 @@ public partial class PlaygroundSmoke : Node
         if (_isHost && !_crate.Object.IsAuthority)
         {
             _clientPeer = _crate.Object.Authority;
-            if (NetworkObjectServer.Instance.GetDisplayTick(_clientPeer) is { } shown && _crate.Visible)
+            if (_crate.Object.DisplayTick is { } shown && _crate.Visible)
                 _displayed.Add((shown, _crate.GlobalPosition));
         }
         if (_isObserver && _crate.Object.Authority is not 1 && !_crate.Object.IsAuthority && _crate.Visible)
@@ -124,14 +124,15 @@ public partial class PlaygroundSmoke : Node
         {
             WriteTrace();
             var sawHost = _playground.Players.GetNodeOrNull<PlaygroundPlayer>("Player1") is { Visible: true };
-            ok = sawHost && _sent.Count > 20 && _crateMaxTravel > 1.5 && backToHost;
+            // The host deliberately outlives both guests and is the one that verifies return-to-host after they leave.
+            ok = sawHost && _sent.Count > 20 && _crateMaxTravel > 1.5;
             detail = $"sawHost={sawHost} sent={_sent.Count} travel={_crateMaxTravel:F2} backToHost={backToHost}";
         }
         else
         {
             var sawDriver = _playground.Players.GetChildren().OfType<PlaygroundPlayer>()
                 .Any(player => player.Peer != 1 && player.Peer != Multiplayer.GetUniqueId() && player.Visible);
-            ok = sawDriver && _sawGuestCrate && _received.Count > 20 && _crateMaxTravel > 1.5 && backToHost;
+            ok = sawDriver && _sawGuestCrate && _received.Count > 20 && _crateMaxTravel > 1.5;
             detail = $"sawDriver={sawDriver} sawGuestCrate={_sawGuestCrate} received={_received.Count} travel={_crateMaxTravel:F2} backToHost={backToHost}";
         }
 

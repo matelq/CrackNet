@@ -49,7 +49,10 @@ public partial class SimulatedMultiplayerPeer : MultiplayerPeerExtension
 
     private void OnPeerDisconnected(long peer)
     {
-        _peers.Remove((int)peer);
+        var id = (int)peer;
+        _peers.Remove(id);
+        _pending.RemoveAll(packet => packet.Target == id);
+        _lastReliableSend.Remove(id);
         EmitSignal(SignalName.PeerDisconnected, peer);
     }
 

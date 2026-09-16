@@ -24,9 +24,9 @@ dotnet test Netfox.slnx                                                   # core
 dotnet build Netfox.csproj                                                # addon + tests
 <godot> --headless --path . res://test/TestRunner.tscn                    # Godot tests, exit 0 = ok
 <godot> --path . res://examples/playground/playground.tscn                # the sample: Host in one window, Join in others
-<godot> --headless --path . res://examples/playground/playground.tscn -- --smoke --host --seconds=36
-<godot> --headless --path . res://examples/playground/playground.tscn -- --smoke --join --smoke-client=a --seconds=22
-<godot> --headless --path . res://examples/playground/playground.tscn -- --smoke --join --smoke-client=b --seconds=18   # same --profile=clear|casual|realistic|bad|hostile on all
+<godot> --headless --path . res://examples/playground/playground.tscn -- --smoke --host --seconds=36 --port=20000
+<godot> --headless --path . res://examples/playground/playground.tscn -- --smoke --join --smoke-client=a --seconds=22 --port=20000
+<godot> --headless --path . res://examples/playground/playground.tscn -- --smoke --join --smoke-client=b --seconds=18 --port=20000   # same --profile=clear|casual|realistic|bad|hostile on all
 ```
 
 Scenes are `.tscn` files and are the source of truth. To generate one in code, rebuild the tree and `ResourceSaver.Save`

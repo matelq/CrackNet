@@ -149,6 +149,7 @@ public partial class NetworkObjectServer : Node
             obj.Track.Clear();
             obj.PlaybackCursor.Reset();
             obj.PlaybackStarted = false;
+            obj.DisplayTick = null;
         }
     }
 
@@ -485,6 +486,7 @@ public partial class NetworkObjectServer : Node
             if (!_clocks.TryGetValue(obj.Root!.GetMultiplayerAuthority(), out var clock) || clock.Tick is not { } shown) continue;
             var objectTick = obj.PlaybackStarted ? obj.PlaybackCursor.Advance(shown, elapsedTicks) : shown;
             if (!obj.Track.TrySample(objectTick, out var from, out var to, out var fraction)) continue;
+            obj.DisplayTick = objectTick;
             Apply(obj, from, to, fraction);
         }
     }

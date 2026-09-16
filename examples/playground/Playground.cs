@@ -49,10 +49,12 @@ public partial class Playground : Node3D
     private MultiplayerSpawner _playerSpawner = null!;
     private PlaygroundMesh _mesh = null!;
     private NetworkSimulator.Profile _profile = NetworkSimulator.Profile.Default;
+    private int _port = Port;
 
     public override void _Ready()
     {
         _profile = ReadProfile();
+        _port = ReadPort();
         BuildWorld();
         BuildUi();
 
@@ -95,6 +97,14 @@ public partial class Playground : Node3D
         return NetworkSimulator.Profile.Named(NetfoxSettings.Instance.SimulatedProfile) ?? NetworkSimulator.Profile.Default;
     }
 
+    private static int ReadPort()
+    {
+        foreach (var arg in OS.GetCmdlineUserArgs())
+            if (arg.StartsWith("--port=") && int.TryParse(arg["--port=".Length..], out var port) && port is > 0 and < 65000)
+                return port;
+        return Port;
+    }
+
     private bool ThroughSimulator => _profile != NetworkSimulator.Profile.Clear;
 
     public void Host()
@@ -104,7 +114,7 @@ public partial class Playground : Node3D
 
     private void StartMeshHost(NetworkSimulator.Profile profile)
     {
-        var error = _mesh.Host(Port, profile);
+        var error = _mesh.Host(_port, profile);
         if (error != Error.Ok) _status.Text = $"Hosting failed: {error}";
     }
 
@@ -124,7 +134,7 @@ public partial class Playground : Node3D
 
     private void StartMeshClient(string address, NetworkSimulator.Profile profile)
     {
-        var error = _mesh.Join(address, Port, profile);
+        var error = _mesh.Join(address, _port, profile);
         if (error != Error.Ok) _status.Text = $"Joining failed: {error}";
         else _menu.Hide();
     }

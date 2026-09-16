@@ -88,6 +88,9 @@ public partial class NetworkObject : Node
     internal SampleTrack<Sample> Track { get; } = new();
     internal ObjectPlaybackCursor PlaybackCursor { get; } = new();
     internal bool PlaybackStarted { get; set; }
+
+    /// <summary>The tick this object was last displayed at on a remote peer, including its opening catch-up cursor.</summary>
+    public double? DisplayTick { get; internal set; }
     internal bool TeleportPending { get; set; }
     internal bool DespawnRequested { get; set; }
     internal bool RemoteDespawned { get; set; }
@@ -244,6 +247,7 @@ public partial class NetworkObject : Node
             Track.Clear();
             PlaybackCursor.Reset();
             PlaybackStarted = false;
+            DisplayTick = null;
             RemoteDespawned = false;
             LastSentBody = null;
         }

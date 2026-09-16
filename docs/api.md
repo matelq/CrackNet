@@ -122,6 +122,7 @@ One replicated object. While its root is this peer's multiplayer authority it se
 | | Member | Summary |
 |---|---|---|
 | property | `Context` | The stack this object belongs to; resolved when it enters the tree. |
+| property | `DisplayTick` | The tick this object was last displayed at on a remote peer, including its opening catch-up cursor. |
 | property | `Holder` | The peer holding the object, or 0 when nobody does. |
 | property | `IsAuthority` | True when this peer simulates the object and sends its state. |
 | property | `LastSentBody` | What this peer last sent for the object, and when: an unchanged object is not sent again for a while. |

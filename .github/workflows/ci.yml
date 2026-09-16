@@ -60,13 +60,13 @@ jobs:
         run: $GODOT --headless --path . res://test/TestRunner.tscn
       - name: Playground smoke under the bad profile
         run: |
-          "$GODOT" --headless --path . res://examples/playground/playground.tscn -- --smoke --host --seconds=40 --profile=bad > pg-host.log 2>&1 &
+          "$GODOT" --headless --path . res://examples/playground/playground.tscn -- --smoke --host --seconds=40 --profile=bad --port=20000 > pg-host.log 2>&1 &
           host=$!
           sleep 8
-          "$GODOT" --headless --path . res://examples/playground/playground.tscn -- --smoke --join --smoke-client=a --seconds=24 --profile=bad > pg-client-a.log 2>&1 &
+          "$GODOT" --headless --path . res://examples/playground/playground.tscn -- --smoke --join --smoke-client=a --seconds=24 --profile=bad --port=20000 > pg-client-a.log 2>&1 &
           client_a=$!
           sleep 2
-          "$GODOT" --headless --path . res://examples/playground/playground.tscn -- --smoke --join --smoke-client=b --seconds=20 --profile=bad > pg-client-b.log 2>&1 || true
+          "$GODOT" --headless --path . res://examples/playground/playground.tscn -- --smoke --join --smoke-client=b --seconds=20 --profile=bad --port=20000 > pg-client-b.log 2>&1 || true
           wait $client_a || true
           wait $host || true
           echo "--- host"; grep -E "PLAYGROUND|ERROR|Exception" pg-host.log || cat pg-host.log
