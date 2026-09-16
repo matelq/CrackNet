@@ -6,6 +6,9 @@ using Netfox.Internal;
 
 namespace Netfox;
 
+/// <summary>The newest state tick received from a peer and the tick currently displayed for that peer.</summary>
+public readonly record struct PlaybackStatus(int NewestTick, double DisplayTick);
+
 /// <summary>
 /// Sends the state of every <see cref="NetworkObject"/> this peer is authority for, once per tick, and plays back the
 /// state of every other one. Keeps one <see cref="PlaybackClock"/> per remote peer.
@@ -123,6 +126,16 @@ public partial class NetworkObjectServer : Node
 
     /// <summary>The display tick for objects of <paramref name="peer"/>, or null before anything arrived from it.</summary>
     public double? GetDisplayTick(int peer) => _clocks.TryGetValue(peer, out var clock) ? clock.Tick : null;
+
+    /// <summary>
+    /// The receive and playback positions for <paramref name="peer"/>, or null before any state arrived. The caller
+    /// can compare <see cref="PlaybackStatus.NewestTick"/> with its local network tick for network age, and with
+    /// <see cref="PlaybackStatus.DisplayTick"/> for buffered playback age.
+    /// </summary>
+    public PlaybackStatus? GetPlaybackStatus(int peer)
+        => _clocks.TryGetValue(peer, out var clock) && clock.Tick is { } display
+            ? new PlaybackStatus(clock.Newest, display)
+            : null;
 
     /// <summary>
     /// Sends an authority change this peer just applied: a guest asks the host, the host tells everyone.

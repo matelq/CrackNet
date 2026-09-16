@@ -193,10 +193,26 @@ public partial class Playground : Node3D
         var local = Players.GetNodeOrNull<PlaygroundPlayer>($"Player{Multiplayer.GetUniqueId()}");
         var profile = ThroughSimulator ? $"{_profile.LatencyMs}ms each way, {_profile.JitterMs}ms jitter, {_profile.PacketLossPercent}% loss" : "no simulated conditions";
 
+        var delayLines = Players.GetChildren().OfType<PlaygroundPlayer>()
+            .Where(player => player.Peer != Multiplayer.GetUniqueId())
+            .Select(player => (Player: player, Status: NetworkObjectServer.Instance.GetPlaybackStatus(player.Peer)))
+            .Where(entry => entry.Status is not null)
+            .Select(entry =>
+            {
+                var status = entry.Status!.Value;
+                var millisecondsPerTick = 1000.0 / time.Tickrate;
+                var network = Math.Max(0, time.Tick - status.NewestTick) * millisecondsPerTick;
+                var playback = Math.Max(0, status.NewestTick - status.DisplayTick) * millisecondsPerTick;
+                return $"Peer {entry.Player.Peer}: {network + playback:F0}ms behind ({network:F0}ms network + {playback:F0}ms playback)";
+            });
+        var delayReadout = string.Join('\n', delayLines);
+        if (delayReadout.Length > 0) delayReadout = "\n" + delayReadout;
+
         _status.Text = Multiplayer.MultiplayerPeer is null or OfflineMultiplayerPeer
             ? $"Host, or join an address. Network: {profile}"
             : $"Peer {Multiplayer.GetUniqueId()}  tick {time.Tick}  rtt {time.RemoteRtt * 1000:F0}ms  network: {profile}\n" +
-              "WASD move, Space jump, F grab / throw, E push a player, left mouse or Enter shoot. Crates show who simulates them.";
+              "WASD move, Space jump, F grab / throw, E push a player, left mouse or Enter shoot. Crates show who simulates them." +
+              delayReadout;
 
         if (local is not null)
             _camera.GlobalPosition = _camera.GlobalPosition.Lerp(local.GlobalPosition + new Vector3(0, 11, 11), (float)Math.Min(1, delta * 6));

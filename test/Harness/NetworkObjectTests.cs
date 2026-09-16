@@ -8,6 +8,24 @@ public partial class NetworkObjectTests : HarnessSuite
     private static readonly Vector3 Speed = new(3, 0, 0);
 
     [Test]
+    public async Task PlaybackReadoutSeparatesNetworkAndPlaybackDelay()
+    {
+        HarnessBody.Spawn(Host, "Clock", 1, Speed);
+        HarnessBody.Spawn(Client, "Clock", 1, Speed);
+
+        Expect.True(await WaitUntil(() => Client.Context.NetworkObjectServer.GetPlaybackStatus(1) is not null, 5),
+            "client never observed the host clock");
+        var status = Client.Context.NetworkObjectServer.GetPlaybackStatus(1)!.Value;
+
+        // State is stamped for the tick after AfterTick, so the newest sample may be one ahead of the receiver's
+        // current tick even when their clocks are synchronized.
+        Expect.True(status.NewestTick <= Client.Context.NetworkTime.Tick + 1,
+            $"newest {status.NewestTick}, local {Client.Context.NetworkTime.Tick}");
+        Expect.True(status.DisplayTick <= status.NewestTick,
+            $"display {status.DisplayTick}, newest {status.NewestTick}");
+    }
+
+    [Test]
     public async Task HostObjectPlaysBackOnTheClientBehindTheHost()
     {
         var onHost = HarnessBody.Spawn(Host, "Crate", 1, Speed);
