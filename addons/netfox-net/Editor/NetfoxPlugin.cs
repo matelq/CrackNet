@@ -40,20 +40,6 @@ public partial class NetfoxPlugin : EditorPlugin
         new("netfox/time/tickrate_mismatch_action", (int)TickrateMismatchAction.Warn, Variant.Type.Int, PropertyHint.Enum, "Warn,Disconnect,Adjust,Signal"),
         new("netfox/time/suppress_offline_peer_warning", false, Variant.Type.Bool),
 
-        new("netfox/rollback/enabled", true, Variant.Type.Bool),
-        new("netfox/rollback/history_limit", 64, Variant.Type.Int),
-        new("netfox/rollback/input_redundancy", 3, Variant.Type.Int),
-        new("netfox/rollback/max_input_redundancy", 32, Variant.Type.Int),
-        new("netfox/rollback/display_offset", 0, Variant.Type.Int, PropertyHint.Range, "0,4,or_greater"),
-        new("netfox/rollback/input_delay", 0, Variant.Type.Int, PropertyHint.Range, "0,4,or_greater"),
-        new("netfox/rollback/enable_input_broadcast", false, Variant.Type.Bool),
-        new("netfox/rollback/enable_diff_states", true, Variant.Type.Bool),
-        new("netfox/rollback/full_state_interval", 24, Variant.Type.Int, PropertyHint.Range, "0,60,or_greater"),
-
-        new("netfox/state_synchronizer/enable_diff_states", true, Variant.Type.Bool),
-        new("netfox/state_synchronizer/history_limit", 64, Variant.Type.Int),
-        new("netfox/state_synchronizer/full_state_interval", 24, Variant.Type.Int, PropertyHint.Range, "0,60,or_greater"),
-
         new("netfox/events/enabled", true, Variant.Type.Bool),
 
         // Extras: window tiler

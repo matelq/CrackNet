@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="netfox-net"
-config/description="Native C# port of netfox: rollback netcode for Godot"
+config/description="Co-op netcode for Godot C#: distributed authority"
 config/features=PackedStringArray("4.7", "C#", "Forward Plus")
 
 [autoload]

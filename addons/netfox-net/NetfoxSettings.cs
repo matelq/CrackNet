@@ -46,32 +46,6 @@ public sealed class NetfoxSettings
     public TickrateMismatchAction TickrateMismatchAction { get; set; } = TickrateMismatchAction.Warn;
     public bool SuppressOfflinePeerWarning { get; set; }
 
-    // rollback
-    public bool RollbackEnabled { get; set; } = true;
-    public int RollbackHistoryLimit { get; set; } = 64;
-    public int InputRedundancy { get; set; } = 3;
-
-    /// <summary>
-    /// The most input ticks one packet may carry. <see cref="InputRedundancy"/> is the floor and this is the ceiling:
-    /// in between, the window is whatever the receiving peer has not acknowledged yet.
-    /// <para>
-    /// It exists to bound the packet rather than the redundancy. A peer that has heard nothing for a long time would
-    /// otherwise try to send its whole history in one go, which does not fit and would be dropped whole - turning a
-    /// bad link into no link at all.
-    /// </para>
-    /// </summary>
-    public int MaxInputRedundancy { get; set; } = 32;
-    public int DisplayOffset { get; set; }
-    public int InputDelay { get; set; }
-    public bool EnableInputBroadcast { get; set; }
-    public bool RollbackEnableDiffStates { get; set; } = true;
-    public int RollbackFullStateInterval { get; set; } = 24;
-
-    // state synchronizer
-    public bool StateSyncEnableDiffStates { get; set; } = true;
-    public int StateSyncHistoryLimit { get; set; } = 64;
-    public int StateSyncFullStateInterval { get; set; } = 24;
-
     // events
     public bool EventsEnabled { get; set; } = true;
 
@@ -115,20 +89,6 @@ public sealed class NetfoxSettings
         s.TickrateMismatchAction = (TickrateMismatchAction)Settings.GetInt(
             "netfox/time/tickrate_mismatch_action", (int)s.TickrateMismatchAction);
         s.SuppressOfflinePeerWarning = Settings.GetBool("netfox/time/suppress_offline_peer_warning", s.SuppressOfflinePeerWarning);
-
-        s.RollbackEnabled = Settings.GetBool("netfox/rollback/enabled", s.RollbackEnabled);
-        s.RollbackHistoryLimit = Settings.GetInt("netfox/rollback/history_limit", s.RollbackHistoryLimit);
-        s.InputRedundancy = Settings.GetInt("netfox/rollback/input_redundancy", s.InputRedundancy);
-        s.MaxInputRedundancy = Settings.GetInt("netfox/rollback/max_input_redundancy", s.MaxInputRedundancy);
-        s.DisplayOffset = Settings.GetInt("netfox/rollback/display_offset", s.DisplayOffset);
-        s.InputDelay = Settings.GetInt("netfox/rollback/input_delay", s.InputDelay);
-        s.EnableInputBroadcast = Settings.GetBool("netfox/rollback/enable_input_broadcast", s.EnableInputBroadcast);
-        s.RollbackEnableDiffStates = Settings.GetBool("netfox/rollback/enable_diff_states", s.RollbackEnableDiffStates);
-        s.RollbackFullStateInterval = Settings.GetInt("netfox/rollback/full_state_interval", s.RollbackFullStateInterval);
-
-        s.StateSyncEnableDiffStates = Settings.GetBool("netfox/state_synchronizer/enable_diff_states", s.StateSyncEnableDiffStates);
-        s.StateSyncHistoryLimit = Settings.GetInt("netfox/state_synchronizer/history_limit", s.StateSyncHistoryLimit);
-        s.StateSyncFullStateInterval = Settings.GetInt("netfox/state_synchronizer/full_state_interval", s.StateSyncFullStateInterval);
 
         s.EventsEnabled = Settings.GetBool("netfox/events/enabled", s.EventsEnabled);
 

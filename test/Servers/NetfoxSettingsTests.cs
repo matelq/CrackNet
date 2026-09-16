@@ -11,7 +11,6 @@ public partial class NetfoxSettingsTests : TestSuite
         var settings = NetfoxSettings.Load();
 
         Expect.Equal(30, settings.Tickrate);
-        Expect.Equal(64, settings.RollbackHistoryLimit);
         Expect.Equal("127.0.0.1", settings.AutoconnectHost);
         Expect.True(settings.EventsEnabled);
 
