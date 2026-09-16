@@ -6,24 +6,41 @@ using FileAccess = Godot.FileAccess;
 
 namespace Netfox.Extras;
 
-/// <summary>Tiles the windows of game instances launched together from the editor. Port of netfox.extras/window-tiler.gd.</summary>
+/// <summary>
+/// Tiles the windows of game instances launched together from the editor (Debug > Customize Run Instances), on
+/// Project Settings > Netfox > Extras > Auto Tile Windows.
+/// <para>
+/// Every instance keeps a lock file in the cache directory fresh twice a second; a lock that has not been touched for
+/// a few seconds belongs to an instance that is gone. Each instance lays itself out again whenever the set of live
+/// locks changes. The original decided once, in its first two seconds, and deleted every lock older than three:
+/// instances that take several seconds each to start - C# and a physics extension - each saw only themselves and
+/// all maximised on top of each other.
+/// </para>
+/// </summary>
 public partial class WindowTiler : Node
 {
     private static readonly NetfoxLogger Logger = NetfoxLogger.ForExtras("WindowTiler");
+
+    private const double TouchInterval = 0.5;
+    private const long StaleSeconds = 3;
 
     private readonly bool _isEnabled = NetfoxSettings.Instance.AutoTileWindows;
     private readonly bool _isBorderless = NetfoxSettings.Instance.Borderless;
     private readonly int _tileScreen = NetfoxSettings.Instance.TileScreen;
 
     // Hash the game name so the lock file names are always valid
-    private readonly string _prefix = $"netfox-window-tiler-{Settings.GetString("application/config/name", "godot").GetHashCode():x}";
-    private readonly string _sid = $"{((long)(Clocks.UnixTime() / 2.0)).GetHashCode():x}";
+    private readonly string _prefix = $"netfox-window-tiler-{Settings.GetString("application/config/name", "godot").GetHashCode():x}-";
     private readonly string _uid = $"{(long)(Clocks.UnixTime() * 1000_0000.0)}";
 
-    public override async void _Ready()
+    private string LockPath => $"{OS.GetCacheDir()}/{_prefix}{_uid}";
+
+    private List<string> _layout = new();
+    private double _sinceTouch = TouchInterval;
+    private bool _active;
+
+    public override void _Ready()
     {
-        if (OS.HasFeature("template")) return;
-        if (DisplayServer.GetName() == "headless") return;
+        if (OS.HasFeature("template") || DisplayServer.GetName() == "headless" || !_isEnabled || IsEmbedded()) return;
 
         foreach (var envVar in new[] { "CI", "NETFOX_CI" })
         {
@@ -32,104 +49,68 @@ public partial class WindowTiler : Node
             return;
         }
 
-        if (!HasRecentLocks(3)) Cleanup();
+        _active = true;
+    }
 
-        if (IsEmbedded()) return;
-        if (!_isEnabled) return;
+    public override void _Process(double delta)
+    {
+        if (!_active) return;
+        _sinceTouch += delta;
+        if (_sinceTouch < TouchInterval) return;
+        _sinceTouch = 0;
 
-        Logger.Debug("Tiling with sid: {0}, uid: {1}", _sid, _uid);
-
-        var error = MakeLock(_sid, _uid);
-        if (error != Error.Ok)
+        using (var file = FileAccess.Open(LockPath, FileAccess.ModeFlags.Write))
         {
-            Logger.Warning("Failed to create lock for tiling, reason: {0}", error);
-            return;
+            if (file is null)
+            {
+                Logger.Warning("Failed to write the tiling lock, reason: {0}", FileAccess.GetOpenError());
+                _active = false;
+                return;
+            }
+            file.StoreString(_uid);
         }
 
-        // Poll locks until no new ones show up
-        var locks = new List<string>();
-        var stablePolls = 0;
-        await ToSignal(GetTree().CreateTimer(0.25), SceneTreeTimer.SignalName.Timeout);
+        var live = LiveLocks();
+        if (live.SequenceEqual(_layout)) return;
 
-        for (var i = 0; i < 20; i++)
-        {
-            await ToSignal(GetTree().CreateTimer(0.1), SceneTreeTimer.SignalName.Timeout);
-            if (!IsInsideTree()) return;
+        _layout = live;
+        var index = live.IndexOf(_uid);
+        Logger.Debug("Tiling as {0} of {1}", index, live.Count);
+        if (index >= 0) TileWindow(index, live.Count);
+    }
 
-            var newLocks = ListLockIds();
-            if (newLocks.SequenceEqual(locks))
-            {
-                stablePolls++;
-            }
-            else
-            {
-                locks = newLocks;
-                stablePolls = 0;
-            }
-
-            if (stablePolls >= 2) break;
-        }
-
-        var idx = locks.IndexOf(_uid);
-        Logger.Debug("Tiling as idx {0} / {1} - {2} in {3}", idx, locks.Count, _uid, string.Join(", ", locks));
-        TileWindow(idx, locks.Count);
+    public override void _ExitTree()
+    {
+        if (_active && FileAccess.FileExists(LockPath)) DirAccess.RemoveAbsolute(LockPath);
     }
 
     private static bool IsEmbedded()
         => Engine.Singleton.HasMethod("is_embedded_in_editor") && Engine.Singleton.Call("is_embedded_in_editor").AsBool();
 
-    private Error MakeLock(string sid, string uid)
-    {
-        var path = $"{OS.GetCacheDir()}/{_prefix}-{sid}-{uid}";
-        using var file = FileAccess.Open(path, FileAccess.ModeFlags.Write);
-        return file is null ? FileAccess.GetOpenError() : Error.Ok;
-    }
-
-    private List<string> ListLockIds()
+    /// <summary>The uids of instances that touched their lock recently, oldest first; stale locks are removed.</summary>
+    private List<string> LiveLocks()
     {
         var result = new List<string>();
         using var dir = DirAccess.Open(OS.GetCacheDir());
         if (dir is null) return result;
 
-        foreach (var f in dir.GetFiles())
-            if (f.StartsWith(_prefix)) result.Add(GetUid(f));
-        result.Sort(string.CompareOrdinal);
-        return result;
-    }
-
-    private void Cleanup()
-    {
-        using var dir = DirAccess.Open(OS.GetCacheDir());
-        if (dir is null) return;
-
-        foreach (var f in dir.GetFiles())
-        {
-            if (!f.StartsWith(_prefix)) continue;
-            Logger.Trace("Cleaned lock: {0}", f);
-            dir.Remove($"{OS.GetCacheDir()}/{f}");
-        }
-    }
-
-    private bool HasRecentLocks(int seconds)
-    {
-        using var dir = DirAccess.Open(OS.GetCacheDir());
-        if (dir is null) return false;
-
         var now = (long)Clocks.UnixTime();
-        foreach (var f in dir.GetFiles())
+        foreach (var name in dir.GetFiles())
         {
-            if (!f.StartsWith(_prefix)) continue;
-            var modified = (long)FileAccess.GetModifiedTime($"{OS.GetCacheDir()}/{f}");
-            if (modified > 0 && now - modified <= seconds) return true;
+            if (!name.StartsWith(_prefix)) continue;
+            var path = $"{OS.GetCacheDir()}/{name}";
+            if (now - (long)FileAccess.GetModifiedTime(path) > StaleSeconds)
+            {
+                dir.Remove(path);
+                continue;
+            }
+            // A lock from the older format, or anything else sharing the prefix, is not ours to order
+            if (long.TryParse(name[_prefix.Length..], out _)) result.Add(name[_prefix.Length..]);
         }
-        return false;
-    }
 
-    private string GetUid(string filename)
-    {
-        var rest = filename.Substring(_prefix.Length + 1);
-        var parts = rest.Split('-');
-        return parts.Length > 1 ? parts[1] : rest;
+        // Uids are start times, so sorting keeps each window's place as others come and go
+        result.Sort((a, b) => long.Parse(a).CompareTo(long.Parse(b)));
+        return result;
     }
 
     private void TileWindow(int i, int total)
@@ -144,6 +125,7 @@ public partial class WindowTiler : Node
             return;
         }
 
+        DisplayServer.WindowSetMode(DisplayServer.WindowMode.Windowed);
         window.Borderless = _isBorderless;
 
         var windowsPerRow = (int)Math.Ceiling(Math.Sqrt(total));
