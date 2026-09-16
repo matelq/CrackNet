@@ -533,7 +533,9 @@ public partial class NetworkObjectServer : Node
 
     private static void Apply(NetworkObject obj, NetworkObject.Sample from, NetworkObject.Sample to, double fraction)
     {
-        var reachedDespawn = from.Despawned && ReferenceEquals(from, to) || to.Despawned && fraction >= 1;
+        // From the first despawn sample on. It is sent repeatedly, so playback spends the grace period between two
+        // despawn samples, and waiting for the last one left the object hanging where it ended
+        var reachedDespawn = from.Despawned || to.Despawned && fraction >= 1;
         for (var i = 0; i < obj.Properties.Count; i++)
         {
             var (node, property, interpolate) = obj.Properties[i];

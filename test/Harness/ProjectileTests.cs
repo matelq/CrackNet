@@ -115,6 +115,9 @@ public partial class ProjectileTests : HarnessSuite
             }
 
             if (onHost is null or { Visible: false }) return;
+            // The final sample is repeated for a while; hiding only on the last repeat left the shot hanging in the
+            // air for the whole grace period
+            Expect.True(shown < despawnTick + 1.5, $"projectile still visible at display tick {shown:F1}, despawned at {despawnTick}");
         }
 
         Expect.True(false, "projectile stayed visible after its despawn tick");
