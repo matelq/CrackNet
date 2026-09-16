@@ -29,58 +29,34 @@ each client finishes, which is the earliest moment it is worth sending that clie
 ## The loop
 
 One Godot frame can contain no ticks, one tick, or several - whatever the elapsed time calls for, capped by
-`MaxTicksPerFrame`. Every frame that runs at least one tick looks like this:
+`MaxTicksPerFrame`:
 
 ```
 BeforeTickLoop                     once, before any tick this frame
   for each tick to simulate:
     BeforeTick(delta, tick)
     OnTick(delta, tick)
-    AfterTick(delta, tick)         input for the tick is recorded and sent right after this
-  NetworkRollback's loop           see the rollback guide; runs here, first
-AfterTickLoop                      once, after the rollback loop
+    AfterTick(delta, tick)         NetworkObject state is sent from here, every StateIntervalTicks
+AfterTickLoop                      once, after the ticks
 ```
 
-Two consequences worth internalising:
-
-- **`BeforeTickLoop` runs once per frame, not once per tick.** `BaseNetInput.Gather` hangs off it, so when a frame
-  runs three ticks, all three get the same gathered input. That is deliberate - you cannot poll a keyboard three times
-  for one frame's worth of reality - but it means input is not a per-tick function of anything you can control.
-- **The rollback loop is already subscribed to `AfterTickLoop`, first.** Your own `AfterTickLoop` handler therefore
-  runs after resimulation is finished, which is where to put anything that should see the settled state.
+Playback of remote objects runs in `_Process`, every frame, so displayed motion is smooth between ticks.
 
 ## Reading the clock
 
 | Member | What it is |
 |---|---|
-| `Tick` | The current tick. During rollback, use `NetworkRollback.Instance.Tick` instead - that is the tick being resimulated. |
+| `Tick` | The current tick. Samples are stamped with it. |
 | `Time` | Seconds since the clock started, as netfox sees them. |
-| `Ticktime` | Seconds per tick, `1.0 / Tickrate`. This is the `delta` your rollback tick gets. |
-| `TickFactor` | How far into the current tick the frame is, 0 to 1. What `TickInterpolator` uses. |
-| `PhysicsFactor` | Ratio between the tick delta and the delta of whatever frame you are in. Multiply velocities by it around `MoveAndSlide` - see the [caveats](rollback-caveats.md). |
+| `Ticktime` | Seconds per tick, `1.0 / Tickrate`. |
+| `TickFactor` | How far into the current tick the frame is, 0 to 1. |
+| `PhysicsFactor` | Ratio between the tick delta and the delta of whatever frame you are in. |
 | `RemoteRtt` | Round trip time to the host, in seconds. Zero on the host. |
 | `ClockStretchFactor` | How much the local clock is being stretched to converge on the host's. Around 1 when settled. |
 
 `TicksToSeconds`, `SecondsToTicks`, `SecondsBetween` and `TicksBetween` convert between the two, using the negotiated
 tickrate rather than the one in your project settings - which matters, because a peer with a different tickrate
 setting adopts the host's.
-
-## Do not read the frame clock inside a tick
-
-This is the mistake that costs the most time to find:
-
-```csharp
-public void RollbackTick(double delta, int tick, bool isFresh)
-{
-    // Wrong: a resimulated tick gets a different answer than the first pass did
-    var elapsed = Time.GetTicksMsec();
-    _cooldown -= GetProcessDeltaTime();
-}
-```
-
-A tick may be simulated several times, frames apart. Anything read from the wall clock, the frame delta, or a random
-number generator that is not rewound will differ between those passes, and the peers stop agreeing. Use the `delta`
-and `tick` you are handed, and keep everything else in rollback state.
 
 ## Settings
 
@@ -90,7 +66,7 @@ Under **Project Settings > Netfox > Time**:
   **Tickrate mismatch action**, warns or errors. 30 is a reasonable default; higher costs bandwidth and CPU in
   proportion.
 - **Sync to physics** - drives the tick loop from `_PhysicsProcess` at Godot's physics rate instead of from
-  `_Process`. Use it when physics bodies take part in rollback.
+  `_Process`.
 - **Max ticks per frame** - the ceiling on catching up after a stall, so a hitch does not turn into a freeze.
 - **Stall threshold** - a frame longer than this is treated as the game having been paused rather than as time to
   catch up on.

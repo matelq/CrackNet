@@ -1,51 +1,58 @@
 # netfox-net
 
-Native C# port of [netfox](https://github.com/foxssake/netfox) for Godot 4.7 .NET: tick synchronization, rollback with
-client-side prediction and server reconciliation, state synchronization, interpolation, and the netfox.extras toolbox.
-No GDScript, no interop layer.
+Co-op netcode for Godot 4.7 .NET: distributed authority with state synchronization, after Glenn Fiedler's
+[Networked Physics in Virtual Reality](https://gafferongames.com/post/networked_physics_in_virtual_reality/). Built for
+"friend-slop" games - a handful of friends, shared physics objects, pushing each other, projectiles, joint QTEs - where
+nobody cheats and everybody touches everything.
 
-Same semantics and the same public API as the original — checked tick by tick against it, not just by eye. What differs
-is that you write C#: interfaces instead of duck-typed methods, events instead of signals, attributes instead of
-property-name strings.
+Started as a C# port of [netfox](https://github.com/foxssake/netfox). This branch has left rollback behind; the
+`reworked` and `master` branches keep the port.
 
-**[Guides](docs/README.md)** · **[Getting started](docs/getting-started.md)** · **[Coming from GDScript](docs/migration.md)** · **[Sample](examples/playground/README.md)**
+**[Guides](docs/README.md)** · **[Getting started](docs/getting-started.md)** · **[Design and decisions](docs/design/distributed-authority.md)**
+
+## The model in one paragraph
+
+Every networked object has one peer that simulates it and sends its state - its authority - and everyone else plays
+that state back a few ticks behind. Your own character is always yours, so input applies at once with no prediction
+and no reconciliation. Touching a crate takes authority over it, and whatever it knocks over follows; grabbing takes
+ownership, so nobody can snatch it back. The host arbitrates conflicting claims and gets objects back once they come
+to rest. Pushes and hits are events delivered to whoever currently simulates the target.
 
 ## Status
 
-Functional and API parity with upstream, at `v0.1.0` (pre-release). Verified by 77 core tests, 156 Godot-side tests —
-including two netfox stacks talking to each other inside one process — a two-process ENet run with and without a
-latency and loss proxy, a headless run of the sample game, and a tick-by-tick trace compared against the GDScript
-original. All of it runs in CI.
+Pre-release, under active playtesting. Verified by 82 core tests, 74 Godot-side tests (several stacks in one tree over
+a loopback peer) and a three-process ENet mesh smoke under a simulated bad network, all in CI.
 
-Not yet verified: **Steam against a live client.** The transport is written and compiles, but it has never talked to
-Steam. See [#6](https://github.com/matelq/netfox-net/issues/6).
-
-Roadmap lives in [issues](https://github.com/matelq/netfox-net/issues).
+Not yet verified: **Steam against a live client** ([#6](https://github.com/matelq/netfox-net/issues/6)). The playground
+uses an ENet full mesh that follows the same route.
 
 ## Using it
 
-1. Take `addons/netfox-net` from the [latest release](https://github.com/matelq/netfox-net/releases) and drop it into
-   `res://addons/`. The zip already carries the `Netfox.Core` sources inside it, so there is no project reference to
-   add.
-2. Enable the plugin in **Project Settings > Plugins**. It registers the `netfox/*` settings and the autoloads in
-   dependency order.
-3. Your project needs `ImplicitUsings` and `Nullable` enabled. Optionally reference
-   `addons/netfox-net/analyzers/Netfox.SourceGenerators.dll` as an `Analyzer` for the property attributes.
-4. Assign `Multiplayer.MultiplayerPeer` — ENet, Steam, anything. `NetworkEvents` starts `NetworkTime` on the host at
-   once and on clients once they are connected.
-5. Put a `RollbackSynchronizer` under your player and implement `IRollbackTick` on what should simulate.
-
-[Getting started](docs/getting-started.md) walks through all of it with code.
+1. Copy `addons/netfox-net` into `res://addons/` (a release zip carries the `Netfox.Core` sources inside it).
+2. Enable the plugin in **Project Settings > Plugins**. It registers the `netfox/*` settings and the autoloads.
+3. Enable `ImplicitUsings` and `Nullable`, and reference `addons/netfox-net/analyzers/Netfox.SourceGenerators.dll` as
+   an `Analyzer` for `[Synced]`.
+4. Assign `Multiplayer.MultiplayerPeer`. The clock starts on its own once the session does.
+5. Add a `NetworkObject` under each replicated node and mark its state `[Synced]`.
 
 ```csharp
-[GlobalClass]
-public partial class Player : CharacterBody3D, IRollbackTick
+public partial class Crate : RigidBody3D
 {
-    [RollbackState] public int JumpsLeft { get; set; }
+    [Synced] public Transform3D NetTransform { get => GlobalTransform; set => GlobalTransform = value; }
 
-    public void RollbackTick(double delta, int tick, bool isFresh)
+    [Export] public NetworkObject Object { get; set; } = null!;   // SpreadsAuthority on
+
+    // Frozen wherever another peer simulates it: it follows that peer's samples
+    public override void _Ready()
     {
-        // A function of the state you were given and the input for this tick, and nothing else
+        Object.AuthorityChanged += () => Freeze = !Object.IsAuthority;
+        Freeze = !Object.IsAuthority;
+    }
+
+    private void OnBodyEntered(Node other)
+    {
+        // Whoever simulates a moving crate simulates what it knocks over too
+        if (other is Crate crate) Object.Touch(crate.Object);
     }
 }
 ```
@@ -54,71 +61,19 @@ public partial class Player : CharacterBody3D, IRollbackTick
 
 | Path | What |
 |---|---|
-| `addons/netfox-net/` | The addon. This is what you copy into a project. |
-| `Netfox.Core/` | Engine-agnostic core: history buffers, snapshots, serialization, clock math. No Godot dependency. |
-| `Netfox.SourceGenerators/` | The `[RollbackState]` attributes and the generator behind them. Optional. |
-| `docs/` | The guides, and a generated API reference. |
-| `examples/playground/` | A playable sample built out of scenes: lobby, players, prediction, weapon, physics. |
-| `examples/e2e/`, `examples/parity/`, `examples/physics/` | The end-to-end, parity and physics checks. |
-| `test/`, `Netfox.Core.Tests/`, `Netfox.Core.Benchmarks/` | Godot-side tests, xUnit tests, benchmarks. |
-| `parity/` | The GDScript side of the parity trace, and the script that compares the two. |
-
-The repository root is itself a Godot project, like upstream netfox.
+| `addons/netfox-net/` | The addon: `NetworkObject`, the clock, transport helpers, the network simulator. |
+| `Netfox.Core/` | Engine-agnostic core: playback clock, sample tracks, clock sync math. |
+| `Netfox.SourceGenerators/` | `[Synced]` and its generator. |
+| `docs/` | Guides, the design document, a generated API reference. |
+| `examples/playground/` | The co-op sample: players, crates, grab and throw, pushes, projectiles, and the smoke check. |
+| `examples/steam/` | GodotSteam bootstrap. |
+| `test/`, `Netfox.Core.Tests/` | Godot-side tests and xUnit tests. |
 
 ## Try the sample
 
 ```
+sh tools/install-extensions.sh rapier
 godot --path . res://examples/playground/playground.tscn
 ```
 
-Two instances, Host in one and Join in the other. It shows movement through a rewindable state machine, prediction,
-interpolation, a weapon on the request-and-accept model, replication without rollback, and visibility filtering — and
-lights up rigid body rollback and Steam hosting when those are installed.
-
-**[TESTING.md](examples/playground/TESTING.md)** walks through it from nothing - installing Godot, running two
-instances, adding latency until things visibly break, and reading what the status line is telling you. Its
-[README](examples/playground/README.md) points at the parts of the code worth reading.
-
-## Checks
-
-```
-dotnet test Netfox.slnx                                   # 77 core tests
-dotnet build Netfox.csproj
-godot --headless --path . res://test/TestRunner.tscn       # 156 Godot-side tests, exit 0 on success
-sh parity/run-parity.sh                                   # tick traces against the GDScript original
-godot --headless --path . res://examples/playground/PlatformRideCheck.tscn   # rider stays on the moving platform
-```
-
-End to end over ENet, two processes — the host has to outlive the client:
-
-```
-godot --headless --path . res://examples/e2e/E2E.tscn -- --host --seconds=14
-godot --headless --path . res://examples/e2e/E2E.tscn -- --join --seconds=10
-```
-
-Each prints an `E2E RESULT ... ok=True` line. The host keeps a trace of the position it simulated for every tick and
-the client checks what it received against it, so a run proves replication is exact rather than merely that packets
-arrived. Add `--latency=40 --loss=3` to both to route it through the latency and loss proxy.
-
-## Steam
-
-The transport is the [GodotSteam](https://codeberg.org/godotsteam/godotsteam) GDExtension, driven from C# through
-`ClassDB` — no C# bindings involved, the same way the Rapier physics drivers work. Run
-`sh tools/install-extensions.sh steam` to install it, then use `examples/steam/SteamLobbyBootstrap.cs` to create or
-join a lobby. `examples/steam/SteamSmoke.tscn` reports whether everything it needs is present.
-
-netfox itself is transport-agnostic: once a peer is assigned, nothing above it knows the difference.
-
-## Differences from the original
-
-Beyond the C# shape of the API, this port fixes several upstream bugs and deviates from a few upstream decisions on
-purpose — a working `Sanitize`, state sent once per loop rather than once per resimulated tick, servers reset between
-sessions, input that reaches the peers that need it. Each one, with its reasoning, is in the
-[migration notes](docs/migration.md).
-
-There is no wire compatibility with GDScript netfox, and none is intended.
-
-## License
-
-MIT, see [LICENSE](LICENSE). Derived from netfox by Gálffy Tamás (Fox and Sake), also MIT; the original notice is kept
-in `addons/netfox-net/LICENSE.netfox`.
+Host in one window, Join in the others, or turn on autoconnect - see [Testing on a real network](docs/real-networks.md).

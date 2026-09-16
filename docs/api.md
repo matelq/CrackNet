@@ -152,11 +152,12 @@ Sends the state of every `NetworkObject` this peer is authority for, once per ti
 |---|---|---|
 | property | `Context` | The stack this server belongs to; resolved when it enters the tree. |
 | property | `PlaybackDelayTicks` | How many ticks behind the newest sample remote objects are shown. |
+| field | `MaxPlaybackDepthTicks` | The deepest a playback buffer grows to absorb jitter; also what a despawn waits out. |
 | field | `RestHeartbeatTicks` | An object whose state has not changed is sent again only this often. |
 | field | `StateIntervalTicks` | State goes out every this many ticks: 2 at 30 Hz is 15 snapshots a second. |
 | method | `ErasePeer(System.Int32)` | Forgets a peer's clock. On the host, also takes back every object the peer simulated or held and tells everyone: otherwise a crate carried out of the session stays with nobody for good. |
 | method | `GetDisplayTick(System.Int32)` | The display tick for objects of `peer`, or null before anything arrived from it. |
-| method | `GetPlaybackStatus(System.Int32)` | The receive and playback positions for `peer`, or null before any state arrived. The caller can compare `NewestTick` with its local network tick for network age, and with `DisplayTick` for buffered playback age. |
+| method | `GetPlaybackStatus(System.Int32)` | How old what `peer` is shown is, averaged over the last second, or null before any state arrived. Measured on arrival and against the clock's running time rather than against the newest tick: a resting peer sends only a heartbeat a second, and "local tick minus newest tick" then read up to a second of delay that was never there. |
 | method | `HandleAuthority(System.Int32,System.Byte[])` | On the host: accepts a guest's change when it is newer and the object is free or already the guest's, and tells everyone; otherwise tells the guest what stands. On a guest: whatever the host says stands. |
 | method | `HandleEvent(System.Int32,System.Byte[])` | Raises an event on its object if this peer is the authority, and passes it on to the authority otherwise. |
 | method | `SendAllAuthorityTo(System.Int32)` | On the host: tells a peer that just joined who has authority over and who holds every object. |
@@ -263,7 +264,7 @@ The newest state tick received from a peer and the tick currently displayed for 
 
 | | Member | Summary |
 |---|---|---|
-| method | `#ctor(System.Int32,System.Double)` | The newest state tick received from a peer and the tick currently displayed for that peer. |
+| method | `#ctor(System.Double,System.Double)` | The newest state tick received from a peer and the tick currently displayed for that peer. |
 
 ### PropertyEntry
 
@@ -448,13 +449,15 @@ A newly seen object's display position. It begins at that object's first sample 
 
 ### PlaybackClock
 
-The display tick for everything one remote peer sends. One clock per peer, not per object, so a stack of crates or a character and what it holds are always shown at the same moment. The clock trails the newest tick heard from the peer by a fixed delay and slews its rate to hold that depth, rather than jumping when packet spacing changes. The display never runs past the newest tick, but the clock's own time keeps going while nothing arrives: a resting peer sends only heartbeats, and motion after a rest must show at the normal depth at once, not a heartbeat late. After an outage that means a skip forward to where the data is, as Source does, rather than seconds of added delay draining at a few percent. It never runs backwards.
+The display tick for everything one remote peer sends. One clock per peer, not per object, so a stack of crates or a character and what it holds are always shown at the same moment. The clock trails the newest tick heard from the peer by an adaptive depth and slews its rate to hold it, rather than jumping when packet spacing changes. The depth is the minimum - the send interval and a margin - plus the jitter this link has shown recently: every arrival records how late it came against local time, and the spread of that over the last few seconds is how much a packet can be late compared to its neighbours. A buffer absorbs send spacing and jitter, never the base latency, so a clean link gets the minimum and a jittery one grows by its jitter and no more (https://gafferongames.com/post/state_synchronization/, "jitter buffer"; Valorant's minimal buffering). The display never runs past the newest tick, but the clock's own time keeps going while nothing arrives: a resting peer sends only heartbeats, and motion after a rest must show at the normal depth at once, not a heartbeat late. After an outage that means a skip forward to where the data is, as Source does, rather than seconds of added delay draining at a few percent. It never runs backwards.
 
 | | Member | Summary |
 |---|---|---|
+| property | `Depth` | How far behind the newest tick the clock aims to run now: the minimum plus this link's recent jitter. |
 | property | `Holds` | Advances where the clock started holding at the newest tick; a measure of underruns. |
 | property | `Newest` | The newest tick heard from the peer. |
 | property | `Tick` | The tick to display, or null until the peer has sent anything. |
+| property | `Time` | The clock's own time, which keeps running while nothing arrives. How far this is behind the local tick is the peer's playback age; `Tick` can sit still at the newest sample while a peer rests. |
 | method | `Advance(System.Double)` | Moves the display tick on by `elapsedTicks` of local time. |
 | method | `Observe(System.Int32)` | Tells the clock a sample for `tick` arrived from the peer. |
 
