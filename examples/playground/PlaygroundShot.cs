@@ -10,6 +10,15 @@ public partial class PlaygroundShot : Node3D
 {
     private const float Lifetime = 2.5f, HitRadius = 0.7f, CrateImpulse = 6, PlayerKnock = 6;
 
+    /// <summary>Half the crate's size plus the shot's radius: a crate is a box, not a sphere around its centre.</summary>
+    private const float CrateHalfExtent = 0.5f + 0.15f;
+
+    private bool IsInside(Vector3 centre, float halfExtent)
+    {
+        var offset = GlobalPosition - centre;
+        return Math.Abs(offset.X) <= halfExtent && Math.Abs(offset.Y) <= halfExtent && Math.Abs(offset.Z) <= halfExtent;
+    }
+
     [Synced] public Vector3 NetPosition { get => GlobalPosition; set => GlobalPosition = value; }
 
     public NetworkObject Object { get; private set; } = null!;
@@ -35,15 +44,17 @@ public partial class PlaygroundShot : Node3D
         GlobalPosition += _velocity * (float)delta;
         _age += delta;
 
+        // Nearest first, and nothing when nothing is in reach: MinBy over a value tuple throws on an empty sequence,
+        // which it did every frame of every flight, so no shot ever hit anything
         var crateHit = GetTree().GetNodesInGroup("crates").OfType<PlaygroundCrate>()
-            .Select(crate => (Crate: crate, Distance: crate.GlobalPosition.DistanceTo(GlobalPosition)))
-            .Where(hit => hit.Distance <= HitRadius)
-            .MinBy(hit => hit.Distance).Crate;
+            .Where(crate => IsInside(crate.GlobalPosition, CrateHalfExtent))
+            .OrderBy(crate => crate.GlobalPosition.DistanceTo(GlobalPosition))
+            .FirstOrDefault();
         var playerHit = GetParent().GetParent().GetNode<Node3D>("Players").GetChildren().OfType<PlaygroundPlayer>()
             .Where(player => player.Peer != Object.Authority && player.Visible)
-            .Select(player => (Player: player, Distance: player.GlobalPosition.DistanceTo(GlobalPosition)))
-            .Where(hit => hit.Distance <= HitRadius)
-            .MinBy(hit => hit.Distance).Player;
+            .Where(player => player.GlobalPosition.DistanceTo(GlobalPosition) <= HitRadius)
+            .OrderBy(player => player.GlobalPosition.DistanceTo(GlobalPosition))
+            .FirstOrDefault();
 
         if (crateHit is not null && (playerHit is null
                                      || crateHit.GlobalPosition.DistanceTo(GlobalPosition)

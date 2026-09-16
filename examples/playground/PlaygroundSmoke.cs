@@ -34,6 +34,9 @@ public partial class PlaygroundSmoke : Node
     private PlaygroundCrate _crate = null!;
     private Vector3 _crateStart;
     private double _crateMaxTravel;
+    private PlaygroundCrate _target = null!;
+    private bool _watchingShot;
+    private bool _shotTookCrate;
     private bool _returnedWhileGuestConnected;
 
     /// <summary>The arena is 40 by 40: a crate farther than this from its start has been blown out of the world.</summary>
@@ -56,6 +59,7 @@ public partial class PlaygroundSmoke : Node
         _playground = GetParent<Playground>();
         _crate = _playground.GetNode<PlaygroundCrate>($"Crates/{CrateName}");
         _crateStart = _crate.GlobalPosition;
+        _target = _playground.GetNode<PlaygroundCrate>("Crates/Crate1");
         PlaygroundPlayer.Bot = !_isHost && !_isObserver ? Drive : _ => default;
         // A trace left by an earlier run would be compared against this one's ticks
         if (!_isHost && FileAccess.FileExists(TracePath)) DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath(TracePath));
@@ -68,6 +72,29 @@ public partial class PlaygroundSmoke : Node
                 _returnedWhileGuestConnected = true;
         };
         _crate.Object.SampleReceived += tick => _received.Add(tick);
+    }
+
+    /// <summary>
+    /// Faces the other crate and watches for a crate taken with a shot as the cause: a hit takes the crate it lands on.
+    /// Only the cause counts - turning to aim can nudge a neighbouring crate and take it too.
+    /// </summary>
+    private (Vector3, bool, bool, bool) Aim(PlaygroundPlayer me)
+    {
+        if (!_watchingShot)
+        {
+            _watchingShot = true;
+            foreach (var crate in _playground.GetNode("Crates").GetChildren().OfType<PlaygroundCrate>())
+                crate.Object.AuthorityChanged += () =>
+                    _shotTookCrate |= crate.Object.IsAuthority && crate.Object.SpreadCause.Contains("/Shots/");
+        }
+        return (FlatTo(_target, me) * 0.05f, false, false, false);
+    }
+
+    private static Vector3 FlatTo(Node3D target, Node3D from)
+    {
+        var offset = target.GlobalPosition - from.GlobalPosition;
+        offset.Y = 0;
+        return offset.Normalized();
     }
 
     private (Vector3 Move, bool Grab, bool Push, bool Shoot) Drive(PlaygroundPlayer me)
@@ -85,6 +112,10 @@ public partial class PlaygroundSmoke : Node
             < 5 => default,
             < 7 => (Vector3.Right, false, false, false),
             < 7.2 => (Vector3.Right, true, false, false),
+            // After the throw has settled: face another crate and shoot it
+            < 13 => default,
+            < 13.1 => Aim(me),
+            < 13.2 => (Vector3.Zero, false, false, true),
             _ => default,
         };
     }
@@ -136,8 +167,8 @@ public partial class PlaygroundSmoke : Node
         {
             WriteTrace();
             var sawHost = _playground.Players.GetNodeOrNull<PlaygroundPlayer>("Player1") is { Visible: true };
-            ok = sawHost && _sent.Count > 20 && _crateMaxTravel is > 1.5 and < MaxCrateTravel && backToHost;
-            detail = $"sawHost={sawHost} sent={_sent.Count} travel={_crateMaxTravel:F2} backToHost={backToHost}";
+            ok = sawHost && _sent.Count > 20 && _crateMaxTravel is > 1.5 and < MaxCrateTravel && backToHost && _shotTookCrate;
+            detail = $"sawHost={sawHost} sent={_sent.Count} travel={_crateMaxTravel:F2} backToHost={backToHost} shotHitCrate={_shotTookCrate}";
         }
         else
         {

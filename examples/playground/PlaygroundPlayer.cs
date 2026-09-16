@@ -145,7 +145,8 @@ public partial class PlaygroundPlayer : CharacterBody3D
         var data = new Godot.Collections.Dictionary
         {
             ["name"] = $"Shot{Peer}_{++_shotCount}",
-            ["origin"] = GlobalPosition + Forward * 0.8f + Vector3.Up * 0.5f,
+            // Chest height, so a shot can hit a crate on the floor as well as another player
+            ["origin"] = GlobalPosition + Forward * 0.8f,
             ["velocity"] = Forward * ShotSpeed,
         };
         _shots.Spawn(data);
