@@ -34,6 +34,10 @@ public partial class PlaygroundSmoke : Node
     private PlaygroundCrate _crate = null!;
     private Vector3 _crateStart;
     private double _crateMaxTravel;
+    private bool _returnedWhileGuestConnected;
+
+    /// <summary>The arena is 40 by 40: a crate farther than this from its start has been blown out of the world.</summary>
+    private const double MaxCrateTravel = 45;
     private int _clientPeer;
     private bool _sawGuestCrate;
 
@@ -56,6 +60,13 @@ public partial class PlaygroundSmoke : Node
         // A trace left by an earlier run would be compared against this one's ticks
         if (!_isHost && FileAccess.FileExists(TracePath)) DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath(TracePath));
         _crate.Object.SampleSent += RecordSent;
+        // Handing everything back when a guest leaves also returns the crate to the host, so only a return while the
+        // thrower is still here proves the crate came back because it came to rest
+        _crate.Object.AuthorityChanged += () =>
+        {
+            if (_isHost && _crate.Object.Authority == 1 && _clientPeer != 0 && Multiplayer.GetPeers().Contains(_clientPeer))
+                _returnedWhileGuestConnected = true;
+        };
         _crate.Object.SampleReceived += tick => _received.Add(tick);
     }
 
@@ -117,22 +128,22 @@ public partial class PlaygroundSmoke : Node
         {
             var sent = ReadTrace();
             var (maxError, compared) = Compare(sent);
-            ok = _clientPeer != 0 && _crateMaxTravel > 1.5 && compared > 20 && maxError < MaxDisplayError && backToHost;
-            detail = $"clientTookIt={_clientPeer != 0} travel={_crateMaxTravel:F2} compared={compared} maxError={maxError:F3} backToHost={backToHost}";
+            ok = _clientPeer != 0 && _crateMaxTravel is > 1.5 and < MaxCrateTravel && compared > 20 && maxError < MaxDisplayError
+                 && _returnedWhileGuestConnected;
+            detail = $"clientTookIt={_clientPeer != 0} travel={_crateMaxTravel:F2} compared={compared} maxError={maxError:F3} returnedAtRest={_returnedWhileGuestConnected}";
         }
         else if (!_isObserver)
         {
             WriteTrace();
             var sawHost = _playground.Players.GetNodeOrNull<PlaygroundPlayer>("Player1") is { Visible: true };
-            // The host deliberately outlives both guests and is the one that verifies return-to-host after they leave.
-            ok = sawHost && _sent.Count > 20 && _crateMaxTravel > 1.5;
+            ok = sawHost && _sent.Count > 20 && _crateMaxTravel is > 1.5 and < MaxCrateTravel && backToHost;
             detail = $"sawHost={sawHost} sent={_sent.Count} travel={_crateMaxTravel:F2} backToHost={backToHost}";
         }
         else
         {
             var sawDriver = _playground.Players.GetChildren().OfType<PlaygroundPlayer>()
                 .Any(player => player.Peer != 1 && player.Peer != Multiplayer.GetUniqueId() && player.Visible);
-            ok = sawDriver && _sawGuestCrate && _received.Count > 20 && _crateMaxTravel > 1.5;
+            ok = sawDriver && _sawGuestCrate && _received.Count > 20 && _crateMaxTravel is > 1.5 and < MaxCrateTravel && backToHost;
             detail = $"sawDriver={sawDriver} sawGuestCrate={_sawGuestCrate} received={_received.Count} travel={_crateMaxTravel:F2} backToHost={backToHost}";
         }
 
