@@ -14,6 +14,9 @@ namespace Netfox.Core.Time;
 public sealed class PlaybackClock
 {
     private const double Slew = 0.05;
+    private const double CatchUpGain = 0.02;
+    private const double MaxCatchUp = 0.5;
+    private double _sinceNewest;
     private readonly double _delay;
     private readonly double _resyncDepth;
     private readonly double _maxLead;
@@ -39,6 +42,12 @@ public sealed class PlaybackClock
     /// <summary>The tick to display, or null until the peer has sent anything.</summary>
     public double? Tick { get; private set; }
 
+    /// <summary>
+    /// The clock's own time, which keeps running while nothing arrives. How far this is behind the local tick is the
+    /// peer's playback age; <see cref="Tick"/> can sit still at the newest sample while a peer rests.
+    /// </summary>
+    public double? Time => Tick is null ? null : _time;
+
     /// <summary>The newest tick heard from the peer.</summary>
     public int Newest { get; private set; }
 
@@ -58,6 +67,7 @@ public sealed class PlaybackClock
 
         if (tick <= Newest) return;
         Newest = tick;
+        _sinceNewest = 0;
         if (Newest - _delay - _time > _resyncDepth) _time = Newest - _delay;
         Tick = Math.Max(Tick.Value, Math.Min(_time, Newest));
     }
@@ -71,9 +81,14 @@ public sealed class PlaybackClock
         // Time keeps running while nothing arrives: a peer whose objects rest sends only heartbeats, and a clock that
         // stopped at the last one would be a heartbeat behind when motion resumed, catching up at 5% for seconds.
         // Capped, so a long outage does not leave it running into a future nothing will fill.
-        var behind = Newest - _delay - _time;
-        // Slowing down only makes sense while data flows; in silence being "ahead" of a stale newest tick is expected
-        var rate = behind > 1 ? 1 + Slew : behind < -1 && _time < Newest ? 1 - Slew : 1;
+        // Where the newest tick would be by now: a resting peer sends a heartbeat a second, and measuring against the
+        // last one made the clock believe it was ahead for most of that second and never catch up
+        _sinceNewest += elapsedTicks;
+        var behind = Newest + Math.Min(_sinceNewest, _maxLead) - _delay - _time;
+
+        // Ahead: ease back gently. Behind: speed up in proportion, up to half again, so a clock that started a second
+        // late catches up in a couple of seconds instead of twenty - played back faster, never skipped
+        var rate = Math.Abs(behind) <= 1 ? 1 : 1 + Math.Clamp(behind * CatchUpGain, -Slew, MaxCatchUp);
         _time = Math.Min(_time + elapsedTicks * rate, Newest + _maxLead);
 
         var next = Math.Min(_time, Newest);
@@ -85,6 +100,7 @@ public sealed class PlaybackClock
     {
         Tick = null;
         _time = 0;
+        _sinceNewest = 0;
         Newest = 0;
         Holds = 0;
     }

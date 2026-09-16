@@ -21,15 +21,32 @@ public partial class NetworkObjectTests : HarnessSuite
         for (var i = 0; i < 60; i++) await NextFrame();
 
         var status = Client.Context.NetworkObjectServer.GetPlaybackStatus(1)!.Value;
-        var networkAge = Client.Context.NetworkTime.Tick - status.NewestTick;
-        var playbackAge = status.NewestTick - status.DisplayTick;
         var interval = NetworkObjectServer.StateIntervalTicks;
 
-        // Clock sync error and the send interval blur both by a couple of ticks; a readout that swapped or summed the
-        // parts, or ignored the latency, falls outside
-        Expect.True(networkAge >= 1 && networkAge <= 3 + interval + 2, $"network age {networkAge} ticks for 100 ms of latency");
-        Expect.True(playbackAge >= 0 && playbackAge <= Client.Context.NetworkObjectServer.PlaybackDelayTicks + interval + 1,
-            $"playback age {playbackAge:F1} ticks");
+        // Clock sync error blurs both by a couple of ticks; a readout that swapped or summed the parts, or ignored the
+        // latency, falls outside
+        Expect.True(status.NetworkTicks >= 1 && status.NetworkTicks <= 3 + interval + 2,
+            $"network age {status.NetworkTicks:F1} ticks for 100 ms of latency");
+        Expect.True(status.PlaybackTicks <= Client.Context.NetworkObjectServer.PlaybackDelayTicks + interval + 2,
+            $"playback age {status.PlaybackTicks:F1} ticks");
+    }
+
+    [Test]
+    public async Task ARestingPeerDoesNotReadAsLate()
+    {
+        // No latency, and the host's body never changes: it sends only a heartbeat a second. Measured against the
+        // newest tick that read as up to a second behind.
+        HarnessBody.Spawn(Host, "Resting", 1).CountsTicks = false;
+        HarnessBody.Spawn(Client, "Resting", 1).CountsTicks = false;
+
+        Expect.True(await WaitUntil(() => Client.Context.NetworkTime.IsInitialSyncDone()
+                                          && Client.Context.NetworkObjectServer.GetPlaybackStatus(1) is not null, 8),
+            "client never synced and observed the host clock");
+        for (var i = 0; i < 150; i++) await NextFrame();
+
+        var status = Client.Context.NetworkObjectServer.GetPlaybackStatus(1)!.Value;
+        Expect.True(status.TotalTicks <= Client.Context.NetworkObjectServer.PlaybackDelayTicks + NetworkObjectServer.StateIntervalTicks + 3,
+            $"a resting host reads {status.TotalTicks:F1} ticks behind with no latency");
     }
 
     [Test]

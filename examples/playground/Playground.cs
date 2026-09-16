@@ -49,6 +49,8 @@ public partial class Playground : Node3D
     private MultiplayerSpawner _playerSpawner = null!;
     private PlaygroundMesh _mesh = null!;
     private NetworkSimulator.Profile _profile = NetworkSimulator.Profile.Default;
+    private double _sinceReadout = 1;
+    private string _delayReadout = "";
     private int _port = Port;
 
     public override void _Ready()
@@ -215,20 +217,24 @@ public partial class Playground : Node3D
         var local = Players.GetNodeOrNull<PlaygroundPlayer>($"Player{Multiplayer.GetUniqueId()}");
         var profile = ThroughSimulator ? $"{_profile.LatencyMs}ms each way, {_profile.JitterMs}ms jitter, {_profile.PacketLossPercent}% loss" : "no simulated conditions";
 
-        var delayLines = Players.GetChildren().OfType<PlaygroundPlayer>()
-            .Where(player => player.Peer != Multiplayer.GetUniqueId())
-            .Select(player => (Player: player, Status: NetworkObjectServer.Instance.GetPlaybackStatus(player.Peer)))
-            .Where(entry => entry.Status is not null)
-            .Select(entry =>
-            {
-                var status = entry.Status!.Value;
-                var millisecondsPerTick = 1000.0 / time.Tickrate;
-                var network = Math.Max(0, time.Tick - status.NewestTick) * millisecondsPerTick;
-                var playback = Math.Max(0, status.NewestTick - status.DisplayTick) * millisecondsPerTick;
-                return $"Peer {entry.Player.Peer}: {network + playback:F0}ms behind ({network:F0}ms network + {playback:F0}ms playback)";
-            });
-        var delayReadout = string.Join('\n', delayLines);
-        if (delayReadout.Length > 0) delayReadout = "\n" + delayReadout;
+        // Once a second: an average that changes every frame cannot be read
+        _sinceReadout += delta;
+        if (_sinceReadout >= 1)
+        {
+            _sinceReadout = 0;
+            var millisecondsPerTick = 1000.0 / time.Tickrate;
+            _delayReadout = string.Concat(Players.GetChildren().OfType<PlaygroundPlayer>()
+                .Where(player => player.Peer != Multiplayer.GetUniqueId())
+                .Select(player => (Player: player, Status: NetworkObjectServer.Instance.GetPlaybackStatus(player.Peer)))
+                .Where(entry => entry.Status is not null)
+                .Select(entry =>
+                {
+                    var status = entry.Status!.Value;
+                    return $"\nPeer {entry.Player.Peer}: {status.TotalTicks * millisecondsPerTick:F0}ms behind " +
+                           $"({status.NetworkTicks * millisecondsPerTick:F0}ms network + {status.PlaybackTicks * millisecondsPerTick:F0}ms playback)";
+                }));
+        }
+        var delayReadout = _delayReadout;
 
         _status.Text = Multiplayer.MultiplayerPeer is null or OfflineMultiplayerPeer
             ? $"Host, or join an address. Network: {profile}"

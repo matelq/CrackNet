@@ -128,7 +128,8 @@ public class PlaybackTests
 
             var displayed = a + (b - a) * f;
             Assert.True(displayed >= previous);
-            if (double.IsFinite(previous) && displayed - previous > .526) jumps++;
+            // Catching up plays up to half again as fast (0.75 of a tick per half-tick frame); only more is a skip
+            if (double.IsFinite(previous) && displayed - previous > 2) jumps++;
             if (frame > 40) worstDepth = Math.Max(worstDepth, clock.Newest - shown);
             Assert.InRange(track.Count, 1, 32);
             previous = displayed;
@@ -166,5 +167,28 @@ public class PlaybackTests
         clock.Observe(0);
         clock.Observe(100);
         Assert.Equal(98d, clock.Tick);
+    }
+
+    [Fact]
+    public void AClockThatStartedLateCatchesUpWithAPeerThatOnlySendsHeartbeats()
+    {
+        // The first state arrives late (25 ticks), then the peer rests and sends a heartbeat every 30 ticks. Measured
+        // against the last heartbeat the clock believed itself ahead most of the time and stayed ~25 ticks behind.
+        var clock = new PlaybackClock(delayTicks: 3);
+        var now = 25.0;
+        clock.Observe(0);
+        var nextHeartbeat = 30;
+        for (; now < 25 + 150; now += 0.5)
+        {
+            clock.Advance(.5);
+            if (now >= nextHeartbeat)
+            {
+                clock.Observe(nextHeartbeat);
+                nextHeartbeat += 30;
+            }
+        }
+
+        var behindRealTime = now - clock.Time!.Value;
+        Assert.InRange(behindRealTime, 0, 3 + 2);
     }
 }

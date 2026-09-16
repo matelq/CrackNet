@@ -8,7 +8,15 @@ using Netfox.Internal;
 namespace Netfox;
 
 /// <summary>The newest state tick received from a peer and the tick currently displayed for that peer.</summary>
-public readonly record struct PlaybackStatus(int NewestTick, double DisplayTick);
+/// <summary>
+/// How old what a peer is shown is, averaged over the last second, in ticks: <see cref="NetworkTicks"/> is how old its
+/// state was on arrival, <see cref="TotalTicks"/> how far its playback runs behind the local tick. The difference is
+/// the time spent in the playback buffer.
+/// </summary>
+public readonly record struct PlaybackStatus(double NetworkTicks, double TotalTicks)
+{
+    public double PlaybackTicks => Math.Max(0, TotalTicks - NetworkTicks);
+}
 
 /// <summary>
 /// Sends the state of every <see cref="NetworkObject"/> this peer is authority for, once per tick, and plays back the
@@ -126,6 +134,7 @@ public partial class NetworkObjectServer : Node
     public void ErasePeer(int peer)
     {
         _clocks.Remove(peer);
+        _ages.Remove(peer);
         if (!Multiplayer.IsServer()) return;
 
         foreach (var obj in _objects)
@@ -142,6 +151,7 @@ public partial class NetworkObjectServer : Node
     internal void ResetSession()
     {
         _clocks.Clear();
+        _ages.Clear();
         _pendingAuthority.Clear();
         _pendingSamples.Clear();
         foreach (var obj in _objects)
@@ -157,14 +167,36 @@ public partial class NetworkObjectServer : Node
     public double? GetDisplayTick(int peer) => _clocks.TryGetValue(peer, out var clock) ? clock.Tick : null;
 
     /// <summary>
-    /// The receive and playback positions for <paramref name="peer"/>, or null before any state arrived. The caller
-    /// can compare <see cref="PlaybackStatus.NewestTick"/> with its local network tick for network age, and with
-    /// <see cref="PlaybackStatus.DisplayTick"/> for buffered playback age.
+    /// How old what <paramref name="peer"/> is shown is, averaged over the last second, or null before any state arrived.
+    /// <para>
+    /// Measured on arrival and against the clock's running time rather than against the newest tick: a resting peer
+    /// sends only a heartbeat a second, and "local tick minus newest tick" then read up to a second of delay that was
+    /// never there.
+    /// </para>
     /// </summary>
     public PlaybackStatus? GetPlaybackStatus(int peer)
-        => _clocks.TryGetValue(peer, out var clock) && clock.Tick is { } display
-            ? new PlaybackStatus(clock.Newest, display)
-            : null;
+    {
+        if (!_ages.TryGetValue(peer, out var ages) || ages.Network.Count == 0 || ages.Total.Count == 0) return null;
+        return new PlaybackStatus(ages.Network.Average(sample => sample.Ticks), ages.Total.Average(sample => sample.Ticks));
+    }
+
+    private const ulong AgeWindowMs = 1000;
+    private readonly Dictionary<int, (Queue<(ulong At, double Ticks)> Network, Queue<(ulong At, double Ticks)> Total)> _ages = new();
+
+    private (Queue<(ulong At, double Ticks)> Network, Queue<(ulong At, double Ticks)> Total) AgesOf(int peer)
+    {
+        if (!_ages.TryGetValue(peer, out var ages)) _ages[peer] = ages = (new(), new());
+        return ages;
+    }
+
+    private static void AddAge(Queue<(ulong At, double Ticks)> samples, double ticks)
+    {
+        var now = Godot.Time.GetTicksMsec();
+        samples.Enqueue((now, ticks));
+        while (samples.Count > 0 && now - samples.Peek().At > AgeWindowMs) samples.Dequeue();
+    }
+
+    private double LocalTick => Context.NetworkTime.Tick + Context.NetworkTime.TickFactor;
 
     /// <summary>
     /// Sends an authority change this peer just applied: a guest asks the host, the host tells everyone.
@@ -391,6 +423,8 @@ public partial class NetworkObjectServer : Node
         if (!_clocks.TryGetValue(sender, out var clock))
             _clocks[sender] = clock = new PlaybackClock(PlaybackDelayTicks);
         clock.Observe(tick);
+        // A state for tick N is taken as tick N-1 finishes, so on a clean link it arrives as N comes around
+        AddAge(AgesOf(sender).Network, Math.Max(0, LocalTick - tick));
 
         while (reader.AvailableBytes > 0)
         {
@@ -475,8 +509,11 @@ public partial class NetworkObjectServer : Node
     public override void _Process(double delta)
     {
         var elapsedTicks = delta * Context.NetworkTime.Tickrate;
-        foreach (var clock in _clocks.Values)
+        foreach (var (peer, clock) in _clocks)
+        {
             clock.Advance(elapsedTicks);
+            if (clock.Time is { } time) AddAge(AgesOf(peer).Total, Math.Max(0, LocalTick - time));
+        }
 
         if (_pendingSamples.Count > 0) ApplyPendingSamples();
 

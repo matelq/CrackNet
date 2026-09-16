@@ -10,7 +10,9 @@ namespace Netfox.Examples.Playground;
 public partial class PlaygroundMesh : Node
 {
     private const int MaxPeers = 8;
-    private const int RendezvousOffset = 100;
+    // The rendezvous is the base port itself. Editor autoconnect elects the host by who binds that port first; a host
+    // that moved its lobby elsewhere left the base port free, and the next instance to start became a second host
+    private const int RendezvousOffset = 0;
     private const int LinkOffset = 200;
 
     private readonly Dictionary<int, string> _knownPeers = [];
