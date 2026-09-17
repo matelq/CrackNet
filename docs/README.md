@@ -7,6 +7,8 @@ Godot's high-level multiplayer basics: peers, multiplayer authority, `Multiplaye
 ## Start here
 
 0. **[Getting started](getting-started.md)** - install, connect, and replicate a player and a crate.
+   **[Minimal examples](examples.md)** - players, physics objects, players with objects, players with each other,
+   shooting: the smallest code for each.
 1. **[NetworkObject](network-object.md)** - kinds, authority and ownership, grabbing and throwing, knocks and events,
    projectiles, spawning, what is sent, and how playback shows remote objects.
 2. **[NetworkTime](network-time.md)** - the shared tick clock that stamps every sample.

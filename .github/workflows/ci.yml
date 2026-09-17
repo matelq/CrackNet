@@ -56,6 +56,8 @@ jobs:
         run: $GODOT --headless --path . --import || true
       - name: Build
         run: dotnet build Netfox.csproj
+      - name: Doc examples compile
+        run: python3 tools/check-doc-examples.py
       - name: Run Godot tests
         run: $GODOT --headless --path . res://test/TestRunner.tscn
       - name: Playground smoke under the bad profile

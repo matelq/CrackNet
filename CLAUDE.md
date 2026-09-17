@@ -78,7 +78,8 @@ Instances). That setting lands in project.godot: never commit it, and run headle
 Warnings are errors in every project (`Directory.Build.props`). Fix the cause; do not suppress.
 
 Run the whole CI set locally, not a subset: `dotnet format Netfox.slnx --verify-no-changes`, `dotnet test Netfox.slnx`,
-`dotnet build Netfox.csproj`, then the Godot runner. Building only the project you touched once let a broken
+`dotnet build Netfox.csproj`, `python tools/check-doc-examples.py`, then the Godot runner. `docs/examples.md` is how
+the API is judged: keep every block marked and compiling. Building only the project you touched once let a broken
 `Netfox.csproj` through, because the Godot project compiles everything under the repo root that is not excluded.
 
 A check that only compares state after the keys are released is blind to what a player sees: a crate drawn on the

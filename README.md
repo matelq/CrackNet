@@ -8,7 +8,7 @@ nobody cheats and everybody touches everything.
 Started as a C# port of [netfox](https://github.com/foxssake/netfox). This branch has left rollback behind; the
 `reworked` and `master` branches keep the port.
 
-**[Guides](docs/README.md)** · **[Getting started](docs/getting-started.md)** · **[Design and decisions](docs/design/distributed-authority.md)**
+**[Guides](docs/README.md)** · **[Getting started](docs/getting-started.md)** · **[Minimal examples](docs/examples.md)** · **[Design and decisions](docs/design/distributed-authority.md)**
 
 ## The model in one paragraph
 
