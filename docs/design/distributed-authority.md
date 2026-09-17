@@ -170,6 +170,18 @@ enum, strings, references) always step. `Teleport()` makes the next snapshot app
 - [ ] QTE: press together within a window
 - [ ] Steam transport (the playground mesh exercises the intended route over ENet)
 
+## Open
+
+- Review finding 3: `[Synced]` on a nested or generic type generates a separate empty type and replicates nothing,
+  silently. Plan: a compile error (NFX002).
+- Review finding 4: one object whose state is larger than `MaxSyncPacketSize` goes out as a single oversized
+  unreliable packet, which the transport may drop, silently. Plan: a warning.
+- A simpler API. Candidates: `NetworkObject` handles a rigid body itself (freeze where not authoritative, touch on
+  contact, return to host at rest); a ready synced body instead of three hand-written `[Synced]` properties; a
+  built-in knock instead of `SendToAuthority` with a raw `Variant`; sequences and diagnostics out of the main API;
+  one spawn call instead of a spawner per shooter; inspector presets (player, prop, projectile); remove unused
+  `NetworkSchemas` and `PeerVisibilityFilter`. Decide in a design session before implementing.
+
 ## Deferred
 
 - Pusher-side predicted knockback shown as a decaying presentation offset. Revisit if push latency still bothers on
