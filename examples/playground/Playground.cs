@@ -147,11 +147,11 @@ public partial class Playground : Node3D
     /// <summary>
     /// Steam, when GodotSteam is installed and the Steam client runs: the host makes a friends-only lobby, a friend
     /// joins it from the Steam overlay (Join game, or an invite) or by pasting the lobby id. Steam relays the traffic,
-    /// so no ports and no addresses. The simulated network profile does not apply here.
+    /// so no ports and no addresses. The simulated network profile applies on top of Steam's real network.
     /// </summary>
     private void StartSteam()
     {
-        _steam = new SteamLobbyBootstrap { Name = "Steam" };
+        _steam = new SteamLobbyBootstrap { Name = "Steam", Conditions = _profile };
         _steam.Failed += reason => _status.Text = $"Steam: {reason}";
         _steam.LobbyReady += lobbyId =>
         {

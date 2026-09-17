@@ -1,4 +1,5 @@
 using Godot;
+using Netfox.Extras;
 
 namespace Netfox.Examples.Steam;
 
@@ -28,6 +29,12 @@ public partial class SteamLobbyBootstrap : Node
     [Export] public int LobbyType { get; set; } = 1;
 
     public ulong LobbyId { get; private set; }
+
+    /// <summary>
+    /// Simulated network conditions on top of Steam, for testing. Clear by default, and then the Steam peer goes to
+    /// Godot as it is: nothing of the simulator sits on the send path.
+    /// </summary>
+    public NetworkSimulator.Profile Conditions { get; set; } = NetworkSimulator.Profile.Clear;
 
     /// <summary>The Steam peer, once a lobby is up. It is a MultiplayerPeerExtension, so Godot takes it as it is.</summary>
     public MultiplayerPeer? Peer { get; private set; }
@@ -124,7 +131,8 @@ public partial class SteamLobbyBootstrap : Node
         // no_delay stays off, and not by oversight. GodotSteam applies it per connection, to reliable messages too
         // (_get_steam_packet_flags), and Steam says it is invalid for reliable messages: a message that cannot go out
         // within ~200ms is dropped rather than queued. Right for per-tick state, wrong for the identity handshake.
-        // The same function maps UnreliableOrdered onto Reliable, so netfox's sync-state channel is reliable here.
+        // The same function maps Unreliable onto Steam's unreliable send, which object state uses, and
+        // UnreliableOrdered onto Reliable, which netfox-net does not use.
         peer.Set("no_nagle", true);
 
         var error = (Error)peer.Call(method, lobbyId).AsInt32();
@@ -138,7 +146,7 @@ public partial class SteamLobbyBootstrap : Node
         Peer = peer;
 
         // From here netfox is on its own: NetworkEvents starts the tick loop with the session, exactly as over ENet
-        Multiplayer.MultiplayerPeer = peer;
+        Multiplayer.MultiplayerPeer = Conditions == NetworkSimulator.Profile.Clear ? peer : new SimulatedMultiplayerPeer(peer, Conditions);
         LobbyReady?.Invoke(lobbyId);
     }
 
