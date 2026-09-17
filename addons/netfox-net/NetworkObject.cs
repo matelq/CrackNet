@@ -550,6 +550,7 @@ public partial class NetworkObject : Node
     public override void _ExitTree()
     {
         if (Engine.IsEditorHint()) return;
+        _body?.Exited();
         Context.NetworkObjectServer?.Deregister(this);
     }
 

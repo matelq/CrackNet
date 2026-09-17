@@ -26,6 +26,7 @@ internal abstract class PhysicsHandling
 
     public virtual void AuthorityChanged() { }
     public abstract void PhysicsProcess();
+    public virtual void Exited() { }
 
     protected bool IsHost => Object.Root!.Multiplayer.IsServer();
 
@@ -72,8 +73,63 @@ internal abstract class PhysicsHandling
             };
         }
 
+        /// <summary>Every shared 3D body in play, for <see cref="UpdateGhosts"/>.</summary>
+        // ponytail: every change visits every body; a spatial index when a game has hundreds of shared bodies
+        private static readonly List<Rigid3D> Shared = [];
+        private readonly HashSet<Rigid3D> _ghosts = [];
+
+        public override void Exited()
+        {
+            Shared.Remove(this);
+            foreach (var other in _ghosts) other._ghosts.Remove(this);
+            _ghosts.Clear();
+        }
+
+        /// <summary>
+        /// A body simulated here and a copy of one simulated elsewhere do not collide. The copy is kinematic and a
+        /// network delay behind: it pushed bodies here with infinite mass, which neither mass nor the solver's
+        /// corrective velocity limits, and shot them off. Only the peer simulating a body resolves its hits; this one
+        /// takes a copy before running into it (<see cref="TouchAhead"/>), and from then on both are simulated here.
+        /// Characters still collide with copies, so a player can stand on one.
+        /// </summary>
+        private void UpdateGhosts()
+        {
+            if (Object.ResolvedKind != NetworkObject.ObjectKind.Shared) return;
+            if (!Shared.Contains(this)) Shared.Add(this);
+            foreach (var other in Shared)
+            {
+                if (other == this) continue;
+                var apart = Object.Authority.IsLocal != other.Object.Authority.IsLocal;
+                if (apart == _ghosts.Contains(other)) continue;
+                if (apart)
+                {
+                    _body.AddCollisionExceptionWith(other._body);
+                    _ghosts.Add(other);
+                    other._ghosts.Add(this);
+                }
+                else
+                {
+                    _body.RemoveCollisionExceptionWith(other._body);
+                    other._body.RemoveCollisionExceptionWith(_body);
+                    _ghosts.Remove(other);
+                    other._ghosts.Remove(this);
+                }
+            }
+        }
+
+        /// <summary>Takes the copies this body will reach within a couple of frames, before it passes into them.</summary>
+        private void TouchAhead()
+        {
+            if (_body.LinearVelocity.Length() <= TouchSpeed) return;
+            var ahead = _body.LinearVelocity * (float)(2 * _body.GetPhysicsProcessDeltaTime());
+            foreach (var other in TouchingOf(_body, ahead))
+                if (!other.Authority.IsLocal && other.ResolvedKind == NetworkObject.ObjectKind.Shared && other.Root is RigidBody3D)
+                    Object.Touch(other);
+        }
+
         public override void AuthorityChanged()
         {
+            UpdateGhosts();
             SetFrozen(_body, !Object.Authority.IsLocal || Object.Holder != 0);
             // Whoever takes a body takes what rests on and against it: a frozen body reports no resting contacts, and
             // left alone a stack would hang in the air here until the host's word that it fell
@@ -92,7 +148,7 @@ internal abstract class PhysicsHandling
         /// <summary>The objects whose bodies touch this one: resting contacts too, which a frozen body reports none of.</summary>
         private IEnumerable<NetworkObject> Touching() => TouchingOf(_body);
 
-        private static IEnumerable<NetworkObject> TouchingOf(RigidBody3D body)
+        private static IEnumerable<NetworkObject> TouchingOf(RigidBody3D body, Vector3 offset = default)
         {
             if (!body.IsInsideTree()) yield break;
             var space = body.GetWorld3D().DirectSpaceState;
@@ -102,7 +158,7 @@ internal abstract class PhysicsHandling
                 var query = new PhysicsShapeQueryParameters3D
                 {
                     Shape = shape.Shape,
-                    Transform = shape.GlobalTransform,
+                    Transform = shape.GlobalTransform.Translated(offset),
                     Margin = 0.05f,
                     CollisionMask = body.CollisionMask,
                     Exclude = [body.GetRid()],
@@ -139,8 +195,10 @@ internal abstract class PhysicsHandling
             if (Object.ResolvedKind != NetworkObject.ObjectKind.Shared || !Object.Authority.IsLocal || Object.Holder != 0 || IsHost)
             {
                 Object.RestFrames = 0;
+                if (Object.Authority.IsLocal && Object.Holder == 0) TouchAhead();
                 return;
             }
+            TouchAhead();
             Object.RestFrames = _body.Sleeping || _body.LinearVelocity.Length() < RestSpeed ? Object.RestFrames + 1 : 0;
             if (Object.RestFrames < RestFramesBeforeReturning) return;
 

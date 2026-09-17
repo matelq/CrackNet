@@ -355,4 +355,45 @@ public partial class PhysicsObjectTests : HarnessSuite
         Expect.True(changes.Count == 0, $"the crate under a standing player changed authority: {string.Join(", ", changes)}");
         Expect.True(walkerHighest < 2.0f && walker.GlobalPosition.Y > 1.8f, $"the player was thrown up to {walkerHighest}, ended at {walker.GlobalPosition}");
     }
+
+    [Test]
+    public async Task AnotherPeersCrateDoesNotShoveMine()
+    {
+        // A copy of another peer's body is kinematic: it pushed this peer's bodies with infinite mass, which neither
+        // mass nor Rapier's corrective velocity limits. On the host, the copy of a crate thrown from inside a stack
+        // shot the stack off at 10-15 m/s
+        var standing = new[] { Crate(Host, "Standing", new Vector3(2, 0.5f, 0)), Crate(Client, "Standing", new Vector3(2, 0.5f, 0)) };
+        var moved = new[] { Crate(Host, "Moved", new Vector3(-2, 0.5f, 0)), Crate(Client, "Moved", new Vector3(-2, 0.5f, 0)) };
+        for (var i = 0; i < 30; i++) await NextFrame();
+
+        Expect.True(Net(moved[1]).TryClaim());
+        for (var i = 0; i < 90; i++)
+        {
+            moved[1].GlobalPosition = new Vector3(-2 + 5 * Math.Min(1, i / 60f), 0.5f, 0);
+            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+        }
+        for (var i = 0; i < 30; i++) await NextFrame();
+
+        Expect.Equal(1, Net(standing[0]).Authority.Peer, "nothing took the standing crate");
+        Expect.True(standing[0].GlobalPosition.DistanceTo(new Vector3(2, 0.5f, 0)) < 0.1f,
+            $"the host's crate was shoved to {standing[0].GlobalPosition} by the copy of the client's");
+    }
+
+    [Test]
+    public async Task AThrownCrateTakesAndKnocksWhatItHits()
+    {
+        // A crate simulated here passes through copies of other peers' crates, so it has to take one before reaching it
+        Network.LatencyMs = 150;
+        var target = new[] { Crate(Host, "Target", new Vector3(3, 0.5f, 0)), Crate(Client, "Target", new Vector3(3, 0.5f, 0)) };
+        var thrown = new[] { Crate(Host, "Thrown", new Vector3(0, 0.5f, 0)), Crate(Client, "Thrown", new Vector3(0, 0.5f, 0)) };
+        for (var i = 0; i < 30; i++) await NextFrame();
+
+        Expect.True(Net(thrown[1]).TryClaim());
+        await NextFrame();
+        Expect.True(Net(thrown[1]).Throw(new Vector3(8, 0, 0)));
+
+        Expect.True(await WaitUntil(() => target[1].GlobalPosition.X > 3.2f, 2),
+            $"the crate passed through or stopped: target at {target[1].GlobalPosition} authority {Net(target[1]).Authority.Peer}, thrown at {thrown[1].GlobalPosition}");
+        Expect.True(thrown[1].GlobalPosition.X < target[1].GlobalPosition.X, $"the thrown crate went through: {thrown[1].GlobalPosition} vs {target[1].GlobalPosition}");
+    }
 }
