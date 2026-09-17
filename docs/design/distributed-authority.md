@@ -154,12 +154,21 @@ Goal: a crate needs no code and a player needs only its own movement. Paid for i
   - `Shared`: taken by touch or grab and passes on contact (a crate, a ball);
   - `World`: authority stays put and does not pass (a lift, a door, the match score) - not necessarily the host's;
   - `Custom`: the flags by hand. No preset for "shared but does not pass on contact".
+  - `Auto` resolves `CharacterBody2D/3D` and plain `Node2D/3D` to `Personal`; `RigidBody2D/3D` and `VehicleBody3D`
+    to `Shared`; `AnimatableBody`, `StaticBody`, `Area` and non-spatial `Node`/`Control` to `World`. A grenade (a
+    rigid body that stays its thrower's) is the common case that picks `Personal` by hand.
 - **Built-in behaviour for physics roots:** freeze where not authoritative (with the Rapier re-set), contact
   monitoring and `Touch` on contact for rigid bodies, `Touch` on slide collisions for character bodies, return to the
   host at rest.
 - **`Knock(Vector3)`** built in: an impulse on a rigid body's authority, a `Knocked` event on a character's. The
   general event stays.
-- **One `Spawn` call** over a library-owned spawner instead of a `MultiplayerSpawner` per shooter.
+- **One `Spawn(scene, transform)` call** over a library-owned spawner instead of a `MultiplayerSpawner` per shooter.
+  It sends the scene path, with no registry of spawnable scenes (clients are trusted). No separate spawn data: what a
+  new object needs is `[Synced]`, and the object stays hidden until its first sample brings it.
+- **Grab:** `TryGrab()`, `Release()`, plus `Throw(Vector3 velocity)` so a throw's velocity is set by the library.
+- **Events:** `Send(Variant)` / `Received(int from, Variant)` instead of `SendToAuthority` / `EventReceived`.
+- **Diagnostics** out of the main API: sequences, `DisplayTick`, `SampleSent/Received` move to `Object.Diagnostics`,
+  a peer's playback status to `NetworkObjectServer.Diagnostics`.
 - **Removed:** `NetworkSchemas`, `PeerVisibilityFilter`; the public `NetworkTime` reduced to what games use.
 
 ## Tests the model needs
@@ -210,6 +219,7 @@ Goal: a crate needs no code and a player needs only its own movement. Paid for i
 - Extrapolating targets to the present for hit tests, in the style of Photon Fusion "Forecast". Revisit if dodges do
   not count on Casual or Realistic.
 - Sequence number overflow (review finding).
+- Typed events (`Send<T>` / `On<T>`) for several kinds of event per object without unpacking a `Variant`.
 - Smaller transforms per root type (position and yaw for an upright character, 2D rotation only). Everything sends the
   full transform until measurements ask.
 - Objects larger than a state packet. Today such an object warns and goes out oversized, fragmented by the transport.
