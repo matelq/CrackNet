@@ -187,6 +187,12 @@ Goal: a crate needs no code and a player needs only its own movement. Paid for i
 Judged by `docs/examples.md`; the owner found sections 3 (players and objects) and 5 (shooting) hard to read.
 Proposals came from independent Claude and Codex reviews.
 
+- **`this.` stays.** Extension members only apply to an explicit receiver, so a node's own calls read
+  `this.Authority.IsLocal`, `this.TakeKnockback(delta)`; on another node there is no `this` (`crate.TryClaim()`).
+  Considered and deliberately not done: a generator writing those members into each game class (they are already
+  `partial` for `[Synced]`), which would allow a bare `Authority.IsLocal`. It buys five characters for a rule about
+  which classes get the members and one more layer of generated code to explain. A base class such as
+  `NetworkCharacterBody3D` was rejected outright: it takes the game's one inheritance slot.
 - **`IAuthorityChanged`** on the node itself (`OnAuthorityChanged`, called on every peer after the change), beside the
   `AuthorityChanged` event, which is for watching another object: extension members cannot declare events, and a node
   subscribing to its own would have to unsubscribe in `_ExitTree`.
