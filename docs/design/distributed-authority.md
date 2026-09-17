@@ -263,10 +263,21 @@ other peer shows late overlaps what is around it.
   may pass visibly into a stack on the host. Backup if that looks bad in playtests: simulate every body on every peer
   and pull copies towards the received state (Fiedler's VR demo), which gives finite-mass contacts at the price of CPU,
   correction jitter and a different playback model.
-- **Standing or riding** on another peer's body: a character's position is sent relative to its base, and every peer
-  places it on its own copy of that base. Done with carrying (below), which needs the same mechanism.
-- **Handover:** decided after measuring with ghosts in place. Launches are a physics problem (infinite-mass pushes,
-  depenetration), not a presentation one; a presentation blend comes after, if a visible snap remains.
+Two decisions here are made but not built, and both matter enough to keep in sight:
+
+- **Base-relative positions for standing or riding** (with carrying, below: the same mechanism). A character's position
+  is sent relative to the body it stands on, and every peer places it on its own copy of that body, so a player riding
+  a crate or a lift does not slide against it by a playback delay. Since copies are frozen static, a player on a moving
+  copy is not carried at all today, only shoved by it.
+  - Whether a player rides at all stays the game's choice, through Godot's own `platform_floor_layers` and
+    `platform_on_leave` on its `CharacterBody3D`: a game that excludes the crate layer keeps a player standing still on
+    a crate rolling away. The library takes as the base whatever the engine already reports as that character's floor,
+    so opting out of riding also opts out of the base, with no extra API. Riding stays the default: co-op wants lifts
+    and crates to carry.
+- **Handover smoothing.** A launch is physics (infinite-mass pushes, kinematic velocity, depenetration) and is fixed as
+  physics; what a handover can still leave is a visible snap of a metre or so, the playback delay's worth of position.
+  Photon Fusion corrects that in presentation only, over about 0.15 s, and Fiedler blends extrapolation error the same
+  way. To add when a playtest shows the snap rather than pre-emptively, and never by blending the physics body.
 - Already in: a character does not take what it stands on; a group touched by any character does not go back to the
   host; Rapier's `normalized_max_corrective_velocity` is 2 in the playground project.
 - **Copies are frozen static, not kinematic.** Rapier gives a kinematic body the velocity of its last move; a copy
