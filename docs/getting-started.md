@@ -69,13 +69,10 @@ public partial class Player : CharacterBody3D
 {
     [Synced] public int Health { get; set; }
 
-    private NetworkObject Object => GetNode<NetworkObject>("NetworkObject");
-
-    public override void _Ready() => Object.Knocked += impulse => Velocity += impulse;
-
     public override void _PhysicsProcess(double delta)
     {
-        if (!Object.Authority.IsLocal) return;   // everyone else plays back what this peer sends
+        if (!this.Net().Authority.IsLocal) return;   // everyone else plays back what this peer sends
+        Velocity += this.Net().TakeKnockback(delta);  // pushes from other players
         // read input, MoveAndSlide
     }
 }

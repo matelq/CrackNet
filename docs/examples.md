@@ -25,13 +25,11 @@ Player (CharacterBody3D)      Player.cs
 ```csharp
 public partial class Player : CharacterBody3D
 {
-    public NetworkObject Object => GetNode<NetworkObject>("NetworkObject");
-
     public override void _Ready() => AddToGroup("players");
 
     public override void _PhysicsProcess(double delta)
     {
-        if (!Object.Authority.IsLocal) return;   // other peers only play this player back
+        if (!this.Net().Authority.IsLocal) return;   // other peers only play this player back
 
         var input = Input.GetVector("left", "right", "forward", "back");
         Velocity = new Vector3(input.X * 6, Velocity.Y - 14 * (float)delta, input.Y * 6);
@@ -81,19 +79,11 @@ host.
 
 ## 3. Players and objects
 
-Walking into a crate already takes it. A character body does not push rigid bodies in Godot, so push it yourself,
-after taking it so the push lands on this peer's simulation:
+Walking into a crate takes it. To push it as well, set **Push Strength** on the player's `NetworkObject` in the
+inspector (0.6 is a gentle shove): the library pushes the rigid bodies the character slides into, on this peer's
+simulation. No code.
 
-<!-- check: body Player -->
-```csharp
-// In Player._PhysicsProcess, after MoveAndSlide
-for (var i = 0; i < GetSlideCollisionCount(); i++)
-    if (GetSlideCollision(i).GetCollider() is RigidBody3D body && NetworkObject.Of(body) is { } crate
-        && Object.Touch(crate))
-        body.ApplyCentralImpulse(Velocity.Normalized() * 0.6f);
-```
-
-Grab, carry and throw:
+Claim, carry and throw:
 
 <!-- check: members Player -->
 ```csharp
@@ -103,10 +93,10 @@ private void GrabOrThrow(RigidBody3D nearest)
 {
     if (_held is { } held)
     {
-        NetworkObject.Of(held)!.Throw(-GlobalBasis.Z * 9 + Vector3.Up * 2);
+        held.Throw(-GlobalBasis.Z * 9 + Vector3.Up * 2);
         _held = null;
     }
-    else if (NetworkObject.Of(nearest)!.TryGrab())
+    else if (nearest.TryClaim())
     {
         _held = nearest;
     }
@@ -115,35 +105,28 @@ private void GrabOrThrow(RigidBody3D nearest)
 
 <!-- check: body Player -->
 ```csharp
-// In _PhysicsProcess: a held body is frozen, so it goes where it is put
+// In _PhysicsProcess: a claimed body is frozen, so it goes where it is put
 if (_held is not null) _held.GlobalPosition = GlobalPosition - GlobalBasis.Z * 1.1f + Vector3.Up * 0.6f;
 ```
 
-What you get: nobody else can take a held crate; a thrown one flies on the thrower's simulation and everyone sees
+What you get: nobody else can take a claimed crate; a thrown one flies on the thrower's simulation and everyone sees
 that flight.
 
 ## 4. Players and players
 
 Put players on a collision layer their own mask leaves out: each peer would otherwise push a copy of the other player
-from the past. A push is a knock, applied by the pushed player's own peer:
+from the past. A push is delivered to the pushed player's own peer, which adds it to its knockback:
 
 <!-- check: members Player -->
 ```csharp
 // The pusher, on its own peer
-private void Push(Player other) => other.Object.Knock(-GlobalBasis.Z * 4);
-
-// The pushed player
-private Vector3 _knockback;
+private void Shove(Player other) => this.Push(other, -GlobalBasis.Z * 4);
 ```
 
 <!-- check: body Player -->
 ```csharp
-// In _Ready
-Object.Knocked += impulse => _knockback += impulse;
-
-// In _PhysicsProcess, before MoveAndSlide
-Velocity += _knockback;
-_knockback = _knockback.MoveToward(Vector3.Zero, 20 * (float)delta);
+// The pushed player, in _PhysicsProcess before MoveAndSlide
+Velocity += this.Net().TakeKnockback(delta);
 ```
 
 What you get: exactly one application of each push, on the peer that simulates the pushed player, wherever the push
@@ -175,9 +158,9 @@ public partial class Shot : Node3D
 
         foreach (var player in GetTree().GetNodesInGroup("players").OfType<Player>())
         {
-            if (player.Object.Authority.Peer == Object.Authority.Peer) continue;   // not the shooter
+            if (player.Net().Authority.Peer == Object.Authority.Peer) continue;    // not the shooter
             if (player.GlobalPosition.DistanceTo(GlobalPosition) > 0.7f) continue;
-            player.Object.Knock(Velocity.Normalized() * 6);
+            this.Push(player, Velocity.Normalized() * 6);
             Object.Despawn();                     // in the same decision: no second hit, no passing through
             return;
         }
@@ -203,5 +186,5 @@ private void Shoot()
 What you get: the shot appears at once for the shooter and from the muzzle for everyone else; the shooter's screen
 decides what it hit; other peers see it vanish when their playback reaches the hit.
 
-To hit a crate as well, take it first and then knock it: `Object.Touch(crate); crate.Knock(impulse);`. For hitscan,
-the shooter runs an ordinary ray query instead of moving a shot.
+`this.Push(target, impulse)` is the same for a crate: it takes the crate for the shooter and it flies at once. For
+hitscan, the shooter runs an ordinary ray query instead of moving a shot.

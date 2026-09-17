@@ -36,12 +36,12 @@ public partial class PhysicsObjectTests : HarnessSuite
         return crate;
     }
 
-    private static Walker Walker(NetfoxStack stack, int peer, Vector3 position, Vector3 velocity)
+    private static Walker Walker(NetfoxStack stack, int peer, Vector3 position, Vector3 velocity, float pushStrength = 0)
     {
         var walker = new Walker { Name = $"Walker{peer}", Position = position, Walk = velocity };
         walker.SetMultiplayerAuthority(peer);
         walker.AddChild(new CollisionShape3D { Shape = new CapsuleShape3D { Radius = 0.4f, Height = 1.8f } });
-        walker.AddChild(new NetworkObject { Name = "NetworkObject" });
+        walker.AddChild(new NetworkObject { Name = "NetworkObject", PushStrength = pushStrength });
         World(stack).AddChild(walker);
         return walker;
     }
@@ -79,22 +79,23 @@ public partial class PhysicsObjectTests : HarnessSuite
     }
 
     [Test]
-    public async Task AKnockPushesARigidBodyOnItsAuthorityAndRaisesKnockedOnACharacter()
+    public async Task APushReachesTheAuthorityOfARigidBodyAndOfACharacter()
     {
         var crates = new[] { Crate(Host, "Crate", new Vector3(0, 0.5f, 0)), Crate(Client, "Crate", new Vector3(0, 0.5f, 0)) };
         var walkers = new[] { Walker(Host, 2, new Vector3(5, 1, 0), Vector3.Zero), Walker(Client, 2, new Vector3(5, 1, 0), Vector3.Zero) };
         var knocked = new List<(int Peer, Vector3 Impulse)>();
         foreach (var walker in walkers)
-            Net(walker).Knocked += impulse => knocked.Add((walker.Multiplayer.GetUniqueId(), impulse));
+            Net(walker).Pushed += impulse => knocked.Add((walker.Multiplayer.GetUniqueId(), impulse));
         await NextFrame();
 
-        Net(crates[1]).Knock(new Vector3(0, 0, 8));
-        Net(walkers[0]).Knock(new Vector3(3, 0, 0));
+        Net(crates[1]).Push(new Vector3(0, 0, 8));
+        Net(walkers[0]).Push(new Vector3(3, 0, 0));
 
         Expect.True(await WaitUntil(() => crates[0].LinearVelocity.Z > 1 && knocked.Count > 0, 3),
             $"crate velocity {crates[0].LinearVelocity}, knocked {knocked.Count}");
         for (var i = 0; i < 10; i++) await NextFrame();
         Expect.SequenceEqual([(2, new Vector3(3, 0, 0))], knocked);
+        Expect.Equal(new Vector3(3, 0, 0), walkers[1].Net().TakeKnockback(0), "the push waits in the knockback too");
     }
 
     [Test]
@@ -103,7 +104,7 @@ public partial class PhysicsObjectTests : HarnessSuite
         var crates = new[] { Crate(Host, "Crate", new Vector3(0, 0.5f, 0)), Crate(Client, "Crate", new Vector3(0, 0.5f, 0)) };
         await NextFrame();
 
-        Expect.True(Net(crates[1]).TryGrab());
+        Expect.True(Net(crates[1]).TryClaim());
         Expect.True(crates[1].Freeze, "a held crate is moved by hand");
         Expect.True(Net(crates[1]).Throw(new Vector3(6, 3, 0)));
 
@@ -139,5 +140,65 @@ public partial class PhysicsObjectTests : HarnessSuite
         await WaitUntil(() => reachedClient.Count == 3, 2);
         Expect.True(reachedClient.Count == 3 && rejected.Count == 0,
             $"reached the client on the host: {string.Join(", ", reachedClient)}; taken back from the client: {string.Join(", ", rejected)}");
+    }
+
+    [Test]
+    public async Task StrikingACrateTakesItAndItFliesAtOnce()
+    {
+        // Slow enough that waiting for the host would show
+        Network.LatencyMs = 150;
+        var crates = new[] { Crate(Host, "Crate", new Vector3(0, 0.5f, 0)), Crate(Client, "Crate", new Vector3(0, 0.5f, 0)) };
+        Walker(Host, 2, new Vector3(-3, 1, 0), Vector3.Zero);
+        var striker = Walker(Client, 2, new Vector3(-3, 1, 0), Vector3.Zero);
+        for (var i = 0; i < 5; i++) await NextFrame();
+
+        striker.Push(crates[1], new Vector3(0, 0, 8));
+        Expect.Equal(2, crates[1].Net().Authority.Peer, "the striker took the crate");
+        for (var i = 0; i < 3; i++) await NextFrame();
+        Expect.True(crates[1].LinearVelocity.Z > 1, $"the crate did not fly at once on the striker's peer: {crates[1].LinearVelocity}");
+        Expect.True(await WaitUntil(() => crates[0].Net().Authority.Peer == 2 && crates[0].GlobalPosition.Z > 0.3f, 3),
+            $"the host never saw it: authority {crates[0].Net().Authority.Peer}, at {crates[0].GlobalPosition}");
+    }
+
+    [Test]
+    public async Task StrikingAPlayerPushesItOnItsOwnPeer()
+    {
+        var pushed = new List<(int Peer, Vector3 Impulse)>();
+        var targets = new[] { Walker(Host, 1, new Vector3(3, 1, 0), Vector3.Zero), Walker(Client, 1, new Vector3(3, 1, 0), Vector3.Zero) };
+        foreach (var target in targets)
+            target.Net().Pushed += impulse => pushed.Add((target.Multiplayer.GetUniqueId(), impulse));
+        Walker(Host, 2, new Vector3(-3, 1, 0), Vector3.Zero);
+        var striker = Walker(Client, 2, new Vector3(-3, 1, 0), Vector3.Zero);
+        for (var i = 0; i < 5; i++) await NextFrame();
+
+        striker.Push(targets[1], new Vector3(4, 0, 0));
+        Expect.True(await WaitUntil(() => pushed.Count > 0, 3), "never pushed");
+        for (var i = 0; i < 10; i++) await NextFrame();
+        Expect.SequenceEqual([(1, new Vector3(4, 0, 0))], pushed);
+        Expect.Equal(1, targets[1].Net().Authority.Peer, "a player is never taken");
+    }
+
+    [Test]
+    public async Task PushStrengthPushesWhatTheCharacterWalksInto()
+    {
+        async Task<float> Travel(float strength, string name)
+        {
+            var crates = new[] { Crate(Host, name, new Vector3(0, 0.5f, 0)), Crate(Client, name, new Vector3(0, 0.5f, 0)) };
+            var walkerName = $"Walker2";
+            Walker(Host, 2, new Vector3(-2, 1, 0), Vector3.Zero, strength);
+            Walker(Client, 2, new Vector3(-2, 1, 0), new Vector3(3, 0, 0), strength);
+            for (var i = 0; i < 90; i++) await NextFrame();
+            var travel = crates[1].GlobalPosition.X;
+            foreach (var stack in new[] { Host, Client })
+            {
+                stack.GetNode($"World/{name}").Free();
+                stack.GetNode($"World/{walkerName}").Free();
+            }
+            return travel;
+        }
+
+        var without = await Travel(0, "CrateA");
+        var with = await Travel(2, "CrateB");
+        Expect.True(with > without + 0.5f, $"with PushStrength the crate moved to {with}, without to {without}");
     }
 }

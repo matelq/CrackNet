@@ -80,8 +80,8 @@ public partial class EventTests : HarnessSuite
         var (crate, received) = SpawnEverywhere("Crate", authority: 1);
         await NextFrame();
 
-        Expect.True(crate[1].Object.TryGrab());
-        Expect.True(crate[2].Object.TryGrab());
+        Expect.True(crate[1].Object.TryClaim());
+        Expect.True(crate[2].Object.TryClaim());
         // Peer 3 thinks it simulates the crate and hits it; the host is about to say it does not
         crate[2].Object.Send("hit");
 

@@ -34,7 +34,7 @@ the host at rest, a character body touches what it slides into. Games call:
 
 | Call | When |
 |---|---|
-| `TryGrab()` | This peer picks the object up: authority and ownership. The body is frozen while held; move it by hand. |
+| `TryClaim()` | The object becomes this peer's: authority and ownership, nobody else can take it. The body is frozen while claimed; move it by hand. |
 | `Throw(velocity)` | Lets go with a velocity: the throw flies on this peer's simulation. |
 | `Release()` | Lets go without one. |
 | `Touch(other)` | Contact the physics engine does not report: a projectile that moves itself, a melee swing. |
@@ -46,15 +46,21 @@ Conflicts are settled by the host. A grab beats a touch, and of two touches the 
 The rule to hold on to: **every interaction has exactly one arbiter**, the authority of the object that started it.
 If two peers can both decide the same hit or grab, the mechanic is not finished.
 
-## Knocks and events
+## Pushes and events
+
+Every call below also works on the game's own node (`crate.Push(...)`); `node.Net()` returns its `NetworkObject`.
 
 ```csharp
-target.Object.Knock(impulse);                            // from anyone
-Object.Knocked += impulse => _knockback += impulse;      // a character's authority applies it
+this.Push(target, impulse);                              // my object struck yours: takes a crate, pushes a player
+target.Push(impulse);                                    // nothing doing the pushing: an explosion, a trap
+Velocity += this.Net().TakeKnockback(delta);             // a character applies the pushes it received
 ```
 
-`Knock` reaches whoever simulates the object: a rigid body takes the impulse itself, anything else raises `Knocked`.
-Players do not collide with each other, since each would push a copy of the other in the past: a push is a knock.
+A push reaches whoever simulates the object: a rigid body takes the impulse itself; anything else adds it to
+`TakeKnockback` and raises `Pushed`. `Push(target, impulse)` first takes the target when it can, so a crate flies on
+the striker's simulation at once; if the host gives the crate to someone else instead, that push is lost with the
+claim. Players do not collide with each other, since each would push a copy of the other in the past: a push is how
+they shove. **Push Strength** on a character's `NetworkObject` pushes the rigid bodies it walks into.
 
 ```csharp
 target.Object.Send("opened");                            // from anyone
@@ -68,9 +74,9 @@ a claim the host has not confirmed yet: then it waits for the host's answer, and
 ## Projectiles and hitscan
 
 A projectile belongs to its shooter: spawn it with `NetworkObject.Spawn`, and its plain `Node3D` root makes it
-`Personal`. The shooter's peer moves it and decides every hit against the targets it displays: it knocks the target
+`Personal`. The shooter's peer moves it and decides every hit against the targets it displays: it pushes the target
 and calls `Despawn()` in the same frame, so a projectile cannot pass through its first target or hit twice. To push a
-crate with one, `Touch` the crate first, then `Knock` it. `PlaygroundShot` is the worked example.
+crate with one, `this.Push(crate, impulse)` takes it and pushes it. `PlaygroundShot` is the worked example.
 
 Hitscan needs nothing extra: the shooter runs an ordinary ray query. Bodies other peers simulate sit frozen at their
 displayed positions, so the ray hits what the shooter sees.

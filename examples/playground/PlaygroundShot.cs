@@ -60,14 +60,13 @@ public partial class PlaygroundShot : Node3D
                                      || crateHit.GlobalPosition.DistanceTo(GlobalPosition)
                                      <= playerHit.GlobalPosition.DistanceTo(GlobalPosition)))
         {
-            Object.Touch(crateHit.Object);
-            crateHit.Object.Knock(Velocity.Normalized() * CrateImpulse);
+            this.Push(crateHit, Velocity.Normalized() * CrateImpulse);
             Consume();
             return;
         }
         if (playerHit is not null)
         {
-            playerHit.Object.Knock(Velocity.Normalized() * PlayerKnock);
+            this.Push(playerHit, Velocity.Normalized() * PlayerKnock);
             Consume();
             return;
         }

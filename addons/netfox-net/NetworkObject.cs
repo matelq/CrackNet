@@ -205,8 +205,11 @@ public partial class NetworkObject : Node
             this, nextDepth, limit);
     }
 
-    /// <summary>Takes ownership and authority. False when someone else holds it.</summary>
-    public bool TryGrab()
+    /// <summary>
+    /// Makes the object this peer's: authority and ownership, so nobody else can take it until it is released. A physics
+    /// body is frozen while claimed; the game moves it. False when someone else holds it.
+    /// </summary>
+    public bool TryClaim()
     {
         if (!Transferable || (Holder != 0 && Holder != LocalPeer)) return false;
         if (Holder == LocalPeer) return true;
@@ -242,10 +245,29 @@ public partial class NetworkObject : Node
     public event Action<int, Variant>? Received;
 
     /// <summary>
-    /// Raised on the authority of a root that is not a rigid body, exactly once per <see cref="Knock"/>: the impulse, for
-    /// the game to apply as knockback. A rigid body takes the impulse itself.
+    /// Raised on the authority of a root that is not a rigid body, exactly once per push: the impulse. It is also added to
+    /// <see cref="TakeKnockback"/>, so handle one or the other. A rigid body takes the impulse itself.
     /// </summary>
-    public event Action<Vector3>? Knocked;
+    public event Action<Vector3>? Pushed;
+
+    /// <summary>
+    /// How hard a character body pushes the rigid bodies it slides into, along the contact normal; 0 is off. The library
+    /// takes the body and pushes it on this peer's simulation.
+    /// </summary>
+    [Export(PropertyHint.Range, "0,20,0.05,or_greater")] public float PushStrength { get; set; }
+
+    private Vector3 _knockback;
+
+    /// <summary>
+    /// The pushes received and not yet used up, decaying by <paramref name="decay"/> per second: add it to a character's
+    /// velocity each physics frame, before moving.
+    /// </summary>
+    public Vector3 TakeKnockback(double delta, float decay = 20)
+    {
+        var knockback = _knockback;
+        _knockback = _knockback.MoveToward(Vector3.Zero, decay * (float)delta);
+        return knockback;
+    }
 
     /// <summary>
     /// Delivers <paramref name="payload"/> to whoever is this object's authority, reliably and exactly once, even if
@@ -254,12 +276,26 @@ public partial class NetworkObject : Node
     public void Send(Variant payload) => Deliver(LocalPeer, EventKind.User, payload, hops: 0);
 
     /// <summary>
-    /// Pushes this object from wherever the caller is: its authority applies <paramref name="impulse"/> to a rigid body
-    /// (X and Y for 2D) or raises <see cref="Knocked"/>. Delivered like <see cref="Send"/>.
+    /// Pushes this object with nothing doing the pushing - an explosion, a trap: its authority applies
+    /// <paramref name="impulse"/> to a rigid body (X and Y for 2D) or raises <see cref="Pushed"/>. Delivered like
+    /// <see cref="Send"/>.
     /// </summary>
-    public void Knock(Vector3 impulse) => Deliver(LocalPeer, EventKind.Knock, impulse, hops: 0);
+    public void Push(Vector3 impulse) => Deliver(LocalPeer, EventKind.Push, impulse, hops: 0);
 
-    internal enum EventKind { User = 0, Knock = 1 }
+    /// <summary>
+    /// This object struck <paramref name="target"/>: takes the target when it can (<see cref="Touch"/>), so a crate flies
+    /// on this peer's simulation at once, then pushes it. A player, which cannot be taken, is pushed on its own peer. If
+    /// the host gives the target to someone else, the winner's simulation stands and this push is lost with the claim.
+    /// </summary>
+    public void Push(NetworkObject target, Vector3 impulse)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        Touch(target);
+        if (target.IsAuthority) target.Raise(LocalPeer, EventKind.Push, impulse);
+        else target.Push(impulse);
+    }
+
+    internal enum EventKind { User = 0, Push = 1 }
 
     /// <summary>
     /// Raises an event here if this peer is the authority, and passes it on otherwise. While this peer's own request
@@ -285,7 +321,10 @@ public partial class NetworkObject : Node
         {
             case RigidBody3D body: body.ApplyCentralImpulse(impulse); break;
             case RigidBody2D body: body.ApplyCentralImpulse(new Vector2(impulse.X, impulse.Y)); break;
-            default: Knocked?.Invoke(impulse); break;
+            default:
+                _knockback += impulse;
+                Pushed?.Invoke(impulse);
+                break;
         }
     }
 

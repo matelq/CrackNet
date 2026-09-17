@@ -16,7 +16,6 @@ public partial class PlaygroundPlayer : CharacterBody3D
     public int Peer { get; private set; }
     public int Slot { get; private set; }
 
-    private Vector3 _knockback;
     private PlaygroundCrate? _held;
     private bool _grabWasDown, _pushWasDown, _shootWasDown;
 
@@ -40,7 +39,8 @@ public partial class PlaygroundPlayer : CharacterBody3D
         player.AddChild(new MeshInstance3D { Mesh = new CapsuleMesh { Radius = 0.4f, Height = 1.8f }, MaterialOverride = new StandardMaterial3D { AlbedoColor = color } });
         player.AddChild(new MeshInstance3D { Mesh = new BoxMesh { Size = new Vector3(0.2f, 0.2f, 0.4f) }, Position = new Vector3(0, 0.5f, -0.45f), MaterialOverride = new StandardMaterial3D { AlbedoColor = Colors.Black } });
 
-        player.Object = new NetworkObject { Name = "NetworkObject" };
+        // Crates walked into are taken and pushed by the NetworkObject itself
+        player.Object = new NetworkObject { Name = "NetworkObject", PushStrength = 0.6f };
         player.AddChild(player.Object);
 
         return player;
@@ -50,7 +50,6 @@ public partial class PlaygroundPlayer : CharacterBody3D
 
     public override void _Ready()
     {
-        Object.Knocked += impulse => _knockback += impulse;
         if (Object.Authority.IsLocal) AddToGroup("local_player");
     }
 
@@ -65,14 +64,12 @@ public partial class PlaygroundPlayer : CharacterBody3D
             (Input.IsPhysicalKeyPressed(Key.S) ? 1 : 0) - (Input.IsPhysicalKeyPressed(Key.W) ? 1 : 0)).Normalized();
         if (bot is null && !GetWindow().HasFocus()) input = Vector3.Zero;
 
-        var velocity = new Vector3(input.X * Speed, Velocity.Y, input.Z * Speed) + _knockback;
-        _knockback = _knockback.MoveToward(Vector3.Zero, 20 * dt);
+        var velocity = new Vector3(input.X * Speed, Velocity.Y, input.Z * Speed) + Object.TakeKnockback(delta);
         velocity.Y = IsOnFloor() && GetWindow().HasFocus() && Input.IsPhysicalKeyPressed(Key.Space) ? JumpSpeed : velocity.Y - Gravity * dt;
         if (input != Vector3.Zero) Rotation = new Vector3(0, Mathf.Atan2(-input.X, -input.Z), 0);
 
         Velocity = velocity;
         MoveAndSlide();
-        PushCrates(input);
 
         if (Pressed(bot?.Grab, Key.F, ref _grabWasDown)) GrabOrThrow();
         if (Pressed(bot?.Push, Key.E, ref _pushWasDown)) PushPlayers();
@@ -92,30 +89,19 @@ public partial class PlaygroundPlayer : CharacterBody3D
         return pressed;
     }
 
-    private void PushCrates(Vector3 input)
-    {
-        for (var i = 0; i < GetSlideCollisionCount(); i++)
-        {
-            if (GetSlideCollision(i).GetCollider() is not PlaygroundCrate crate || crate == _held) continue;
-            // The NetworkObject takes the crate after this frame's movement anyway; taking it now lets the push land
-            // on this peer's simulation this frame
-            if (Object.Touch(crate.Object)) crate.ApplyCentralImpulse(input * 0.6f);
-        }
-    }
-
     private void GrabOrThrow()
     {
         if (_held is { } held)
         {
             _held = null;
-            held.Object.Throw(Forward * ThrowSpeed + Vector3.Up * 2);
+            held.Throw(Forward * ThrowSpeed + Vector3.Up * 2);
             return;
         }
 
         var nearest = GetTree().GetNodesInGroup("crates").OfType<PlaygroundCrate>()
             .Where(crate => crate.GlobalPosition.DistanceTo(GlobalPosition + Forward) < 1.6f)
             .MinBy(crate => crate.GlobalPosition.DistanceTo(GlobalPosition));
-        if (nearest is null || !nearest.Object.TryGrab()) return;
+        if (nearest is null || !nearest.TryClaim()) return;
         _held = nearest;
     }
 
@@ -124,7 +110,7 @@ public partial class PlaygroundPlayer : CharacterBody3D
         foreach (var other in GetParent().GetChildren().OfType<PlaygroundPlayer>())
         {
             if (other == this || other.GlobalPosition.DistanceTo(GlobalPosition + Forward) > 1.5f) continue;
-            other.Object.Knock((Forward + Vector3.Up * 0.1f) * PushStrength);
+            other.Push((Forward + Vector3.Up * 0.1f) * PushStrength);
         }
     }
 

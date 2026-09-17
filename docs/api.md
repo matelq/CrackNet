@@ -102,6 +102,14 @@ Tracks network identities: nodes are referenced by scene path, replaced with com
 | method | `ResetSession` | Forgets the ids exchanged with peers, keeping the nodes registered locally. |
 | method | `ResolveReference(System.Int32,Netfox.Core.Data.NetworkIdentityReference,System.Boolean)` | Resolves a reference received from `peer`. Ids are in our local id space; names queue our id for that peer. |
 
+### NetworkNodeExtensions
+
+The everyday calls, on the game's own nodes: `crate.Push(impulse)` rather than `GetNode<NetworkObject>("NetworkObject").Push(impulse)`. Each resolves the node's `NetworkObject`.
+
+| | Member | Summary |
+|---|---|---|
+| method | `Net(Godot.Node)` | The `NetworkObject` replicating `node`: registered with it as root, or its child. |
+
 ### NetworkObject
 
 One replicated object. While its root is this peer's multiplayer authority it sends the root's transform, velocity for a physics body, and the `[Synced]` properties of its subtree; otherwise it plays them back from the authority's samples, a few ticks behind, on the clock shared by everything that peer sends. See docs/design/distributed-authority.md. `Kind` decides how authority moves, and for a physics body the library does the rest: it freezes the body where another peer simulates it, passes authority on contact and hands a settled body back to the host. A nested `NetworkObject` owns its own subtree: a crate carried inside a player is not part of the player.
@@ -116,6 +124,7 @@ One replicated object. While its root is this peer's multiplayer authority it se
 | property | `LastSentBody` | What this peer last sent for the object, and when: an unchanged object is not sent again for a while. |
 | property | `MaxSpreadDepth` | Maximum contacts from the source of a spread chain, or -1 for unlimited. |
 | property | `PendingRequest` | The id of this guest's latest authority request the host has not answered yet, or 0. |
+| property | `PushStrength` | How hard a character body pushes the rigid bodies it slides into, along the contact normal; 0 is off. The library takes the body and pushes it on this peer's simulation. |
 | property | `ResolvedKind` | `Kind` with `Auto` resolved from the root's type. |
 | property | `Root` | The node that is the object: authority, identity and the synced subtree. The parent by default. |
 | property | `SpreadsAuthority` | Whether this object passes its authority on with `NetworkObject`. Set by `Kind`. |
@@ -128,18 +137,20 @@ One replicated object. While its root is this peer's multiplayer authority it se
 | method | `Despawn` | Ends this authoritative object's timeline. It is hidden and stops processing here immediately; remote peers hide it when their playback reaches the flagged final sample, and the root is freed after the playback grace period so a `MultiplayerSpawner` cannot remove it from observers early. |
 | method | `IsNewer(System.Int32,System.Int32)` | True when ( `ownershipSequence`, `authoritySequence`) is newer than what this object has. |
 | method | `KindFor(Godot.Node)` | What `Auto` resolves to for a root of this type. |
-| method | `Knock(Godot.Vector3)` | Pushes this object from wherever the caller is: its authority applies `impulse` to a rigid body (X and Y for 2D) or raises `Knocked`. Delivered like `Variant`. |
 | method | `Of(Godot.Node)` | The object whose root is `root`, or null when it is not a registered object. |
+| method | `Push(Godot.Vector3)` | Pushes this object with nothing doing the pushing - an explosion, a trap: its authority applies `impulse` to a rigid body (X and Y for 2D) or raises `Pushed`. Delivered like `Variant`. |
+| method | `Push(Netfox.NetworkObject,Godot.Vector3)` | This object struck `target`: takes the target when it can (`NetworkObject`), so a crate flies on this peer's simulation at once, then pushes it. A player, which cannot be taken, is pushed on its own peer. If the host gives the target to someone else, the winner's simulation stands and this push is lost with the claim. |
 | method | `Release` | Lets go of a held object. This peer keeps simulating it until someone else touches it. |
 | method | `Send(Godot.Variant)` | Delivers `payload` to whoever is this object's authority, reliably and exactly once, even if authority moves while it is on its way. On the authority itself it is raised at once. |
 | method | `Spawn``1(Godot.Node,Godot.PackedScene,System.Action{``0},System.Int32)` | Instances `scene` on every peer; see `Int32`. |
+| method | `TakeKnockback(System.Double,System.Single)` | The pushes received and not yet used up, decaying by `decay` per second: add it to a character's velocity each physics frame, before moving. |
 | method | `Teleport` | The next state this peer sends applies without interpolation on the others: a respawn, not a flight. |
 | method | `Throw(Godot.Vector3)` | Lets go of a held object with `velocity`: the throw flies on this peer's simulation. |
 | method | `Touch(Netfox.NetworkObject)` | Passes this object's authority to `other` after contact. Physics bodies call it themselves; call it for contact the physics engine does not report. The source's depth limit follows the whole chain; the host verifies this object as the cause and arbitrates opposing requests. |
-| method | `TryGrab` | Takes ownership and authority. False when someone else holds it. |
+| method | `TryClaim` | Makes the object this peer's: authority and ownership, so nobody else can take it until it is released. A physics body is frozen while claimed; the game moves it. False when someone else holds it. |
 | method | `UnsupportedReason(Godot.Node)` | Why a root of this type cannot be replicated, or null when it can. |
 | event | `AuthorityChanged` | Raised after the authority or the holder changed, on every peer. |
-| event | `Knocked` | Raised on the authority of a root that is not a rigid body, exactly once per `Vector3`: the impulse, for the game to apply as knockback. A rigid body takes the impulse itself. |
+| event | `Pushed` | Raised on the authority of a root that is not a rigid body, exactly once per push: the impulse. It is also added to `Single`, so handle one or the other. A rigid body takes the impulse itself. |
 | event | `Received` | Raised on the authority, exactly once per `Variant` call anywhere: the peer that sent it and what it sent. |
 
 ### NetworkObjectServer

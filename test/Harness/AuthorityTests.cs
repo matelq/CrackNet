@@ -40,8 +40,8 @@ public partial class AuthorityTests : HarnessSuite
         var crate = SpawnEverywhere("Crate");
         await NextFrame();
 
-        Expect.True(crate[1].Object.TryGrab());
-        Expect.True(crate[2].Object.TryGrab());
+        Expect.True(crate[1].Object.TryClaim());
+        Expect.True(crate[2].Object.TryClaim());
 
         // First to the host holds it; the later grab does not take it out of the holder's hands
         Expect.True(await WaitUntil(() => Agree(crate, 2, 2), 3), Describe(crate));
@@ -49,7 +49,7 @@ public partial class AuthorityTests : HarnessSuite
         Expect.True(Agree(crate, 2, 2), Describe(crate));
 
         // The loser was corrected, and knows it
-        Expect.False(crate[2].Object.TryGrab());
+        Expect.False(crate[2].Object.TryClaim());
     }
 
     [Test]
@@ -65,7 +65,7 @@ public partial class AuthorityTests : HarnessSuite
 
         Expect.True(crate[1].Object.Authority.Take());
         crate[1].Object.Authority.ReturnToHost();
-        Expect.True(crate[2].Object.TryGrab());
+        Expect.True(crate[2].Object.TryClaim());
 
         Expect.True(await WaitUntil(() => Agree(crate, 3, 3), 3), Describe(crate));
     }
@@ -78,7 +78,7 @@ public partial class AuthorityTests : HarnessSuite
         await NextFrame();
 
         // The client throws one crate into another: it takes the first, then the one it hits
-        Expect.True(thrown[1].Object.TryGrab());
+        Expect.True(thrown[1].Object.TryClaim());
         thrown[1].Object.Release();
         Expect.True(hit[1].Object.Authority.Take());
 
@@ -151,7 +151,7 @@ public partial class AuthorityTests : HarnessSuite
         var crate = SpawnEverywhere("Crate");
         await NextFrame();
 
-        Expect.True(crate[1].Object.TryGrab());
+        Expect.True(crate[1].Object.TryClaim());
         Expect.True(await WaitUntil(() => Agree(crate, 2, 2), 3), Describe(crate));
 
         Client.Disconnect();

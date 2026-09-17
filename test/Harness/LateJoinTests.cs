@@ -15,7 +15,7 @@ public partial class LateJoinTests : HarnessSuite
         var crate = HarnessBody.Spawn(Client, "Crate", 1, Speed);
         Expect.True(await WaitUntil(() => Client.Context.NetworkTime.IsInitialSyncDone(), 5), "client never synced");
 
-        Expect.True(crate.Object.TryGrab());
+        Expect.True(crate.Object.TryClaim());
         var bullet = NetworkObject.Spawn<HarnessBody>(Client, HarnessBody.Scene, body => body.Velocity = Speed).Name.ToString();
         Expect.True(await WaitUntil(() => Host.GetNodeOrNull(bullet) is not null && ((HarnessBody)Host.GetNode("Crate")).Object.Holder == 2, 5),
             "host never saw the grab and the shot");

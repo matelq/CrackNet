@@ -186,7 +186,13 @@ internal abstract class PhysicsHandling
         {
             if (!Object.Authority.IsLocal) return;
             for (var i = 0; i < body.GetSlideCollisionCount(); i++)
-                TouchCollider(body.GetSlideCollision(i).GetCollider());
+            {
+                var collision = body.GetSlideCollision(i);
+                if (collision.GetCollider() is not Node node || NetworkObject.Of(node) is not { } other) continue;
+                // Godot's character bodies do not push rigid bodies: push the ones taken here, along the contact
+                if (Object.PushStrength > 0 && node is RigidBody3D) Object.Push(other, -collision.GetNormal() * Object.PushStrength);
+                else Object.Touch(other);
+            }
         }
     }
 
@@ -196,7 +202,13 @@ internal abstract class PhysicsHandling
         {
             if (!Object.Authority.IsLocal) return;
             for (var i = 0; i < body.GetSlideCollisionCount(); i++)
-                TouchCollider(body.GetSlideCollision(i).GetCollider());
+            {
+                var collision = body.GetSlideCollision(i);
+                if (collision.GetCollider() is not Node node || NetworkObject.Of(node) is not { } other) continue;
+                var normal = collision.GetNormal();
+                if (Object.PushStrength > 0 && node is RigidBody2D) Object.Push(other, new Vector3(-normal.X, -normal.Y, 0) * Object.PushStrength);
+                else Object.Touch(other);
+            }
         }
     }
 }
