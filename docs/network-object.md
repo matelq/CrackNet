@@ -85,4 +85,11 @@ A remote object is shown from its authority's samples, a little in the past:
 arrival and how long it waits in the buffer. `DisplayTick`, `SampleSent` and `SampleReceived` are there for checks
 and diagnostics.
 
-State goes out every `NetworkObjectServer.StateIntervalTicks` ticks (15 Hz at the default 30 Hz tick).
+State goes out every `NetworkObjectServer.StateIntervalTicks` ticks (15 Hz at the default 30 Hz tick). Every object
+that changed is packed into as few packets per peer as fit **Max Sync Packet Size** (1200 bytes by default, under the
+MTU of any real route).
+
+**One object has to fit in one packet.** A crate is about 80 bytes. An object whose state is larger - a long array, a
+dictionary, dozens of properties - is sent as a packet over the limit, which the transport fragments, and losing any
+fragment loses the whole sample; a warning says which object. Split it into several `NetworkObject`s, or send large,
+rarely changing state as an event.

@@ -20,8 +20,9 @@ public partial class NetfoxPlugin : EditorPlugin
         // Setting this to false makes netfox keep its settings when disabling the plugin
         new("netfox/general/clear_settings", true, Variant.Type.Bool),
         new("netfox/general/use_raw_commands", false, Variant.Type.Bool),
-        // Very conservative packet size limit, source: https://stackoverflow.com/a/35697810
-        new("netfox/general/max_sync_packet_size", 508, Variant.Type.Int),
+        // Under the path MTU with room for IP, UDP and transport headers: the limit Steam uses and Gaffer on Games
+        // recommends, so a state packet is never fragmented
+        new("netfox/general/max_sync_packet_size", 1200, Variant.Type.Int),
         new("netfox/general/supress_identity_peer_disconnected_warning", false, Variant.Type.Bool),
 
         LogLevelSetting("netfox/logging/log_level"),

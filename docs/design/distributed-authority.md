@@ -122,8 +122,8 @@ guest-to-guest packet is no longer relayed or charged twice.
 whose state has not changed is sent only as a heartbeat once a second; a receiver that sees a sample after such a gap
 holds the resting value until just before it, so the object starts moving when its authority did. Measured by
 `BandwidthTests`: 50 moving and 150 resting objects cost about 136 kbit/s of state payload per peer (was 1.8 Mbit/s).
-Delta against an acknowledged baseline, quantization per property and a priority accumulator only once measurements
-ask for them.
+Delta against an acknowledged baseline, quantization per property and a priority accumulator (see Deferred) only once
+measurements ask for them. State packets are filled up to 1200 bytes, under the MTU of any real route.
 
 ## API
 
@@ -172,8 +172,6 @@ enum, strings, references) always step. `Teleport()` makes the next snapshot app
 
 ## Open
 
-- Review finding 4: one object whose state is larger than `MaxSyncPacketSize` goes out as a single oversized
-  unreliable packet, which the transport may drop, silently. Plan: a warning.
 - A simpler API. Candidates: `NetworkObject` handles a rigid body itself (freeze where not authoritative, touch on
   contact, return to host at rest); a ready synced body instead of three hand-written `[Synced]` properties; a
   built-in knock instead of `SendToAuthority` with a raw `Variant`; sequences and diagnostics out of the main API;
@@ -187,6 +185,12 @@ enum, strings, references) always step. `Teleport()` makes the next snapshot app
 - Extrapolating targets to the present for hit tests, in the style of Photon Fusion "Forecast". Revisit if dodges do
   not count on Casual or Realistic.
 - Sequence number overflow (review finding).
+- Objects larger than a state packet. Today such an object warns and goes out oversized, fragmented by the transport.
+  Supporting it properly means splitting a sample across packets or sending it through a reliable large-block channel
+  (Gaffer on Games, Sending Large Blocks of Data). Revisit when a game needs one.
+- A byte budget per packet with a priority accumulator (State Synchronization): what does not fit waits and gains
+  priority. Revisit when bandwidth measurements ask for it.
+- Quantization per property and delta against an acknowledged baseline (Snapshot Compression).
 - A common display time instead of per-link buffers. Session-wide: every screen shows every remote object at the same
   moment, set by the worst link, so one bad connection slows everyone. Per screen: each viewer uses the deepest of its
   own links, so only the players on a bad link pay. Revisit if playtests show objects of different players visibly out

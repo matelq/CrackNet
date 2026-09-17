@@ -18,7 +18,7 @@ public sealed class NetfoxSettings
 
     // general
     public bool UseRawCommands { get; set; }
-    public int MaxSyncPacketSize { get; set; } = 508;
+    public int MaxSyncPacketSize { get; set; } = 1200;
     public bool SuppressIdentityPeerDisconnectedWarning { get; set; }
 
     // logging

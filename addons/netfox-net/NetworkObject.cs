@@ -98,6 +98,7 @@ public partial class NetworkObject : Node
     /// <summary>What this peer last sent for the object, and when: an unchanged object is not sent again for a while.</summary>
     internal byte[]? LastSentBody { get; set; }
     internal int LastSentTick { get; set; }
+    internal bool WarnedOversized { get; set; }
 
     /// <summary>True when this peer simulates the object and sends its state.</summary>
     public bool IsAuthority => Root!.IsMultiplayerAuthority();

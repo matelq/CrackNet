@@ -385,6 +385,14 @@ public partial class NetworkObjectServer : Node
             var unchanged = obj.LastSentBody is { } last && last.AsSpan(1).SequenceEqual(body.AsSpan(1));
             if (!obj.DespawnRequested && unchanged && stateTick - obj.LastSentTick < RestHeartbeatTicks) continue;
 
+            if (body.Length > _maxPacketSize && !obj.WarnedOversized)
+            {
+                obj.WarnedOversized = true;
+                Logger.Warning("{0} is {1} bytes, larger than a state packet ({2}): it goes out as a packet that may be "
+                               + "fragmented and lost whole. Split the object or send large state as an event",
+                    identifier.FullName, body.Length, _maxPacketSize);
+            }
+
             obj.LastSentBody = body;
             obj.LastSentTick = stateTick;
             obj.TeleportPending = false;
