@@ -66,7 +66,7 @@ public partial class PlaygroundSmoke : Node
         PlaygroundPlayer.Bot = !_isHost && !_isObserver ? Drive : _ => default;
         // A trace left by an earlier run would be compared against this one's ticks
         if (!_isHost && FileAccess.FileExists(TracePath)) DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath(TracePath));
-        _crate.Object.SampleSent += RecordSent;
+        _crate.Object.Diagnostics.SampleSent += RecordSent;
         _onTop = _playground.GetNode<PlaygroundCrate>("Crates/Crate4");
         // Handing everything back when a guest leaves also returns the crate to the host, so only a return while the
         // thrower is still here proves the crate came back because it came to rest
@@ -75,7 +75,7 @@ public partial class PlaygroundSmoke : Node
             if (_isHost && _crate.Object.Authority == 1 && _clientPeer != 0 && Multiplayer.GetPeers().Contains(_clientPeer))
                 _returnedWhileGuestConnected = true;
         };
-        _crate.Object.SampleReceived += tick => _received.Add(tick);
+        _crate.Object.Diagnostics.SampleReceived += tick => _received.Add(tick);
     }
 
     /// <summary>
@@ -168,7 +168,7 @@ public partial class PlaygroundSmoke : Node
         if (_isHost && !_crate.Object.IsAuthority)
         {
             _clientPeer = _crate.Object.Authority;
-            if (_crate.Object.DisplayTick is { } shown && _crate.Visible)
+            if (_crate.Object.Diagnostics.DisplayTick is { } shown && _crate.Visible)
                 _displayed.Add((shown, _crate.GlobalPosition));
         }
         if (_isObserver && _crate.Object.Authority is not 1 && !_crate.Object.IsAuthority && _crate.Visible)

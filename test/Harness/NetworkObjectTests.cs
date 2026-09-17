@@ -173,7 +173,7 @@ public partial class NetworkObjectTests : HarnessSuite
             if (onClient.Location.X > previous && !moved)
             {
                 moved = true;
-                var shown = Client.Context.NetworkObjectServer.GetDisplayTick(1) ?? -1;
+                var shown = Client.Context.NetworkObjectServer.Diagnostics.GetDisplayTick(1) ?? -1;
                 Expect.True(shown >= startedAt - NetworkObjectServer.StateIntervalTicks,
                     $"client started moving at display tick {shown:F1}, the host at {startedAt}");
             }

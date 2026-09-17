@@ -53,7 +53,7 @@ public partial class ProjectileTests : HarnessSuite
                 continue;
             }
 
-            var shown = Host.Context.NetworkObjectServer.GetDisplayTick(Shooter) ?? -1;
+            var shown = Host.Context.NetworkObjectServer.Diagnostics.GetDisplayTick(Shooter) ?? -1;
             Expect.True(shown >= firedAt, $"shown at display tick {shown}, fired at {firedAt}");
             // At the muzzle, not already down range: the first frame shows the first sample
             var perTick = Speed.X / Host.Context.NetworkTime.Tickrate;
@@ -106,7 +106,7 @@ public partial class ProjectileTests : HarnessSuite
         {
             await NextFrame();
             onHost = Host.GetNodeOrNull<HarnessBody>("TimedDespawn");
-            var shown = Host.Context.NetworkObjectServer.GetDisplayTick(Shooter);
+            var shown = Host.Context.NetworkObjectServer.Diagnostics.GetDisplayTick(Shooter);
             if (shown is null || shown < despawnTick)
             {
                 Expect.True(onHost is { Visible: true },

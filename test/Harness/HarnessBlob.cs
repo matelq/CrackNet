@@ -13,7 +13,7 @@ public partial class HarnessBlob : Node3D
     {
         var node = new HarnessBlob { Name = name, Blob = blob };
         node.SetMultiplayerAuthority(authority);
-        node.Object = new NetworkObject { Name = "NetworkObject" };
+        node.Object = new NetworkObject { Name = "NetworkObject", Kind = NetworkObject.ObjectKind.Custom };
         node.AddChild(node.Object);
         stack.AddChild(node);
         return node;

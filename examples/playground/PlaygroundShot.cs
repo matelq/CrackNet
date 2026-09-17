@@ -19,8 +19,6 @@ public partial class PlaygroundShot : Node3D
         return Math.Abs(offset.X) <= halfExtent && Math.Abs(offset.Y) <= halfExtent && Math.Abs(offset.Z) <= halfExtent;
     }
 
-    [Synced] public Vector3 NetPosition { get => GlobalPosition; set => GlobalPosition = value; }
-
     public NetworkObject Object { get; private set; } = null!;
     private Vector3 _velocity;
     private double _age;
@@ -31,7 +29,7 @@ public partial class PlaygroundShot : Node3D
         var shot = new PlaygroundShot { Name = data["name"].AsString(), Position = data["origin"].AsVector3(), _velocity = data["velocity"].AsVector3() };
         shot.SetMultiplayerAuthority(shooter);
         shot.AddChild(new MeshInstance3D { Mesh = new SphereMesh { Radius = 0.15f, Height = 0.3f }, MaterialOverride = new StandardMaterial3D { AlbedoColor = Playground.ColorOf(shooter), EmissionEnabled = true, Emission = Playground.ColorOf(shooter) } });
-        shot.Object = new NetworkObject { Name = "NetworkObject", Transferable = false, SpreadsAuthority = true };
+        shot.Object = new NetworkObject { Name = "NetworkObject" };
         shot.AddChild(shot.Object);
         return shot;
     }
@@ -61,13 +59,13 @@ public partial class PlaygroundShot : Node3D
                                      <= playerHit.GlobalPosition.DistanceTo(GlobalPosition)))
         {
             Object.Touch(crateHit.Object);
-            crateHit.Object.SendToAuthority(_velocity.Normalized() * CrateImpulse);
+            crateHit.Object.Knock(_velocity.Normalized() * CrateImpulse);
             Consume();
             return;
         }
         if (playerHit is not null)
         {
-            playerHit.Knock(_velocity.Normalized() * PlayerKnock);
+            playerHit.Object.Knock(_velocity.Normalized() * PlayerKnock);
             Consume();
             return;
         }

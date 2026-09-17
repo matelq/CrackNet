@@ -225,7 +225,7 @@ public partial class Playground : Node3D
             var millisecondsPerTick = 1000.0 / time.Tickrate;
             _delayReadout = string.Concat(Players.GetChildren().OfType<PlaygroundPlayer>()
                 .Where(player => player.Peer != Multiplayer.GetUniqueId())
-                .Select(player => (Player: player, Status: NetworkObjectServer.Instance.GetPlaybackStatus(player.Peer)))
+                .Select(player => (Player: player, Status: NetworkObjectServer.Instance.Diagnostics.GetPlaybackStatus(player.Peer)))
                 .Where(entry => entry.Status is not null)
                 .Select(entry =>
                 {

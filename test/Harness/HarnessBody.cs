@@ -29,7 +29,7 @@ public partial class HarnessBody : Node3D
     {
         var body = new HarnessBody { Name = name, Velocity = velocity, Location = location };
         body.SetMultiplayerAuthority(authority);
-        body.Object = new NetworkObject { Name = "NetworkObject" };
+        body.Object = new NetworkObject { Name = "NetworkObject", Kind = NetworkObject.ObjectKind.Custom };
         body.AddChild(body.Object);
         return body;
     }

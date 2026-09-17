@@ -1,5 +1,6 @@
 using Godot;
 using Netfox.Examples.Playground;
+using Netfox.Internal;
 
 namespace Netfox.Tests;
 
@@ -32,19 +33,19 @@ public partial class CrateFreezeTests : TestSuite
         await Mount(crate);
 
         // Held: kinematic, moved by hand to where it is released
-        crate.SetFrozen(true);
+        PhysicsHandling.SetFrozen(crate, true);
         crate.GlobalTransform = new Transform3D(Basis.Identity, new Vector3(0, 3, 0));
         await PhysicsFrames(3);
 
         // Thrown: simulated, it flies and lands somewhere else
-        crate.SetFrozen(false);
+        PhysicsHandling.SetFrozen(crate, false);
         crate.LinearVelocity = new Vector3(8, 0, 0);
         await PhysicsFrames(60);
         var landed = crate.GlobalPosition;
         Expect.True(landed.X > 2, $"the crate never flew: {landed}");
 
         // Handed back: frozen again here, and it must not go back to where it was held
-        crate.SetFrozen(true);
+        PhysicsHandling.SetFrozen(crate, true);
         await PhysicsFrames(3);
         Expect.True(crate.GlobalPosition.DistanceTo(landed) < 0.05f, $"landed at {landed}, frozen at {crate.GlobalPosition}");
     }

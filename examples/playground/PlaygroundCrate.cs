@@ -3,30 +3,23 @@ using Godot;
 namespace Netfox.Examples.Playground;
 
 /// <summary>
-/// A crate anyone can push, grab and throw. The peer simulating it runs Rapier on it; everyone else holds it kinematic
-/// and plays back what that peer sends. Touching it takes authority over it, and it takes authority over the crates it
-/// hits in turn. Once it has come to rest it goes back to the host.
+/// A crate anyone can push, grab and throw. Its <see cref="NetworkObject"/> does the networking: the crate is a rigid
+/// body, so it is Shared, frozen wherever another peer simulates it, passes authority to what it hits and goes back to
+/// the host at rest. All this class adds is a tint in the colour of the peer simulating it right now.
 /// </summary>
 public partial class PlaygroundCrate : RigidBody3D
 {
-    private const int RestTicksBeforeReturning = 30;
-
-    [Synced] public Transform3D NetTransform { get => GlobalTransform; set => GlobalTransform = value; }
-    [Synced] public Vector3 NetLinearVelocity { get => LinearVelocity; set => LinearVelocity = value; }
-    [Synced] public Vector3 NetAngularVelocity { get => AngularVelocity; set => AngularVelocity = value; }
-
     public NetworkObject Object { get; private set; } = null!;
     private StandardMaterial3D _material = null!;
-    private int _restTicks;
 
     public static PlaygroundCrate Create(string name, Vector3 position)
     {
-        var crate = new PlaygroundCrate { Name = name, Position = position, Mass = 2, ContactMonitor = true, MaxContactsReported = 4 };
+        var crate = new PlaygroundCrate { Name = name, Position = position, Mass = 2 };
         crate.SetMultiplayerAuthority(1);
         crate.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = Vector3.One } });
         crate._material = new StandardMaterial3D();
         crate.AddChild(new MeshInstance3D { Mesh = new BoxMesh { Size = Vector3.One }, MaterialOverride = crate._material });
-        crate.Object = new NetworkObject { Name = "NetworkObject", SpreadsAuthority = true };
+        crate.Object = new NetworkObject { Name = "NetworkObject" };
         crate.AddChild(crate.Object);
         crate.AddToGroup("crates");
         return crate;
@@ -34,81 +27,12 @@ public partial class PlaygroundCrate : RigidBody3D
 
     public override void _Ready()
     {
-        FreezeMode = FreezeModeEnum.Kinematic;
         Object.AuthorityChanged += Refresh;
-        Object.AuthorityChanged += TakeTouching;
-        Object.EventReceived += (_, payload) => ApplyCentralImpulse(payload.AsVector3());
-        BodyEntered += OnBodyEntered;
         Playground.SlotsChanged += Refresh;
         Refresh();
     }
 
     public override void _ExitTree() => Playground.SlotsChanged -= Refresh;
 
-    /// <summary>Simulated only where authoritative and not held; tinted with the simulating peer's colour.</summary>
-    /// <summary>
-    /// Whoever takes this crate takes the crates it rests against too, as a chain: a stack follows its bottom crate.
-    /// Otherwise the crates above stay kinematic here, held in the air by the host's simulation, until the host's state
-    /// saying they fell arrives - a stack hanging over nothing on a bad link. Resting contacts raise no collision
-    /// events for a frozen body, so they are found by position.
-    /// </summary>
-    private void TakeTouching()
-    {
-        if (!Object.IsAuthority || Multiplayer.IsServer()) return;
-        foreach (var other in GetTree().GetNodesInGroup("crates").OfType<PlaygroundCrate>())
-        {
-            if (other == this || other.Object.IsAuthority || !IsTouching(other)) continue;
-            Object.Touch(other.Object);
-        }
-    }
-
-    private bool IsTouching(PlaygroundCrate other)
-    {
-        var offset = (other.GlobalPosition - GlobalPosition).Abs();
-        const float reach = 1.05f;
-        return offset.X <= reach && offset.Y <= reach && offset.Z <= reach;
-    }
-
-    public void Refresh()
-    {
-        SetFrozen(!Object.IsAuthority || Object.Holder != 0);
-        _material.AlbedoColor = Playground.ColorOf(Object.Authority).Lerp(Colors.SaddleBrown, 0.35f);
-    }
-
-    private void OnBodyEntered(Node other)
-    {
-        // Whoever simulates a moving crate simulates what it knocks over too
-        if (other is PlaygroundCrate crate && Object.IsAuthority && LinearVelocity.Length() > 0.5f)
-            Object.Touch(crate.Object);
-    }
-
-    public override void _PhysicsProcess(double delta)
-    {
-        if (!Object.IsAuthority || Object.Holder != 0 || Multiplayer.IsServer())
-        {
-            _restTicks = 0;
-            return;
-        }
-
-        _restTicks = Sleeping || LinearVelocity.Length() < 0.05f ? _restTicks + 1 : 0;
-        if (_restTicks >= RestTicksBeforeReturning && Object.ReturnToHost()) _restTicks = 0;
-    }
-
-    /// <summary>
-    /// Frozen (kinematic) where this peer does not simulate the crate or someone holds it.
-    /// <para>
-    /// Rapier keeps the last kinematic target of a body and goes back to it on the next freeze: a crate held, thrown,
-    /// landed and handed back to the host jumped to where it had been held - inside the thrower, who touched it again
-    /// and blew it hundreds of metres away. Setting the transform again after the switch makes the current position
-    /// the kinematic target.
-    /// </para>
-    /// </summary>
-    public void SetFrozen(bool frozen)
-    {
-        if (Freeze == frozen) return;
-        var transform = GlobalTransform;
-        Freeze = frozen;
-        GlobalTransform = transform;
-        PhysicsServer3D.BodySetState(GetRid(), PhysicsServer3D.BodyState.Transform, transform);
-    }
+    private void Refresh() => _material.AlbedoColor = Playground.ColorOf(Object.Authority).Lerp(Colors.SaddleBrown, 0.35f);
 }

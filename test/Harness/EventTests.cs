@@ -27,7 +27,7 @@ public partial class EventTests : HarnessSuite
         foreach (var body in bodies)
         {
             var peer = body.Multiplayer.GetUniqueId();
-            body.Object.EventReceived += (origin, payload) => received.Add((peer, origin, payload.AsString()));
+            body.Object.Received += (origin, payload) => received.Add((peer, origin, payload.AsString()));
         }
         return (bodies, received);
     }
@@ -39,9 +39,9 @@ public partial class EventTests : HarnessSuite
         foreach (var body in player) body.Object.Transferable = false;
         await NextFrame();
 
-        player[0].Object.SendToAuthority("push from host");
-        player[2].Object.SendToAuthority("push from 3");
-        player[1].Object.SendToAuthority("own jump");
+        player[0].Object.Send("push from host");
+        player[2].Object.Send("push from 3");
+        player[1].Object.Send("own jump");
 
         await WaitUntil(() => received.Count >= 3, 3);
         for (var i = 0; i < 20; i++) await NextFrame();
@@ -61,7 +61,7 @@ public partial class EventTests : HarnessSuite
         await NextFrame();
 
         // Peer 3 hits the crate it believes the host simulates; the client takes it before the hit arrives
-        crate[2].Object.SendToAuthority("hit");
+        crate[2].Object.Send("hit");
         Expect.True(crate[1].Object.TryTakeAuthority());
 
         await WaitUntil(() => received.Count >= 1, 3);
@@ -83,7 +83,7 @@ public partial class EventTests : HarnessSuite
         Expect.True(crate[1].Object.TryGrab());
         Expect.True(crate[2].Object.TryGrab());
         // Peer 3 thinks it simulates the crate and hits it; the host is about to say it does not
-        crate[2].Object.SendToAuthority("hit");
+        crate[2].Object.Send("hit");
 
         await WaitUntil(() => received.Count >= 1, 3);
         for (var i = 0; i < 20; i++) await NextFrame();

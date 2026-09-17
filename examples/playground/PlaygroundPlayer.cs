@@ -3,17 +3,14 @@ using Godot;
 namespace Netfox.Examples.Playground;
 
 /// <summary>
-/// A player character. Always simulated by its own peer (<see cref="NetworkObject.Transferable"/> is off), played back
-/// everywhere else. Players do not collide with each other: a push is an event to the pushed player's peer, which
-/// applies it as knockback.
+/// A player character. A character body, so its <see cref="NetworkObject"/> is Personal: always simulated by its own
+/// peer, played back everywhere else, and it takes authority over the crates it walks into. Players do not collide
+/// with each other: a push is a knock delivered to the pushed player's peer, which applies it as knockback.
 /// </summary>
 public partial class PlaygroundPlayer : CharacterBody3D
 {
     private const float Speed = 6, JumpSpeed = 5, Gravity = 14, PushStrength = 4, ThrowSpeed = 9, ShotSpeed = 18;
     private const uint WorldLayer = 1, PlayerLayer = 2, CrateLayer = 4;
-
-    [Synced] public Vector3 NetPosition { get => GlobalPosition; set => GlobalPosition = value; }
-    [Synced] public float NetYaw { get => Rotation.Y; set => Rotation = new Vector3(0, value, 0); }
 
     public NetworkObject Object { get; private set; } = null!;
     public int Peer { get; private set; }
@@ -45,7 +42,7 @@ public partial class PlaygroundPlayer : CharacterBody3D
         player.AddChild(new MeshInstance3D { Mesh = new CapsuleMesh { Radius = 0.4f, Height = 1.8f }, MaterialOverride = new StandardMaterial3D { AlbedoColor = color } });
         player.AddChild(new MeshInstance3D { Mesh = new BoxMesh { Size = new Vector3(0.2f, 0.2f, 0.4f) }, Position = new Vector3(0, 0.5f, -0.45f), MaterialOverride = new StandardMaterial3D { AlbedoColor = Colors.Black } });
 
-        player.Object = new NetworkObject { Name = "NetworkObject", Transferable = false, SpreadsAuthority = true };
+        player.Object = new NetworkObject { Name = "NetworkObject" };
         player.AddChild(player.Object);
 
         // Each player spawns its own shots, so the spawner's authority is the player's peer
@@ -60,12 +57,9 @@ public partial class PlaygroundPlayer : CharacterBody3D
 
     public override void _Ready()
     {
-        Object.EventReceived += (_, payload) => _knockback += payload.AsVector3();
+        Object.Knocked += impulse => _knockback += impulse;
         if (Object.IsAuthority) AddToGroup("local_player");
     }
-
-    /// <summary>A push, a hit: applied by this player's own peer, wherever it came from.</summary>
-    public void Knock(Vector3 impulse) => Object.SendToAuthority(impulse);
 
     public override void _PhysicsProcess(double delta)
     {
@@ -110,6 +104,8 @@ public partial class PlaygroundPlayer : CharacterBody3D
         for (var i = 0; i < GetSlideCollisionCount(); i++)
         {
             if (GetSlideCollision(i).GetCollider() is not PlaygroundCrate crate || crate == _held) continue;
+            // The NetworkObject takes the crate after this frame's movement anyway; taking it now lets the push land
+            // on this peer's simulation this frame
             if (Object.Touch(crate.Object)) crate.ApplyCentralImpulse(input * 0.6f);
         }
     }
@@ -119,8 +115,7 @@ public partial class PlaygroundPlayer : CharacterBody3D
         if (_held is { } held)
         {
             _held = null;
-            held.Object.Release();
-            held.LinearVelocity = Forward * ThrowSpeed + Vector3.Up * 2;
+            held.Object.Throw(Forward * ThrowSpeed + Vector3.Up * 2);
             return;
         }
 
@@ -136,7 +131,7 @@ public partial class PlaygroundPlayer : CharacterBody3D
         foreach (var other in GetParent().GetChildren().OfType<PlaygroundPlayer>())
         {
             if (other == this || other.GlobalPosition.DistanceTo(GlobalPosition + Forward) > 1.5f) continue;
-            other.Knock((Forward + Vector3.Up * 0.1f) * PushStrength);
+            other.Object.Knock((Forward + Vector3.Up * 0.1f) * PushStrength);
         }
     }
 

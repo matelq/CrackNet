@@ -21,7 +21,7 @@ public partial class PacketSizeTests : HarnessSuite
             HarnessBlob.Spawn(Host, "Blob", 1, blob);
             var onClient = HarnessBlob.Spawn(Client, "Blob", 1, "");
             var received = 0;
-            onClient.Object.SampleReceived += _ => received++;
+            onClient.Object.Diagnostics.SampleReceived += _ => received++;
 
             Expect.True(await WaitUntil(() => received >= 3, 5), "the oversized object never arrived");
             var warnings = printed.Count(line => line.Contains("Blob") && line.Contains("larger than"));

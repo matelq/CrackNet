@@ -122,6 +122,26 @@ public partial class NetworkObjectServer : Node
         obj.Registered = true;
     }
 
+    /// <summary>Playback timing per peer: for readouts and checks rather than for game logic.</summary>
+    public ServerDiagnostics Diagnostics => _diagnostics ??= new ServerDiagnostics(this);
+
+    private ServerDiagnostics? _diagnostics;
+
+    public sealed class ServerDiagnostics
+    {
+        private readonly NetworkObjectServer _server;
+
+        internal ServerDiagnostics(NetworkObjectServer server) => _server = server;
+
+        /// <summary>The display tick for objects of <paramref name="peer"/>, or null before anything arrived from it.</summary>
+        public double? GetDisplayTick(int peer) => _server.GetDisplayTick(peer);
+
+        /// <summary>How old what <paramref name="peer"/> is shown is, averaged over the last second, or null before any state arrived.</summary>
+        public PlaybackStatus? GetPlaybackStatus(int peer) => _server.GetPlaybackStatus(peer);
+    }
+
+    internal NetworkObject? Find(Node root) => _byRoot.GetValueOrDefault(root);
+
     internal void Deregister(NetworkObject obj)
     {
         _objects.Remove(obj);
@@ -167,7 +187,7 @@ public partial class NetworkObjectServer : Node
     }
 
     /// <summary>The display tick for objects of <paramref name="peer"/>, or null before anything arrived from it.</summary>
-    public double? GetDisplayTick(int peer) => _clocks.TryGetValue(peer, out var clock) ? clock.Tick : null;
+    internal double? GetDisplayTick(int peer) => _clocks.TryGetValue(peer, out var clock) ? clock.Tick : null;
 
     /// <summary>
     /// How old what <paramref name="peer"/> is shown is, averaged over the last second, or null before any state arrived.
@@ -177,7 +197,7 @@ public partial class NetworkObjectServer : Node
     /// never there.
     /// </para>
     /// </summary>
-    public PlaybackStatus? GetPlaybackStatus(int peer)
+    internal PlaybackStatus? GetPlaybackStatus(int peer)
     {
         if (!_ages.TryGetValue(peer, out var ages) || ages.Network.Count == 0 || ages.Total.Count == 0) return null;
         return new PlaybackStatus(ages.Network.Average(sample => sample.Ticks), ages.Total.Average(sample => sample.Ticks));
@@ -331,13 +351,14 @@ public partial class NetworkObjectServer : Node
     // Two peers that briefly disagree about the authority would pass an event back and forth until they agree
     private const int MaxEventHops = 8;
 
-    internal void SendEvent(NetworkObject obj, int target, int origin, Variant payload, int hops)
+    internal void SendEvent(NetworkObject obj, int target, int origin, NetworkObject.EventKind kind, Variant payload, int hops)
     {
         if (Context.NetworkIdentityServer.GetIdentifierOf(obj.Root!) is not { } identifier) return;
         var writer = new ByteWriter();
         NetRef.Encode(Core.Data.NetworkIdentityReference.OfFullName(identifier.FullName), writer);
         VarUint.Encode(origin, writer);
         VarUint.Encode(hops, writer);
+        writer.PutU8((byte)kind);
         CompactValues.Encode(payload, writer);
         _cmdEvent.Send(writer.ToArray(), target);
     }
@@ -349,6 +370,7 @@ public partial class NetworkObjectServer : Node
         var reference = NetRef.Decode(reader);
         var origin = VarUint.DecodeInt(reader);
         var hops = VarUint.DecodeInt(reader);
+        var kind = (NetworkObject.EventKind)reader.GetU8();
         var payload = CompactValues.Decode(reader);
 
         if (Context.NetworkIdentityServer.ResolveReference(sender, reference, allowQueue: false) is not { } identifier
@@ -356,7 +378,7 @@ public partial class NetworkObjectServer : Node
             return;
 
         if (obj.IsAuthority || hops < MaxEventHops)
-            obj.Deliver(origin, payload, obj.IsAuthority ? hops : hops + 1);
+            obj.Deliver(origin, kind, payload, obj.IsAuthority ? hops : hops + 1);
         else
             Logger.Warning("Dropped an event for {0} after {1} hops: peers disagree about its authority", identifier.FullName, hops);
     }
@@ -397,7 +419,7 @@ public partial class NetworkObjectServer : Node
             obj.LastSentTick = stateTick;
             obj.TeleportPending = false;
             sending.Add((obj, identifier, body));
-            obj.RaiseSampleSent(stateTick);
+            obj.Diagnostics.RaiseSampleSent(stateTick);
         }
         if (sending.Count == 0) return;
 
@@ -520,7 +542,7 @@ public partial class NetworkObjectServer : Node
             obj.Track.Push(tick - StateIntervalTicks, new NetworkObject.Sample(newest.Values, false, false), shown);
 
         if (obj.Track.Push(tick, new NetworkObject.Sample(values, teleport, despawned), shown))
-            obj.RaiseSampleReceived(tick);
+            obj.Diagnostics.RaiseSampleReceived(tick);
     }
 
     public override void _Process(double delta)
