@@ -64,6 +64,7 @@ public partial class PlaygroundShot : Node3D, ISpawnedWith<Vector3>
                                      <= playerHit.GlobalPosition.DistanceTo(GlobalPosition)))
         {
             if (Diagnose) GD.Print($"SHOT {Name} hit {crateHit.Name} (authority {crateHit.Net().Authority.Peer}) at {GlobalPosition}");
+            PlaytestLog.Note(this, $"SHOT {Name} hit {crateHit.Name} (authority {crateHit.Net().Authority.Peer}) at {GlobalPosition:F2}");
             this.Push(crateHit, Velocity.Normalized() * CrateImpulse);
             Consume();
             return;

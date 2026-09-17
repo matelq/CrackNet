@@ -95,6 +95,7 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
         if (_held is { } held)
         {
             _held = null;
+            PlaytestLog.Action(this, $"throw {held.Name}");
             held.Throw(Forward * ThrowSpeed + Vector3.Up * 2);
             return;
         }
@@ -102,7 +103,10 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
         var nearest = GetTree().GetNodesInGroup("crates").OfType<PlaygroundCrate>()
             .Where(crate => crate.GlobalPosition.DistanceTo(GlobalPosition + Forward) < 1.6f)
             .MinBy(crate => crate.GlobalPosition.DistanceTo(GlobalPosition));
-        if (nearest is null || !nearest.TryClaim()) return;
+        if (nearest is null) return;
+        var claimed = nearest.TryClaim();
+        PlaytestLog.Action(this, $"grab {nearest.Name} {(claimed ? "claimed" : "refused")}");
+        if (!claimed) return;
         _held = nearest;
     }
 
@@ -111,6 +115,7 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
         foreach (var other in GetParent().GetChildren().OfType<PlaygroundPlayer>())
         {
             if (other == this || other.GlobalPosition.DistanceTo(GlobalPosition + Forward) > 1.5f) continue;
+            PlaytestLog.Action(this, $"push {other.Name}");
             other.Push((Forward + Vector3.Up * 0.1f) * PushStrength);
         }
     }
@@ -119,6 +124,7 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
     {
         // Chest height, so a shot can hit a crate on the floor as well as another player
         var at = new Transform3D(GlobalBasis, GlobalPosition + Forward * 0.8f);
+        PlaytestLog.Action(this, "shoot");
         PlaygroundShot.Spawn(at, Forward * ShotSpeed, parent: GetParent().GetParent<Playground>().Shots);
     }
 

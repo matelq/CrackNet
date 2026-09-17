@@ -247,31 +247,9 @@ public partial class Playground : Node3D
         menu.AddChild(steamJoin);
     }
 
-    /// <summary>
-    /// Diagnostic for launched crates: the last second of every crate and player, printed once a crate goes faster
-    /// than <see cref="LaunchSpeed"/>. Copy it from the Output panel into a bug report.
-    /// </summary>
-    private const float LaunchSpeed = 15;
-    private readonly Queue<string> _recent = new();
-    private ulong _lastLaunchReport;
-
     public override void _PhysicsProcess(double delta)
-    {
-        var frame = Engine.GetPhysicsFrames();
-        var crates = GetNode("Crates").GetChildren().OfType<PlaygroundCrate>().ToList();
-        foreach (var crate in crates)
-            _recent.Enqueue($"{frame} {crate.Name} at {crate.GlobalPosition:F2} v {crate.LinearVelocity:F1} authority {crate.Object.Authority.Peer} " +
-                            $"holder {crate.Object.Holder} frozen {crate.Freeze} layer {crate.CollisionLayer}");
-        foreach (var player in Players.GetChildren().OfType<PlaygroundPlayer>())
-            _recent.Enqueue($"{frame} {player.Name} at {player.GlobalPosition:F2} v {player.Velocity:F1}");
-        while (_recent.Count > 60 * (crates.Count + Players.GetChildCount())) _recent.Dequeue();
-
-        if (crates.FirstOrDefault(crate => !crate.Freeze && crate.LinearVelocity.Length() > LaunchSpeed) is not { } launched
-            || frame < _lastLaunchReport + 120) return;
-        _lastLaunchReport = frame;
-        GD.Print($"LAUNCH {launched.Name} at {launched.LinearVelocity.Length():F1} m/s on peer {Multiplayer.GetUniqueId()}, frame {frame}. Last second:");
-        foreach (var line in _recent) GD.Print($"  {line}");
-    }
+        => PlaytestLog.Frame(this, GetNode("Crates").GetChildren().OfType<PlaygroundCrate>().ToList(),
+            Players.GetChildren().OfType<PlaygroundPlayer>());
 
     public override void _Process(double delta)
     {

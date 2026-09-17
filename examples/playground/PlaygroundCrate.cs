@@ -41,5 +41,6 @@ public partial class PlaygroundCrate : RigidBody3D
         // and the physics engine would blow them out of the world. It passes through things while held, on every peer
         CollisionLayer = Object.Holder != 0 ? 0u : 1u;
         CollisionMask = Object.Holder != 0 ? 0u : 1u;
+        if (IsInsideTree()) PlaytestLog.Authority(this);
     }
 }
