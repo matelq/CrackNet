@@ -193,7 +193,10 @@ enum, strings, references) always step. `Teleport()` makes the next snapshot app
 - Quantization per property and delta against an acknowledged baseline (Snapshot Compression). A crate would drop
   from about 75 to about 21 bytes. Direction so far: off by default; the developer gives the world's size (an AABB,
   per project or per scene) and positions get their bits from it, while rotation (smallest three) and velocity do not
-  depend on it. Whether attributes may override it per property is still open.
+  depend on it. Whether attributes may override it per property is still open. The delta's baseline is also open:
+  the latest snapshot the peer acknowledged (Gaffer on Games, Quake 3; needs acks and per-peer history, deltas stay a
+  few ticks small) or a periodic keyframe such as the heartbeat (no acks, but deltas grow with time since it, and a
+  lost keyframe blocks decoding until the next one).
 - A common display time instead of per-link buffers. Session-wide: every screen shows every remote object at the same
   moment, set by the worst link, so one bad connection slows everyone. Per screen: each viewer uses the deepest of its
   own links, so only the players on a bad link pay. Revisit if playtests show objects of different players visibly out
