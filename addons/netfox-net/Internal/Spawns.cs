@@ -109,7 +109,7 @@ internal sealed class Spawns
     {
         var root = obj.Root!;
         if (!_scenes.Remove(root)) return;
-        if (!root.IsQueuedForDeletion() || !(obj.IsAuthority || Multiplayer.IsServer())) return;
+        if (!root.IsQueuedForDeletion() || !(obj.Authority.IsLocal || Multiplayer.IsServer())) return;
         if (Multiplayer.MultiplayerPeer is null or OfflineMultiplayerPeer) return;
 
         var writer = new ByteWriter();

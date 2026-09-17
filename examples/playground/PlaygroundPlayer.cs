@@ -51,12 +51,12 @@ public partial class PlaygroundPlayer : CharacterBody3D
     public override void _Ready()
     {
         Object.Knocked += impulse => _knockback += impulse;
-        if (Object.IsAuthority) AddToGroup("local_player");
+        if (Object.Authority.IsLocal) AddToGroup("local_player");
     }
 
     public override void _PhysicsProcess(double delta)
     {
-        if (!Object.IsAuthority) return;
+        if (!Object.Authority.IsLocal) return;
         var dt = (float)delta;
 
         var bot = Bot?.Invoke(this);
@@ -145,6 +145,6 @@ public partial class PlaygroundPlayer : CharacterBody3D
     public override void _ExitTree()
     {
         Playground.SetSlot(Peer, null);
-        if (_held is { } held && Object.IsAuthority) held.Object.Release();
+        if (_held is { } held && Object.Authority.IsLocal) held.Object.Release();
     }
 }

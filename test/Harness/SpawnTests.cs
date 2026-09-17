@@ -34,7 +34,7 @@ public partial class SpawnTests : HarnessSuite
 
         // The host spawns on behalf of a player, as it does the player's character
         var forThird = NetworkObject.Spawn<HarnessBody>(Host, HarnessBody.Scene, authority: 3).Name.ToString();
-        Expect.True(await WaitUntil(() => _third.GetNodeOrNull<HarnessBody>(forThird) is { } body && body.Object.IsAuthority, 3),
+        Expect.True(await WaitUntil(() => _third.GetNodeOrNull<HarnessBody>(forThird) is { } body && body.Object.Authority.IsLocal, 3),
             "the peer the host spawned for does not simulate it");
     }
 

@@ -26,12 +26,12 @@ public partial class LateJoinTests : HarnessSuite
         var lateCrate = HarnessBody.Spawn(late, "Crate", 1, Speed);
 
         var caughtUp = await WaitUntil(() =>
-            lateCrate.Object.Authority == 2 && lateCrate.Object.Holder == 2
+            lateCrate.Object.Authority.Peer == 2 && lateCrate.Object.Holder == 2
             && lateCrate.Ticks > crate.Ticks - 10 && lateCrate.Visible
             && late.GetNodeOrNull<HarnessBody>(bullet) is { Visible: true }, 5);
 
         Expect.True(caughtUp,
-            $"crate auth {lateCrate.Object.Authority} owner {lateCrate.Object.Holder} ticks {lateCrate.Ticks}/{crate.Ticks} visible {lateCrate.Visible}, " +
+            $"crate auth {lateCrate.Object.Authority.Peer} owner {lateCrate.Object.Holder} ticks {lateCrate.Ticks}/{crate.Ticks} visible {lateCrate.Visible}, " +
             $"bullet {late.GetNodeOrNull<HarnessBody>(bullet)?.Visible}");
     }
 

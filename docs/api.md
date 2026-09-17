@@ -108,10 +108,10 @@ One replicated object. While its root is this peer's multiplayer authority it se
 
 | | Member | Summary |
 |---|---|---|
+| property | `Authority` | Who simulates the object and sends its state, and taking or returning that by hand. |
 | property | `Context` | The stack this object belongs to; resolved when it enters the tree. |
 | property | `Diagnostics` | Sequences, display tick and sample events: for checks and diagnostics, not for game logic. |
 | property | `Holder` | The peer holding the object, or 0 when nobody does. |
-| property | `IsAuthority` | True when this peer simulates the object and sends its state. |
 | property | `Kind` | How authority over this object moves. Read when the object enters the tree. |
 | property | `LastSentBody` | What this peer last sent for the object, and when: an unchanged object is not sent again for a while. |
 | property | `MaxSpreadDepth` | Maximum contacts from the source of a spread chain, or -1 for unlimited. |
@@ -131,14 +131,12 @@ One replicated object. While its root is this peer's multiplayer authority it se
 | method | `Knock(Godot.Vector3)` | Pushes this object from wherever the caller is: its authority applies `impulse` to a rigid body (X and Y for 2D) or raises `Knocked`. Delivered like `Variant`. |
 | method | `Of(Godot.Node)` | The object whose root is `root`, or null when it is not a registered object. |
 | method | `Release` | Lets go of a held object. This peer keeps simulating it until someone else touches it. |
-| method | `ReturnToHost` | Hands a free object this peer simulates back to the host. A settled `Shared` physics body does this itself. |
 | method | `Send(Godot.Variant)` | Delivers `payload` to whoever is this object's authority, reliably and exactly once, even if authority moves while it is on its way. On the authority itself it is raised at once. |
 | method | `Spawn``1(Godot.Node,Godot.PackedScene,System.Action{``0},System.Int32)` | Instances `scene` on every peer; see `Int32`. |
 | method | `Teleport` | The next state this peer sends applies without interpolation on the others: a respawn, not a flight. |
 | method | `Throw(Godot.Vector3)` | Lets go of a held object with `velocity`: the throw flies on this peer's simulation. |
 | method | `Touch(Netfox.NetworkObject)` | Passes this object's authority to `other` after contact. Physics bodies call it themselves; call it for contact the physics engine does not report. The source's depth limit follows the whole chain; the host verifies this object as the cause and arbitrates opposing requests. |
 | method | `TryGrab` | Takes ownership and authority. False when someone else holds it. |
-| method | `TryTakeAuthority` | Takes authority over a free object this peer interacts with. Physics bodies do this themselves on contact; call it for other interactions, or for a `Custom` object. False when it is held by someone else, or when this peer is not connected; true means applied here and sent, not yet accepted by the host. |
 | method | `UnsupportedReason(Godot.Node)` | Why a root of this type cannot be replicated, or null when it can. |
 | event | `AuthorityChanged` | Raised after the authority or the holder changed, on every peer. |
 | event | `Knocked` | Raised on the authority of a root that is not a rigid body, exactly once per `Vector3`: the impulse, for the game to apply as knockback. A rigid body takes the impulse itself. |

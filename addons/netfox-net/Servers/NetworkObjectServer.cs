@@ -178,7 +178,7 @@ public partial class NetworkObjectServer : Node
 
         foreach (var obj in _objects)
         {
-            if (obj.Authority != peer && obj.Holder != peer) continue;
+            if (obj.Authority.Peer != peer && obj.Holder != peer) continue;
             // Players leave with their peer; the game frees them. What is left behind goes back to the host.
             if (!obj.Transferable) continue;
             obj.Apply(NetworkObject.HostPeer, 0, obj.AuthoritySequence + 1, obj.OwnershipSequence + 1,
@@ -258,7 +258,7 @@ public partial class NetworkObjectServer : Node
             // By name, not id: this is reliable and rare, and a name resolves even before ids were exchanged
             NetRef.Encode(Core.Data.NetworkIdentityReference.OfFullName(identifier.FullName), writer);
             VarUint.Encode(target == answering || answering == 0 ? requestId : 0, writer);
-            VarUint.Encode(obj.Authority, writer);
+            VarUint.Encode(obj.Authority.Peer, writer);
             VarUint.Encode(obj.Holder, writer);
             VarUint.Encode(obj.AuthoritySequence, writer);
             VarUint.Encode(obj.OwnershipSequence, writer);
@@ -318,7 +318,7 @@ public partial class NetworkObjectServer : Node
 
         var causeAllowed = spreadCause.Length == 0
                            || cause is not null
-                           && cause.Authority == sender
+                           && cause.Authority.Peer == sender
                            && cause.SpreadsAuthority
                            && spreadDepth == cause.SpreadDepth + 1
                            && spreadLimit == cause.EffectiveSpreadLimit
@@ -327,12 +327,12 @@ public partial class NetworkObjectServer : Node
         var authorityAllowed = obj.Transferable
                                && obj.IsNewer(authoritySequence, ownershipSequence)
                                && (obj.Holder == 0 || obj.Holder == sender)
-                               && (authority == sender || (authority == NetworkObject.HostPeer && obj.Authority == sender))
+                               && (authority == sender || (authority == NetworkObject.HostPeer && obj.Authority.Peer == sender))
                                && (owner == 0 || owner == sender)
                                && causeAllowed;
         var configurationAllowed = transferableSequence > obj.TransferableSequence
-                                   && sender == obj.Authority
-                                   && authority == obj.Authority
+                                   && sender == obj.Authority.Peer
+                                   && authority == obj.Authority.Peer
                                    && owner == obj.Holder
                                    && authoritySequence == obj.AuthoritySequence
                                    && ownershipSequence == obj.OwnershipSequence;
@@ -342,7 +342,7 @@ public partial class NetworkObjectServer : Node
             if (authorityAllowed)
                 ApplyRecord(obj, record);
             else
-                obj.Apply(obj.Authority, obj.Holder, obj.AuthoritySequence, obj.OwnershipSequence,
+                obj.Apply(obj.Authority.Peer, obj.Holder, obj.AuthoritySequence, obj.OwnershipSequence,
                     transferable, transferableSequence, obj.SpreadCause, obj.SpreadDepth, obj.SpreadLimit);
             SendAuthority(obj, 0, requestId, answering: sender);
         }
@@ -351,7 +351,7 @@ public partial class NetworkObjectServer : Node
             Logger.Debug("Rejected authority change on {0} from #{1}: transferable {2}, newer {3}, free {4}, cause {5} ({6}: authority {7}, depth {8}/{9})",
                 identifier.FullName, sender, obj.Transferable, obj.IsNewer(authoritySequence, ownershipSequence),
                 obj.Holder == 0 || obj.Holder == sender, causeAllowed, spreadCause,
-                cause?.Authority, spreadDepth, cause is null ? -1 : cause.SpreadDepth + 1);
+                cause?.Authority.Peer, spreadDepth, cause is null ? -1 : cause.SpreadDepth + 1);
             SendAuthority(obj, sender, requestId, answering: sender);
         }
     }
@@ -396,8 +396,8 @@ public partial class NetworkObjectServer : Node
             || !_byRoot.TryGetValue(identifier.Subject, out var obj))
             return;
 
-        if (obj.IsAuthority || hops < MaxEventHops)
-            obj.Deliver(origin, kind, payload, obj.IsAuthority ? hops : hops + 1);
+        if (obj.Authority.IsLocal || hops < MaxEventHops)
+            obj.Deliver(origin, kind, payload, obj.Authority.IsLocal ? hops : hops + 1);
         else
             Logger.Warning("Dropped an event for {0} after {1} hops: peers disagree about its authority", identifier.FullName, hops);
     }
@@ -412,7 +412,7 @@ public partial class NetworkObjectServer : Node
         var sending = new List<(NetworkObject Object, NetworkIdentifier Identifier, byte[] Body)>();
         foreach (var obj in _objects)
         {
-            if (!obj.IsAuthority || identities.GetIdentifierOf(obj.Root!) is not { } identifier) continue;
+            if (!obj.Authority.IsLocal || identities.GetIdentifierOf(obj.Root!) is not { } identifier) continue;
 
             // Flags: 1 teleport, 2 resumed after a rest, 4 final despawn sample.
             var resumed = obj.LastSentBody is not null && stateTick - obj.LastSentTick > StateIntervalTicks;
@@ -577,7 +577,7 @@ public partial class NetworkObjectServer : Node
 
         foreach (var obj in _objects)
         {
-            if (obj.IsAuthority) continue;
+            if (obj.Authority.IsLocal) continue;
             if (!_clocks.TryGetValue(obj.Root!.GetMultiplayerAuthority(), out var clock) || clock.Tick is not { } shown) continue;
             var objectTick = obj.PlaybackStarted ? obj.PlaybackCursor.Advance(shown, elapsedTicks) : shown;
             if (!obj.Track.TrySample(objectTick, out var from, out var to, out var fraction)) continue;

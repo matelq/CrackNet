@@ -67,15 +67,15 @@ public partial class PhysicsObjectTests : HarnessSuite
         Walker(Host, 2, new Vector3(-3, 1, 0), Vector3.Zero);
         Walker(Client, 2, new Vector3(-3, 1, 0), new Vector3(4, 0, 0));
 
-        Expect.True(await WaitUntil(() => crates.All(crate => Net(crate).Authority == 2), 5),
-            $"the walker never took the crate: {string.Join(", ", crates.Select(crate => Net(crate).Authority))}");
+        Expect.True(await WaitUntil(() => crates.All(crate => Net(crate).Authority.Peer == 2), 5),
+            $"the walker never took the crate: {string.Join(", ", crates.Select(crate => Net(crate).Authority.Peer))}");
         Expect.False(crates[1].Freeze, "the client simulates the crate it took");
         Expect.True(crates[0].Freeze, "the host plays it back");
 
         // Stopped walking into it: once it has settled, it goes back
         Client.GetNode<Walker>("World/Walker2").Walk = Vector3.Zero;
-        Expect.True(await WaitUntil(() => crates.All(crate => Net(crate).Authority == 1), 8),
-            $"the settled crate never went back to the host: {string.Join(", ", crates.Select(crate => Net(crate).Authority))}");
+        Expect.True(await WaitUntil(() => crates.All(crate => Net(crate).Authority.Peer == 1), 8),
+            $"the settled crate never went back to the host: {string.Join(", ", crates.Select(crate => Net(crate).Authority.Peer))}");
     }
 
     [Test]
@@ -130,12 +130,12 @@ public partial class PhysicsObjectTests : HarnessSuite
         // A settled stack goes back to the host half a second later, so what counts is that each crate went to the client
         var reachedClient = new HashSet<string>();
         foreach (var obj in onHost)
-            obj.AuthorityChanged += () => { if (obj.Authority == 2) reachedClient.Add(obj.Root!.Name); };
+            obj.AuthorityChanged += () => { if (obj.Authority.Peer == 2) reachedClient.Add(obj.Root!.Name); };
         var rejected = new HashSet<string>();
         foreach (var obj in onClient)
-            obj.AuthorityChanged += () => { if (obj.Authority == 1 && reachedClient.Count < 3) rejected.Add(obj.Root!.Name); };
+            obj.AuthorityChanged += () => { if (obj.Authority.Peer == 1 && reachedClient.Count < 3) rejected.Add(obj.Root!.Name); };
 
-        Expect.True(onClient[0].TryTakeAuthority());
+        Expect.True(onClient[0].Authority.Take());
         await WaitUntil(() => reachedClient.Count == 3, 2);
         Expect.True(reachedClient.Count == 3 && rejected.Count == 0,
             $"reached the client on the host: {string.Join(", ", reachedClient)}; taken back from the client: {string.Join(", ", rejected)}");

@@ -72,7 +72,7 @@ public partial class PlaygroundSmoke : Node
         // thrower is still here proves the crate came back because it came to rest
         _crate.Object.AuthorityChanged += () =>
         {
-            if (_isHost && _crate.Object.Authority == 1 && _clientPeer != 0 && Multiplayer.GetPeers().Contains(_clientPeer))
+            if (_isHost && _crate.Object.Authority.Peer == 1 && _clientPeer != 0 && Multiplayer.GetPeers().Contains(_clientPeer))
                 _returnedWhileGuestConnected = true;
         };
         _crate.Object.Diagnostics.SampleReceived += tick => _received.Add(tick);
@@ -91,13 +91,13 @@ public partial class PlaygroundSmoke : Node
             // never reached: pick a host crate at chest height with nothing else on the line
             var crates = _playground.GetNode("Crates").GetChildren().OfType<PlaygroundCrate>().ToList();
             _target = crates
-                .Where(crate => crate.Object.Authority == 1 && crate.GlobalPosition.Y < 1.2f)
+                .Where(crate => crate.Object.Authority.Peer == 1 && crate.GlobalPosition.Y < 1.2f)
                 .Where(crate => crates.All(other => other == crate || !Blocks(me.GlobalPosition, crate.GlobalPosition, other.GlobalPosition)))
                 .OrderBy(crate => crate.GlobalPosition.DistanceTo(me.GlobalPosition))
                 .FirstOrDefault() ?? _target;
             foreach (var crate in crates)
                 crate.Object.AuthorityChanged += () =>
-                    _shotTookCrate |= crate.Object.IsAuthority && crate.Object.SpreadCause.Contains("/Shots/");
+                    _shotTookCrate |= crate.Object.Authority.IsLocal && crate.Object.SpreadCause.Contains("/Shots/");
         }
         return (FlatTo(_target, me) * 0.05f, false, false, false);
     }
@@ -162,20 +162,20 @@ public partial class PlaygroundSmoke : Node
         // Crate4 stood on Crate0. Once Crate0 has been taken from under it, a Crate4 still up there and frozen here is
         // hanging over nothing, waiting for the host's word that it fell
         var underneathGone = new Vector2(_crate.GlobalPosition.X - _onTop.GlobalPosition.X, _crate.GlobalPosition.Z - _onTop.GlobalPosition.Z).Length() > 1.0f;
-        if (!_isHost && !_isObserver && underneathGone && _onTop.GlobalPosition.Y > 1.2f && _onTop.Freeze && !_onTop.Object.IsAuthority)
+        if (!_isHost && !_isObserver && underneathGone && _onTop.GlobalPosition.Y > 1.2f && _onTop.Freeze && !_onTop.Object.Authority.IsLocal)
         {
             if (_stackHangingFrames++ % 60 == 0)
-                GD.Print($"STACK HANGING frame {_stackHangingFrames}: Crate4 at {_onTop.GlobalPosition} authority {_onTop.Object.Authority} " +
-                         $"holder {_onTop.Object.Holder} frozen {_onTop.Freeze}; Crate0 at {_crate.GlobalPosition} authority {_crate.Object.Authority} holder {_crate.Object.Holder}");
+                GD.Print($"STACK HANGING frame {_stackHangingFrames}: Crate4 at {_onTop.GlobalPosition} authority {_onTop.Object.Authority.Peer} " +
+                         $"holder {_onTop.Object.Holder} frozen {_onTop.Freeze}; Crate0 at {_crate.GlobalPosition} authority {_crate.Object.Authority.Peer} holder {_crate.Object.Holder}");
         }
 
-        if (_isHost && !_crate.Object.IsAuthority)
+        if (_isHost && !_crate.Object.Authority.IsLocal)
         {
-            _clientPeer = _crate.Object.Authority;
+            _clientPeer = _crate.Object.Authority.Peer;
             if (_crate.Object.Diagnostics.DisplayTick is { } shown && _crate.Visible)
                 _displayed.Add((shown, _crate.GlobalPosition));
         }
-        if (_isObserver && _crate.Object.Authority is not 1 && !_crate.Object.IsAuthority && _crate.Visible)
+        if (_isObserver && _crate.Object.Authority.Peer is not 1 && !_crate.Object.Authority.IsLocal && _crate.Visible)
             _sawGuestCrate = true;
 
         if (_elapsed >= _seconds) Finish();
@@ -184,7 +184,7 @@ public partial class PlaygroundSmoke : Node
     private void Finish()
     {
         SetProcess(false);
-        var backToHost = _crate.Object.Authority == 1;
+        var backToHost = _crate.Object.Authority.Peer == 1;
         bool ok;
         string detail;
 

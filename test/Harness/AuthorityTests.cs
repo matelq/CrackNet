@@ -25,10 +25,10 @@ public partial class AuthorityTests : HarnessSuite
         ];
 
     private static bool Agree(HarnessBody[] bodies, int authority, int owner)
-        => bodies.All(body => body.Object.Authority == authority && body.Object.Holder == owner);
+        => bodies.All(body => body.Object.Authority.Peer == authority && body.Object.Holder == owner);
 
     private static string Describe(HarnessBody[] bodies)
-        => string.Join(", ", bodies.Select(body => $"{body.Multiplayer.GetUniqueId()}: auth {body.Object.Authority} owner {body.Object.Holder}"));
+        => string.Join(", ", bodies.Select(body => $"{body.Multiplayer.GetUniqueId()}: auth {body.Object.Authority.Peer} owner {body.Object.Holder}"));
 
     [Test]
     public async Task TwoPeersGrabAtOnceAndExactlyOneEndsUpHoldingIt()
@@ -63,8 +63,8 @@ public partial class AuthorityTests : HarnessSuite
         var crate = SpawnEverywhere("Crate");
         await NextFrame();
 
-        Expect.True(crate[1].Object.TryTakeAuthority());
-        crate[1].Object.ReturnToHost();
+        Expect.True(crate[1].Object.Authority.Take());
+        crate[1].Object.Authority.ReturnToHost();
         Expect.True(crate[2].Object.TryGrab());
 
         Expect.True(await WaitUntil(() => Agree(crate, 3, 3), 3), Describe(crate));
@@ -80,7 +80,7 @@ public partial class AuthorityTests : HarnessSuite
         // The client throws one crate into another: it takes the first, then the one it hits
         Expect.True(thrown[1].Object.TryGrab());
         thrown[1].Object.Release();
-        Expect.True(hit[1].Object.TryTakeAuthority());
+        Expect.True(hit[1].Object.Authority.Take());
 
         Expect.True(await WaitUntil(() => Agree(thrown, 2, 0) && Agree(hit, 2, 0), 3), Describe(thrown) + " / " + Describe(hit));
 
@@ -96,10 +96,10 @@ public partial class AuthorityTests : HarnessSuite
         var crate = SpawnEverywhere("Crate", new Vector3(2, 0, 0));
         await NextFrame();
 
-        Expect.True(crate[1].Object.TryTakeAuthority());
+        Expect.True(crate[1].Object.Authority.Take());
         Expect.True(await WaitUntil(() => Agree(crate, 2, 0), 3), Describe(crate));
 
-        crate[1].Object.ReturnToHost();
+        crate[1].Object.Authority.ReturnToHost();
         Expect.True(await WaitUntil(() => Agree(crate, 1, 0), 3), Describe(crate));
 
         var clientTicks = crate[1].Ticks;
@@ -112,11 +112,11 @@ public partial class AuthorityTests : HarnessSuite
         var crate = SpawnEverywhere("Crate");
         await NextFrame();
 
-        Expect.True(crate[1].Object.TryTakeAuthority());
+        Expect.True(crate[1].Object.Authority.Take());
         Expect.True(await WaitUntil(() => Agree(crate, 2, 0), 3), Describe(crate));
 
         // Peer 3 is not the authority, so it cannot hand the crate to the host
-        crate[2].Object.ReturnToHost();
+        crate[2].Object.Authority.ReturnToHost();
         for (var i = 0; i < 20; i++) await NextFrame();
         Expect.True(Agree(crate, 2, 0), Describe(crate));
     }
@@ -130,7 +130,7 @@ public partial class AuthorityTests : HarnessSuite
         Expect.True(await WaitUntil(() => crate[2].Ticks > 5, 5), $"observer shows ticks {crate[2].Ticks}");
 
         // No teleport: nothing but the authority change itself keeps the two peers' samples apart
-        Expect.True(crate[1].Object.TryTakeAuthority());
+        Expect.True(crate[1].Object.Authority.Take());
         crate[1].Location = Vector3.Zero;
 
         var sawNew = false;

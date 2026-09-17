@@ -69,16 +69,16 @@ internal abstract class PhysicsHandling
             body.MaxContactsReported = Math.Max(body.MaxContactsReported, 4);
             body.BodyEntered += other =>
             {
-                if (Object.IsAuthority && _body.LinearVelocity.Length() > TouchSpeed) TouchCollider(other);
+                if (Object.Authority.IsLocal && _body.LinearVelocity.Length() > TouchSpeed) TouchCollider(other);
             };
         }
 
         public override void AuthorityChanged()
         {
-            SetFrozen(_body, !Object.IsAuthority || Object.Holder != 0);
+            SetFrozen(_body, !Object.Authority.IsLocal || Object.Holder != 0);
             // Whoever takes a body takes what rests on and against it: a frozen body reports no resting contacts, and
             // left alone a stack would hang in the air here until the host's word that it fell
-            if (Object.IsAuthority && !IsHost) TouchOverlapping();
+            if (Object.Authority.IsLocal && !IsHost) TouchOverlapping();
         }
 
         private void TouchOverlapping()
@@ -111,13 +111,13 @@ internal abstract class PhysicsHandling
 
         public override void PhysicsProcess()
         {
-            if (Object.ResolvedKind != NetworkObject.ObjectKind.Shared || !Object.IsAuthority || Object.Holder != 0 || IsHost)
+            if (Object.ResolvedKind != NetworkObject.ObjectKind.Shared || !Object.Authority.IsLocal || Object.Holder != 0 || IsHost)
             {
                 _restFrames = 0;
                 return;
             }
             _restFrames = _body.Sleeping || _body.LinearVelocity.Length() < RestSpeed ? _restFrames + 1 : 0;
-            if (_restFrames >= RestFramesBeforeReturning && Object.ReturnToHost()) _restFrames = 0;
+            if (_restFrames >= RestFramesBeforeReturning && Object.Authority.ReturnToHost()) _restFrames = 0;
         }
     }
 
@@ -134,13 +134,13 @@ internal abstract class PhysicsHandling
             body.MaxContactsReported = Math.Max(body.MaxContactsReported, 4);
             body.BodyEntered += other =>
             {
-                if (Object.IsAuthority && _body.LinearVelocity.Length() > TouchSpeed) TouchCollider(other);
+                if (Object.Authority.IsLocal && _body.LinearVelocity.Length() > TouchSpeed) TouchCollider(other);
             };
         }
 
         public override void AuthorityChanged()
         {
-            var frozen = !Object.IsAuthority || Object.Holder != 0;
+            var frozen = !Object.Authority.IsLocal || Object.Holder != 0;
             if (_body.Freeze != frozen)
             {
                 var transform = _body.GlobalTransform;
@@ -148,7 +148,7 @@ internal abstract class PhysicsHandling
                 _body.GlobalTransform = transform;
                 PhysicsServer2D.BodySetState(_body.GetRid(), PhysicsServer2D.BodyState.Transform, transform);
             }
-            if (!Object.IsAuthority || IsHost || !_body.IsInsideTree()) return;
+            if (!Object.Authority.IsLocal || IsHost || !_body.IsInsideTree()) return;
 
             var space = _body.GetWorld2D().DirectSpaceState;
             foreach (var shape in _body.GetChildren().OfType<CollisionShape2D>())
@@ -169,13 +169,13 @@ internal abstract class PhysicsHandling
 
         public override void PhysicsProcess()
         {
-            if (Object.ResolvedKind != NetworkObject.ObjectKind.Shared || !Object.IsAuthority || Object.Holder != 0 || IsHost)
+            if (Object.ResolvedKind != NetworkObject.ObjectKind.Shared || !Object.Authority.IsLocal || Object.Holder != 0 || IsHost)
             {
                 _restFrames = 0;
                 return;
             }
             _restFrames = _body.Sleeping || _body.LinearVelocity.Length() < RestSpeed ? _restFrames + 1 : 0;
-            if (_restFrames >= RestFramesBeforeReturning && Object.ReturnToHost()) _restFrames = 0;
+            if (_restFrames >= RestFramesBeforeReturning && Object.Authority.ReturnToHost()) _restFrames = 0;
         }
     }
 
@@ -184,7 +184,7 @@ internal abstract class PhysicsHandling
     {
         public override void PhysicsProcess()
         {
-            if (!Object.IsAuthority) return;
+            if (!Object.Authority.IsLocal) return;
             for (var i = 0; i < body.GetSlideCollisionCount(); i++)
                 TouchCollider(body.GetSlideCollision(i).GetCollider());
         }
@@ -194,7 +194,7 @@ internal abstract class PhysicsHandling
     {
         public override void PhysicsProcess()
         {
-            if (!Object.IsAuthority) return;
+            if (!Object.Authority.IsLocal) return;
             for (var i = 0; i < body.GetSlideCollisionCount(); i++)
                 TouchCollider(body.GetSlideCollision(i).GetCollider());
         }

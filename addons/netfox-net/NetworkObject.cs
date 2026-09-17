@@ -118,7 +118,11 @@ public partial class NetworkObject : Node
     /// <summary>Sequences, display tick and sample events: for checks and diagnostics, not for game logic.</summary>
     public ObjectDiagnostics Diagnostics { get; }
 
-    public NetworkObject() => Diagnostics = new ObjectDiagnostics(this);
+    public NetworkObject()
+    {
+        Diagnostics = new ObjectDiagnostics(this);
+        Authority = new ObjectAuthority(this);
+    }
 
     internal List<(Node Node, NodePath Property, bool Interpolate)> Properties { get; } = new();
     internal SampleTrack<Sample> Track { get; } = new();
@@ -135,10 +139,12 @@ public partial class NetworkObject : Node
     internal int LastSentTick { get; set; }
     internal bool WarnedOversized { get; set; }
 
-    /// <summary>True when this peer simulates the object and sends its state.</summary>
-    public bool IsAuthority => Root!.IsMultiplayerAuthority();
+    /// <summary>Who simulates the object and sends its state, and taking or returning that by hand.</summary>
+    public ObjectAuthority Authority { get; }
 
-    public int Authority => Root!.GetMultiplayerAuthority();
+    internal bool IsAuthority => Root!.IsMultiplayerAuthority();
+
+    internal int AuthorityPeer => Root!.GetMultiplayerAuthority();
 
     private int LocalPeer => Root!.Multiplayer.GetUniqueId();
 
@@ -174,12 +180,7 @@ public partial class NetworkObject : Node
         return true;
     }
 
-    /// <summary>
-    /// Takes authority over a free object this peer interacts with. Physics bodies do this themselves on contact; call
-    /// it for other interactions, or for a <see cref="ObjectKind.Custom"/> object. False when it is held by someone
-    /// else, or when this peer is not connected; true means applied here and sent, not yet accepted by the host.
-    /// </summary>
-    public bool TryTakeAuthority()
+    internal bool TryTakeAuthority()
     {
         if (!Transferable || (Holder != 0 && Holder != LocalPeer)) return false;
         if (IsAuthority) return true;
@@ -230,11 +231,7 @@ public partial class NetworkObject : Node
         return true;
     }
 
-    /// <summary>
-    /// Hands a free object this peer simulates back to the host. A settled <see cref="ObjectKind.Shared"/> physics body
-    /// does this itself.
-    /// </summary>
-    public bool ReturnToHost()
+    internal bool ReturnToHost()
         => IsAuthority && Holder == 0 && LocalPeer != HostPeer
            && Request(HostPeer, 0, AuthoritySequence + 1, OwnershipSequence, null, 0, -1);
 
@@ -270,7 +267,7 @@ public partial class NetworkObject : Node
     /// </summary>
     internal void Deliver(int origin, EventKind kind, Variant payload, int hops)
     {
-        if (!IsAuthority) Context.NetworkObjectServer.SendEvent(this, Authority, origin, kind, payload, hops);
+        if (!IsAuthority) Context.NetworkObjectServer.SendEvent(this, AuthorityPeer, origin, kind, payload, hops);
         else if (PendingRequest != 0) _heldEvents.Add((origin, kind, payload, hops));
         else Raise(origin, kind, payload);
     }
@@ -359,8 +356,8 @@ public partial class NetworkObject : Node
         int spreadLimit = -1,
         bool notify = true)
     {
-        var changed = authority != Authority || owner != Holder;
-        if (authority != Authority)
+        var changed = authority != AuthorityPeer || owner != Holder;
+        if (authority != AuthorityPeer)
         {
             SetAuthority(Root!, authority);
             if (IsAuthority && !Shown) SetShown(true);
@@ -593,6 +590,36 @@ public partial class NetworkObject : Node
         public Variant[] Values { get; } = values;
         public bool Teleport { get; } = teleport;
         public bool Despawned { get; } = despawned;
+    }
+
+    /// <summary>Who simulates a <see cref="NetworkObject"/>, and taking or returning that by hand.</summary>
+    public sealed class ObjectAuthority
+    {
+        private readonly NetworkObject _object;
+
+        internal ObjectAuthority(NetworkObject obj) => _object = obj;
+
+        /// <summary>The peer that simulates the object and sends its state: Godot's multiplayer authority of the root.</summary>
+        public int Peer => _object.AuthorityPeer;
+
+        /// <summary>True when this peer simulates the object and sends its state.</summary>
+        public bool IsLocal => _object.IsAuthority;
+
+        /// <summary>
+        /// Takes authority over a free object this peer interacts with. Physics bodies do this themselves on contact;
+        /// call it for a <see cref="ObjectKind.Custom"/> object or an interaction that is not contact. False when it is
+        /// held by someone else, or when this peer is not connected; true means applied here and sent, not yet
+        /// accepted by the host.
+        /// </summary>
+        public bool Take() => _object.TryTakeAuthority();
+
+        /// <summary>
+        /// Hands a free object this peer simulates back to the host. A settled <see cref="ObjectKind.Shared"/> physics
+        /// body does this itself.
+        /// </summary>
+        public bool ReturnToHost() => _object.ReturnToHost();
+
+        public override string ToString() => $"{Peer}";
     }
 
     /// <summary>What a <see cref="NetworkObject"/> exposes for checks and diagnostics rather than for game logic.</summary>

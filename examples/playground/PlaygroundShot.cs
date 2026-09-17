@@ -39,7 +39,7 @@ public partial class PlaygroundShot : Node3D
     public override void _PhysicsProcess(double delta)
     {
         if (_consumed) return;
-        if (!Object.IsAuthority) return;
+        if (!Object.Authority.IsLocal) return;
 
         GlobalPosition += Velocity * (float)delta;
         _age += delta;
@@ -51,7 +51,7 @@ public partial class PlaygroundShot : Node3D
             .OrderBy(crate => crate.GlobalPosition.DistanceTo(GlobalPosition))
             .FirstOrDefault();
         var playerHit = GetParent().GetParent().GetNode<Node3D>("Players").GetChildren().OfType<PlaygroundPlayer>()
-            .Where(player => player.Peer != Object.Authority && player.Visible)
+            .Where(player => player.Peer != Object.Authority.Peer && player.Visible)
             .Where(player => player.GlobalPosition.DistanceTo(GlobalPosition) <= HitRadius)
             .OrderBy(player => player.GlobalPosition.DistanceTo(GlobalPosition))
             .FirstOrDefault();
@@ -78,6 +78,6 @@ public partial class PlaygroundShot : Node3D
     private void Consume()
     {
         _consumed = true;
-        if (Object.IsAuthority) Object.Despawn();
+        if (Object.Authority.IsLocal) Object.Despawn();
     }
 }

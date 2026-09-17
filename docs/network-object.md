@@ -21,7 +21,7 @@ Pick a kind by hand only when the type says the wrong thing: a grenade is a rigi
 
 | Member | Meaning |
 |---|---|
-| `Authority`, `IsAuthority` | The peer that simulates the object and sends its state. Godot's multiplayer authority of the root. |
+| `Authority.Peer`, `Authority.IsLocal` | The peer that simulates the object and sends its state (Godot's multiplayer authority of the root), and whether it is this one. |
 | `Holder` | The peer holding the object, or 0. A held object cannot be taken by anyone else. |
 | `AuthorityChanged` | Raised on every peer after authority or holder changed. |
 
@@ -38,7 +38,7 @@ the host at rest, a character body touches what it slides into. Games call:
 | `Throw(velocity)` | Lets go with a velocity: the throw flies on this peer's simulation. |
 | `Release()` | Lets go without one. |
 | `Touch(other)` | Contact the physics engine does not report: a projectile that moves itself, a melee swing. |
-| `TryTakeAuthority()`, `ReturnToHost()` | The same by hand, for `Custom` objects. |
+| `Authority.Take()`, `Authority.ReturnToHost()` | What physics bodies do themselves, by hand: for `Custom` objects. |
 
 Conflicts are settled by the host. A grab beats a touch, and of two touches the first one to arrive wins.
 `MaxSpreadDepth` limits how many objects a chain can pass authority through, counted from its source.

@@ -62,7 +62,7 @@ public partial class EventTests : HarnessSuite
 
         // Peer 3 hits the crate it believes the host simulates; the client takes it before the hit arrives
         crate[2].Object.Send("hit");
-        Expect.True(crate[1].Object.TryTakeAuthority());
+        Expect.True(crate[1].Object.Authority.Take());
 
         await WaitUntil(() => received.Count >= 1, 3);
         for (var i = 0; i < 20; i++) await NextFrame();

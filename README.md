@@ -53,7 +53,7 @@ public partial class Player : CharacterBody3D
 
     public override void _PhysicsProcess(double delta)
     {
-        if (!GetNode<NetworkObject>("NetworkObject").IsAuthority) return;
+        if (!GetNode<NetworkObject>("NetworkObject").Authority.IsLocal) return;
         // read input, MoveAndSlide: crates walked into are taken automatically
     }
 }

@@ -166,6 +166,8 @@ Goal: a crate needs no code and a player needs only its own movement. Paid for i
   on the spawning peer before the root enters the tree, and the root's transform goes with the spawn.
   It sends the scene path, with no registry of spawnable scenes (clients are trusted). No separate spawn data: what a
   new object needs is `[Synced]`, and the object stays hidden until its first sample brings it.
+- **Authority** in one place: `Authority.Peer`, `Authority.IsLocal`, and `Authority.Take()` / `Authority.ReturnToHost()`
+  for what physics bodies do themselves, by hand, for `Custom` objects.
 - **Grab:** `TryGrab()`, `Release()`, plus `Throw(Vector3 velocity)` so a throw's velocity is set by the library.
 - **Events:** `Send(Variant)` / `Received(int from, Variant)` instead of `SendToAuthority` / `EventReceived`.
 - **Diagnostics** out of the main API: sequences, `DisplayTick`, `SampleSent/Received` move to `Object.Diagnostics`,
