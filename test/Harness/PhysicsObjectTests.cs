@@ -305,4 +305,27 @@ public partial class PhysicsObjectTests : HarnessSuite
             $"the crate bounced up to {crateHighest}, the character to {walkerHighest}; authority changed {changes} times");
         Expect.True(changes <= 1, $"authority over the crate under a standing character changed {changes} times");
     }
+
+    [Test]
+    public async Task AnAnswerToAnOlderRequestDoesNotUndoAClaim()
+    {
+        // Smoke: walking into a crate, it went back to the host and was taken again, then grabbed; the host's answers
+        // to the earlier requests arrived after the grab and let go of the crate for a moment, in the hand and inside
+        // the crate above it, and the physics engine shot that one off
+        Network.LatencyMs = 150;
+        var crates = new[] { Crate(Host, "Crate", new Vector3(0, 0.5f, 0)), Crate(Client, "Crate", new Vector3(0, 0.5f, 0)) };
+        await NextFrame();
+        var onClient = Net(crates[1]);
+
+        Expect.True(onClient.Authority.Take());
+        Expect.True(onClient.Authority.ReturnToHost());
+        Expect.True(onClient.Authority.Take());
+        Expect.True(onClient.TryClaim());
+        var dropped = new List<string>();
+        onClient.AuthorityChanged += () => dropped.Add($"authority {onClient.Authority.Peer} holder {onClient.Holder}");
+
+        await WaitUntil(() => onClient.PendingRequest == 0, 3);
+        for (var i = 0; i < 20; i++) await NextFrame();
+        Expect.True(onClient.Holder == 2 && dropped.Count == 0, $"the claim was undone on the claimer: {string.Join("; ", dropped)}");
+    }
 }

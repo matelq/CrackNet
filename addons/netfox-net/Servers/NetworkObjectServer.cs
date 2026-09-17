@@ -295,7 +295,11 @@ public partial class NetworkObjectServer : Node
                 Logger.Debug("AUTH host says {0}: authority {1} holder {2} seq {3}/{4} answering {5} (had authority {6} seq {7}/{8})",
                     obj.Root!.Name, authority, owner, ownershipSequence, authoritySequence, requestId,
                     obj.Authority.Peer, obj.OwnershipSequence, obj.AuthoritySequence);
-                ApplyRecord(obj, record);
+                // An answer to an older request, or older news, while a later request is on its way: the host's answer
+                // to that one is coming. Applied, it would undo that request here for a network round trip: a grabbed
+                // crate let go in the hand and colliding with whatever it was carried through
+                var outdated = obj.PendingRequest != 0 && requestId != obj.PendingRequest && !obj.IsNewer(authoritySequence, ownershipSequence);
+                if (!outdated) ApplyRecord(obj, record);
                 obj.Answered(requestId);
             }
             else _pendingAuthority[reference.FullName] = record;
