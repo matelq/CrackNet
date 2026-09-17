@@ -22,18 +22,18 @@ public sealed class SyncedPropertiesGenerator : IIncrementalGenerator
     private const string Attribute = "SyncedAttribute";
     private const string Interface = "ISyncedProperties";
 
-    private static readonly DiagnosticDescriptor MustBePartial = new(
+    internal static readonly DiagnosticDescriptor MustBePartial = new(
         "NFX001",
-        "Synced properties need a partial type",
-        "'{0}' declares synced properties, so it has to be declared partial",
+        "A netfox type has to be partial",
+        "'{0}' declares synced properties or is spawnable, so it has to be declared partial",
         "Netfox",
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
-    private static readonly DiagnosticDescriptor MustBeTopLevel = new(
+    internal static readonly DiagnosticDescriptor MustBeTopLevel = new(
         "NFX002",
-        "Synced properties need a top-level, non-generic type",
-        "'{0}' is nested or generic, which synced properties do not support: move the properties to a top-level, non-generic type",
+        "A netfox type has to be top-level and non-generic",
+        "'{0}' is nested or generic, which synced properties and spawning do not support: make it a top-level, non-generic type",
         "Netfox",
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);

@@ -3,7 +3,7 @@ using Godot;
 namespace Netfox.Tests;
 
 /// <summary>
-/// Projectiles belong to their shooter, are spawned with NetworkObject.Spawn, and on other peers appear only when
+/// Projectiles belong to their shooter, are spawned with their generated Spawn, and on other peers appear only when
 /// playback reaches the tick they were fired at.
 /// </summary>
 public partial class ProjectileTests : HarnessSuite
@@ -22,7 +22,7 @@ public partial class ProjectileTests : HarnessSuite
         Expect.True(synced, "peers never synced");
     }
 
-    private HarnessBody Fire() => NetworkObject.Spawn<HarnessBody>(Client, HarnessBody.Scene, body => body.Velocity = Speed);
+    private HarnessBody Fire() => HarnessBody.Spawn(Transform3D.Identity, Speed, parent: Client);
 
     [Test]
     public async Task AProjectileAppearsOnOthersWhenPlaybackReachesItsFiringTick()

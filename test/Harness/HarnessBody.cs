@@ -3,8 +3,12 @@ using Godot;
 namespace Netfox.Tests;
 
 /// <summary>A replicated body for harness cases: while authoritative it moves along <see cref="Velocity"/> every tick.</summary>
-public partial class HarnessBody : Node3D
+[Scene("res://test/Harness/harness_body.tscn")]
+public partial class HarnessBody : Node3D, ISpawnedWith<Vector3>
 {
+    /// <summary>Spawned bodies get their velocity as spawn data, on every peer.</summary>
+    public void OnSpawned(Vector3 velocity = default) => Velocity = velocity;
+
     [Synced] public Vector3 Location { get; set; }
     [Synced] public int Ticks { get; set; }
 
@@ -17,7 +21,7 @@ public partial class HarnessBody : Node3D
     private NetworkTime _time = null!;
 
     /// <summary>Adds a body named <paramref name="name"/> under <paramref name="stack"/>, owned by <paramref name="authority"/>.</summary>
-    public static HarnessBody Spawn(Node stack, string name, int authority, Vector3 velocity = default, Vector3 location = default)
+    public static HarnessBody Place(Node stack, string name, int authority, Vector3 velocity = default, Vector3 location = default)
     {
         var body = Create(name, authority, velocity, location);
         stack.AddChild(body);
@@ -33,9 +37,6 @@ public partial class HarnessBody : Node3D
         body.AddChild(body.Object);
         return body;
     }
-
-    /// <summary>The scene <see cref="NetworkObject.Spawn{T}"/> instances in harness cases.</summary>
-    public static PackedScene Scene => GD.Load<PackedScene>("res://test/Harness/harness_body.tscn");
 
     public override void _EnterTree()
     {

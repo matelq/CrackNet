@@ -12,8 +12,8 @@ public partial class NetworkObjectTests : HarnessSuite
     {
         // 100 ms each way at 30 Hz: state is about three ticks old when it arrives, then waits in the playback buffer
         Network.LatencyMs = 100;
-        HarnessBody.Spawn(Host, "Clock", 1, Speed);
-        HarnessBody.Spawn(Client, "Clock", 1, Speed);
+        HarnessBody.Place(Host, "Clock", 1, Speed);
+        HarnessBody.Place(Client, "Clock", 1, Speed);
 
         Expect.True(await WaitUntil(() => Client.Context.NetworkTime.IsInitialSyncDone()
                                           && Client.Context.NetworkObjectServer.GetPlaybackStatus(1) is not null, 8),
@@ -36,8 +36,8 @@ public partial class NetworkObjectTests : HarnessSuite
     {
         // No latency, and the host's body never changes: it sends only a heartbeat a second. Measured against the
         // newest tick that read as up to a second behind.
-        HarnessBody.Spawn(Host, "Resting", 1).CountsTicks = false;
-        HarnessBody.Spawn(Client, "Resting", 1).CountsTicks = false;
+        HarnessBody.Place(Host, "Resting", 1).CountsTicks = false;
+        HarnessBody.Place(Client, "Resting", 1).CountsTicks = false;
 
         Expect.True(await WaitUntil(() => Client.Context.NetworkTime.IsInitialSyncDone()
                                           && Client.Context.NetworkObjectServer.GetPlaybackStatus(1) is not null, 8),
@@ -52,8 +52,8 @@ public partial class NetworkObjectTests : HarnessSuite
     [Test]
     public async Task HostObjectPlaysBackOnTheClientBehindTheHost()
     {
-        var onHost = HarnessBody.Spawn(Host, "Crate", 1, Speed);
-        var onClient = HarnessBody.Spawn(Client, "Crate", 1, Speed);
+        var onHost = HarnessBody.Place(Host, "Crate", 1, Speed);
+        var onClient = HarnessBody.Place(Client, "Crate", 1, Speed);
 
         var arrived = await WaitUntil(() => onClient.Location.X > 1, 5);
         Expect.True(arrived, $"client {onClient.Location}, host {onHost.Location}");
@@ -69,13 +69,13 @@ public partial class NetworkObjectTests : HarnessSuite
     [Test]
     public async Task ObjectsOfOnePeerAreShownAtTheSameTick()
     {
-        HarnessBody.Spawn(Host, "Below", 1, Speed);
-        HarnessBody.Spawn(Host, "Above", 1, Speed, new Vector3(0, 1, 0));
-        var below = HarnessBody.Spawn(Client, "Below", 1, Speed);
+        HarnessBody.Place(Host, "Below", 1, Speed);
+        HarnessBody.Place(Host, "Above", 1, Speed, new Vector3(0, 1, 0));
+        var below = HarnessBody.Place(Client, "Below", 1, Speed);
         Expect.True(await WaitUntil(() => below.Location.X > 0.5f, 5), $"below {below.Location}");
 
         // The second one starts receiving much later: a clock per object would show it at a different moment
-        var above = HarnessBody.Spawn(Client, "Above", 1, Speed, new Vector3(0, 1, 0));
+        var above = HarnessBody.Place(Client, "Above", 1, Speed, new Vector3(0, 1, 0));
         Expect.True(await WaitUntil(() => above.Location.X > below.Location.X - 0.01f, 5), $"above {above.Location}");
 
         // Every displayed frame, the stack is exactly one above the other: never a tick apart
@@ -89,10 +89,10 @@ public partial class NetworkObjectTests : HarnessSuite
     [Test]
     public async Task ClientObjectReachesTheHostAndAThirdPeer()
     {
-        HarnessBody.Spawn(Host, "Ball", 2);
-        HarnessBody.Spawn(Client, "Ball", 2, Speed);
+        HarnessBody.Place(Host, "Ball", 2);
+        HarnessBody.Place(Client, "Ball", 2, Speed);
         var third = AddPeer(3);
-        var onThird = HarnessBody.Spawn(third, "Ball", 2);
+        var onThird = HarnessBody.Place(third, "Ball", 2);
         var onHost = (HarnessBody)Host.GetNode("Ball");
 
         var arrived = await WaitUntil(() => onHost.Location.X > 1 && onThird.Location.X > 1, 5);
@@ -104,8 +104,8 @@ public partial class NetworkObjectTests : HarnessSuite
     {
         Network.LatencyMs = 40;
         Network.PacketLoss = 0.2;
-        HarnessBody.Spawn(Host, "Crate", 1, Speed);
-        var onClient = HarnessBody.Spawn(Client, "Crate", 1, Speed);
+        HarnessBody.Place(Host, "Crate", 1, Speed);
+        var onClient = HarnessBody.Place(Client, "Crate", 1, Speed);
 
         Expect.True(await WaitUntil(() => onClient.Location.X > 0.5f, 8), $"client {onClient.Location}");
 
@@ -128,8 +128,8 @@ public partial class NetworkObjectTests : HarnessSuite
     [Test]
     public async Task TeleportDoesNotFlyThroughTheMap()
     {
-        var onHost = HarnessBody.Spawn(Host, "Player", 1, Speed);
-        var onClient = HarnessBody.Spawn(Client, "Player", 1, Speed);
+        var onHost = HarnessBody.Place(Host, "Player", 1, Speed);
+        var onClient = HarnessBody.Place(Client, "Player", 1, Speed);
         Expect.True(await WaitUntil(() => onClient.Location.X > 0.3f, 5), $"client {onClient.Location}");
 
         onHost.Location = new Vector3(1000, 0, 0);
@@ -153,8 +153,8 @@ public partial class NetworkObjectTests : HarnessSuite
     public async Task AnObjectThatRestedStartsMovingWhenItsAuthorityDid()
     {
         var rest = new Vector3(5, 0, 0);
-        var onHost = HarnessBody.Spawn(Host, "Crate", 1, Vector3.Zero, rest);
-        var onClient = HarnessBody.Spawn(Client, "Crate", 1, Vector3.Zero, rest);
+        var onHost = HarnessBody.Place(Host, "Crate", 1, Vector3.Zero, rest);
+        var onClient = HarnessBody.Place(Client, "Crate", 1, Vector3.Zero, rest);
         onHost.CountsTicks = onClient.CountsTicks = false;
         Expect.True(await WaitUntil(() => onClient.Visible, 5), "never shown");
 

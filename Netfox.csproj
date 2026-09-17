@@ -20,4 +20,8 @@
     <ProjectReference Include="Netfox.SourceGenerators/Netfox.SourceGenerators.csproj"
                       OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The spawn generator reads scenes to find each spawnable class's scene and fail the build without one -->
+    <AdditionalFiles Include="**/*.tscn" Exclude=".godot/**;.tools/**;netfox/**" />
+  </ItemGroup>
 </Project>

@@ -28,6 +28,16 @@ try:
             continue
         if kind == "file":
             body = code
+            # A spawnable class needs its scene next to it, named after it, or the spawn analyzer fails the build
+            spawnable = re.search(r"(?:\[Scene\]\s*public partial class|public partial class) (\w+)[^\n]*(?:ISpawnedWith|$)", code, re.M)
+            name = re.search(r"public partial class (\w+)", code)
+            if name and ("[Scene]" in code or "ISpawnedWith" in code):
+                cls = name.group(1)
+                (out / f"{cls}.cs").write_text(header + body, encoding="utf8")
+                (out / f"{cls}.tscn").write_text(
+                    f'[gd_scene load_steps=2 format=3]\n\n[ext_resource type="Script" path="res://examples/_doccheck/{cls}.cs" id="1"]\n\n'
+                    f'[node name="{cls}" type="Node"]\nscript = ExtResource("1")\n', encoding="utf8")
+                continue
         elif kind.startswith("members "):
             body = f"public partial class {kind.split()[1]}\n{{\n{code}\n}}\n"
         elif kind.startswith("body "):

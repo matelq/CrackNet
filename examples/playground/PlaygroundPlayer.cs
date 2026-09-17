@@ -7,7 +7,7 @@ namespace Netfox.Examples.Playground;
 /// peer, played back everywhere else, and it takes authority over the crates it walks into. Players do not collide
 /// with each other: a push is a knock delivered to the pushed player's peer, which applies it as knockback.
 /// </summary>
-public partial class PlaygroundPlayer : CharacterBody3D
+public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
 {
     private const float Speed = 6, JumpSpeed = 5, Gravity = 14, PushStrength = 4, ThrowSpeed = 9, ShotSpeed = 18;
     private const uint WorldLayer = 1, PlayerLayer = 2, CrateLayer = 4;
@@ -27,26 +27,27 @@ public partial class PlaygroundPlayer : CharacterBody3D
     /// <summary>The crate this player holds, if any.</summary>
     public PlaygroundCrate? Held => _held;
 
-    public static PlaygroundPlayer Create(int peer, int slot)
-    {
-        var player = new PlaygroundPlayer { Name = $"Player{peer}", Peer = peer, Slot = slot, Position = new Vector3(-6 + slot * 2, 1, 6) };
-        player.SetMultiplayerAuthority(peer);
-        player.CollisionLayer = PlayerLayer;
-        player.CollisionMask = WorldLayer | CrateLayer;
+    /// <summary>Spawn data from the host: which colour slot this player has, the same on every peer.</summary>
+    public void OnSpawned(int slot) => Slot = slot;
 
-        player.AddChild(new CollisionShape3D { Shape = new CapsuleShape3D { Radius = 0.4f, Height = 1.8f } });
-        var color = Playground.SlotColors[slot % Playground.SlotColors.Length];
-        player.AddChild(new MeshInstance3D { Mesh = new CapsuleMesh { Radius = 0.4f, Height = 1.8f }, MaterialOverride = new StandardMaterial3D { AlbedoColor = color } });
-        player.AddChild(new MeshInstance3D { Mesh = new BoxMesh { Size = new Vector3(0.2f, 0.2f, 0.4f) }, Position = new Vector3(0, 0.5f, -0.45f), MaterialOverride = new StandardMaterial3D { AlbedoColor = Colors.Black } });
+    public override void _EnterTree()
+    {
+        Peer = GetMultiplayerAuthority();
+        Name = $"Player{Peer}";
+        CollisionLayer = PlayerLayer;
+        CollisionMask = WorldLayer | CrateLayer;
+
+        AddChild(new CollisionShape3D { Shape = new CapsuleShape3D { Radius = 0.4f, Height = 1.8f } });
+        var color = Playground.SlotColors[Slot % Playground.SlotColors.Length];
+        AddChild(new MeshInstance3D { Mesh = new CapsuleMesh { Radius = 0.4f, Height = 1.8f }, MaterialOverride = new StandardMaterial3D { AlbedoColor = color } });
+        AddChild(new MeshInstance3D { Mesh = new BoxMesh { Size = new Vector3(0.2f, 0.2f, 0.4f) }, Position = new Vector3(0, 0.5f, -0.45f), MaterialOverride = new StandardMaterial3D { AlbedoColor = Colors.Black } });
 
         // Crates walked into are taken and pushed by the NetworkObject itself
-        player.Object = new NetworkObject { Name = "NetworkObject", PushStrength = 0.6f };
-        player.AddChild(player.Object);
+        Object = new NetworkObject { Name = "NetworkObject", PushStrength = 0.6f };
+        AddChild(Object);
 
-        return player;
+        Playground.SetSlot(Peer, Slot);
     }
-
-    public override void _EnterTree() => Playground.SetSlot(Peer, Slot);
 
     public override void _Ready()
     {
@@ -116,15 +117,9 @@ public partial class PlaygroundPlayer : CharacterBody3D
 
     private void Shoot()
     {
-        var shots = GetParent().GetParent<Playground>().Shots;
         // Chest height, so a shot can hit a crate on the floor as well as another player
-        var origin = GlobalPosition + Forward * 0.8f;
-        var velocity = Forward * ShotSpeed;
-        NetworkObject.Spawn<PlaygroundShot>(shots, PlaygroundShot.Scene, shot =>
-        {
-            shot.Position = origin;
-            shot.Velocity = velocity;
-        });
+        var at = new Transform3D(GlobalBasis, GlobalPosition + Forward * 0.8f);
+        PlaygroundShot.Spawn(at, Forward * ShotSpeed, parent: GetParent().GetParent<Playground>().Shots);
     }
 
     /// <summary>The crate this player holds lets go when the player leaves.</summary>

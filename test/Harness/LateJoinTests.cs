@@ -11,19 +11,19 @@ public partial class LateJoinTests : HarnessSuite
     [Test]
     public async Task ALateJoinerSeesWhoHoldsWhatAndWhatWasSpawned()
     {
-        HarnessBody.Spawn(Host, "Crate", 1, Speed);
-        var crate = HarnessBody.Spawn(Client, "Crate", 1, Speed);
+        HarnessBody.Place(Host, "Crate", 1, Speed);
+        var crate = HarnessBody.Place(Client, "Crate", 1, Speed);
         Expect.True(await WaitUntil(() => Client.Context.NetworkTime.IsInitialSyncDone(), 5), "client never synced");
 
         Expect.True(crate.Object.TryClaim());
-        var bullet = NetworkObject.Spawn<HarnessBody>(Client, HarnessBody.Scene, body => body.Velocity = Speed).Name.ToString();
+        var bullet = HarnessBody.Spawn(Transform3D.Identity, Speed, parent: Client).Name.ToString();
         Expect.True(await WaitUntil(() => Host.GetNodeOrNull(bullet) is not null && ((HarnessBody)Host.GetNode("Crate")).Object.Holder == 2, 5),
             "host never saw the grab and the shot");
 
         var late = AddPeer(4);
         // The scene object shows up on the late peer a while after it connected: the host's word has to wait for it
         for (var i = 0; i < 15; i++) await NextFrame();
-        var lateCrate = HarnessBody.Spawn(late, "Crate", 1, Speed);
+        var lateCrate = HarnessBody.Place(late, "Crate", 1, Speed);
 
         var caughtUp = await WaitUntil(() =>
             lateCrate.Object.Authority.Peer == 2 && lateCrate.Object.Holder == 2
@@ -38,14 +38,14 @@ public partial class LateJoinTests : HarnessSuite
     [Test]
     public async Task TransferableChangesReachALateJoiner()
     {
-        var onHost = HarnessBody.Spawn(Host, "Locked", 1);
-        HarnessBody.Spawn(Client, "Locked", 1);
+        var onHost = HarnessBody.Place(Host, "Locked", 1);
+        HarnessBody.Place(Client, "Locked", 1);
         await NextFrame();
         onHost.Object.Transferable = false;
 
         var late = AddPeer(4);
         for (var i = 0; i < 10; i++) await NextFrame();
-        var lateBody = HarnessBody.Spawn(late, "Locked", 1);
+        var lateBody = HarnessBody.Place(late, "Locked", 1);
 
         Expect.True(await WaitUntil(() => !lateBody.Object.Transferable, 3),
             "late joiner kept the scene default instead of the host's authority record");

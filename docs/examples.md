@@ -12,7 +12,7 @@ using Netfox;
 
 ## 1. Players
 
-A scene `player.tscn`:
+A scene `Player.tscn`, next to `Player.cs`:
 
 ```
 Player (CharacterBody3D)      Player.cs
@@ -23,6 +23,7 @@ Player (CharacterBody3D)      Player.cs
 
 <!-- check: file -->
 ```csharp
+[Scene]                                        // spawnable; its scene is Player.tscn
 public partial class Player : CharacterBody3D
 {
     public override void _Ready() => AddToGroup("players");
@@ -44,20 +45,19 @@ On the host, one player per peer:
 ```csharp
 public partial class Game : Node3D
 {
-    private static readonly PackedScene PlayerScene = GD.Load<PackedScene>("res://player.tscn");
+    [Export] public Node3D SpawnPoint { get; set; } = null!;
 
     // Call once this peer is hosting
     public void StartHosting()
     {
-        Multiplayer.PeerConnected += id => SpawnPlayer((int)id);
-        SpawnPlayer(1);
+        Multiplayer.PeerConnected += id => Player.Spawn(SpawnPoint, authority: (int)id);
+        Player.Spawn(SpawnPoint);
     }
-
-    private void SpawnPlayer(int peer)
-        => NetworkObject.Spawn<Player>(GetNode("Players"), PlayerScene,
-            player => player.Position = new Vector3(peer * 2, 1, 0), authority: peer);
 }
 ```
+
+`Player.Spawn` is generated for every `[Scene]` class: `Spawn(node)` places it where a node is, `Spawn(at: transform)`
+at a global transform; `authority` is who simulates it, the caller by default.
 
 What you get: each player's peer simulates its character with no input delay; its transform and velocity reach
 everyone; a peer that joins later gets every player; a player whose peer leaves disappears everywhere.
@@ -71,7 +71,19 @@ Crate (RigidBody3D)
 └── NetworkObject             Kind = Auto → Shared
 ```
 
-No code. Place crates in the scene every peer loads, under the same names, or spawn them with `NetworkObject.Spawn`.
+No code. Place crates in the scene every peer loads, under the same names. To spawn them at run time, give the scene
+a class and call its generated `Spawn`:
+
+<!-- check: file -->
+```csharp
+[Scene]
+public partial class Crate : RigidBody3D { }
+```
+
+<!-- check: members Player -->
+```csharp
+private void DropCrate() => Crate.Spawn(at: GlobalTransform.Translated(Vector3.Up * 3));
+```
 
 What you get: the host simulates them at first; each is frozen wherever another peer simulates it; a crate that hits
 another passes its authority on, and one taken from under a stack takes the stack; a crate at rest goes back to the
@@ -134,7 +146,7 @@ came from.
 
 ## 5. Shooting
 
-A scene `shot.tscn`:
+A scene `Shot.tscn`, next to `Shot.cs`:
 
 ```
 Shot (Node3D)                 Shot.cs
@@ -144,44 +156,43 @@ Shot (Node3D)                 Shot.cs
 
 <!-- check: file -->
 ```csharp
-public partial class Shot : Node3D
+public partial class Shot : Node3D, ISpawnedWith<Vector3>
 {
-    public Vector3 Velocity { get; set; }
-    private NetworkObject Object => GetNode<NetworkObject>("NetworkObject");
+    private Vector3 _velocity;
     private double _age;
+
+    // Spawn data: the same on every peer. Implementing ISpawnedWith makes the class spawnable too
+    public void OnSpawned(Vector3 velocity) => _velocity = velocity;
 
     public override void _PhysicsProcess(double delta)
     {
-        if (!Object.Authority.IsLocal) return;   // the shooter moves it and decides every hit
-        GlobalPosition += Velocity * (float)delta;
+        if (!this.Net().Authority.IsLocal) return;   // the shooter moves it and decides every hit
+        GlobalPosition += _velocity * (float)delta;
         _age += delta;
 
         foreach (var player in GetTree().GetNodesInGroup("players").OfType<Player>())
         {
-            if (player.Net().Authority.Peer == Object.Authority.Peer) continue;    // not the shooter
+            if (player.Net().Authority.Peer == this.Net().Authority.Peer) continue;   // not the shooter
             if (player.GlobalPosition.DistanceTo(GlobalPosition) > 0.7f) continue;
-            this.Push(player, Velocity.Normalized() * 6);
-            Object.Despawn();                     // in the same decision: no second hit, no passing through
+            this.Push(player, _velocity.Normalized() * 6);
+            this.Net().Despawn();                     // in the same decision: no second hit, no passing through
             return;
         }
-        if (_age > 2.5) Object.Despawn();
+        if (_age > 2.5) this.Net().Despawn();
     }
 }
 ```
 
-Firing, on the shooter's peer:
+Firing, on the shooter's peer, from a `Marker3D` at the muzzle:
 
 <!-- check: members Player -->
 ```csharp
-private static readonly PackedScene ShotScene = GD.Load<PackedScene>("res://shot.tscn");
+[Export] public Marker3D Muzzle { get; set; } = null!;
 
-private void Shoot()
-    => NetworkObject.Spawn<Shot>(GetNode("../../Shots"), ShotScene, shot =>
-    {
-        shot.Position = GlobalPosition - GlobalBasis.Z * 0.8f;
-        shot.Velocity = -GlobalBasis.Z * 18;
-    });
+private void Shoot() => Shot.Spawn(Muzzle, -Muzzle.GlobalBasis.Z * 18);
 ```
+
+The velocity is required: `OnSpawned(Vector3 velocity)` has no default, so `Shot.Spawn(Muzzle)` does not build.
 
 What you get: the shot appears at once for the shooter and from the muzzle for everyone else; the shooter's screen
 decides what it hit; other peers see it vanish when their playback reaches the hit.

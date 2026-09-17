@@ -19,9 +19,9 @@ public partial class EventTests : HarnessSuite
     {
         HarnessBody[] bodies =
         [
-            HarnessBody.Spawn(Host, name, authority),
-            HarnessBody.Spawn(Client, name, authority),
-            HarnessBody.Spawn(_third, name, authority),
+            HarnessBody.Place(Host, name, authority),
+            HarnessBody.Place(Client, name, authority),
+            HarnessBody.Place(_third, name, authority),
         ];
         var received = new List<(int, int, string)>();
         foreach (var body in bodies)

@@ -2,7 +2,7 @@ using Godot;
 
 namespace Netfox.Tests;
 
-/// <summary>NetworkObject.Spawn puts a scene on every peer, and freeing it or its peer leaving takes it off everywhere.</summary>
+/// <summary>A generated Spawn puts a scene on every peer, and freeing it or its peer leaving takes it off everywhere.</summary>
 public partial class SpawnTests : HarnessSuite
 {
     private NetfoxStack _third = null!;
@@ -18,30 +18,35 @@ public partial class SpawnTests : HarnessSuite
     private NetfoxStack[] Stacks => [Host, Client, _third];
 
     [Test]
-    public async Task ASpawnAppearsEverywhereWithItsTransformAndAuthority()
+    public async Task ASpawnAppearsEverywhereAtItsGlobalTransformWithItsAuthorityAndData()
     {
-        var spawned = NetworkObject.Spawn<HarnessBody>(Client, HarnessBody.Scene, body => body.Position = new Vector3(3, 1, 2));
-        var name = spawned.Name.ToString();
+        // A parent away from the origin: the spawn transform is global, not relative to it
+        foreach (var stack in Stacks) stack.AddChild(new Node3D { Name = "Offset", Position = new Vector3(10, 0, 0) });
+        var at = new Transform3D(Basis.Identity, new Vector3(3, 1, 2));
+        var velocity = new Vector3(0, 0, 5);
 
-        Expect.True(await WaitUntil(() => Stacks.All(stack => stack.GetNodeOrNull<HarnessBody>(name) is not null), 3),
-            $"not spawned everywhere: {string.Join(", ", Stacks.Select(stack => stack.GetNodeOrNull(name) is not null))}");
+        // The host spawns a body for peer 3, as it does a player's character
+        var name = HarnessBody.Spawn(at, velocity, parent: Host.GetNode("Offset"), authority: 3).Name.ToString();
+
+        Expect.True(await WaitUntil(() => Stacks.All(stack => stack.GetNodeOrNull<HarnessBody>($"Offset/{name}") is not null), 3),
+            $"not spawned everywhere: {string.Join(", ", Stacks.Select(stack => stack.GetNodeOrNull($"Offset/{name}") is not null))}");
         foreach (var stack in Stacks)
         {
-            var body = stack.GetNode<HarnessBody>(name);
-            Expect.Equal(2, body.GetMultiplayerAuthority());
-            Expect.True(body.Position.DistanceTo(new Vector3(3, 1, 2)) < 0.01f, $"{stack.Name} placed it at {body.Position}");
+            var body = stack.GetNode<HarnessBody>($"Offset/{name}");
+            Expect.Equal(3, body.GetMultiplayerAuthority(), $"{stack.Name}: authority");
+            Expect.Equal(velocity, body.Velocity, $"{stack.Name}: spawn data");
+            Expect.True(body.GlobalPosition.DistanceTo(new Vector3(3, 1, 2)) < 0.01f || body.Object.Authority.IsLocal,
+                $"{stack.Name} placed it at {body.GlobalPosition}");
         }
-
-        // The host spawns on behalf of a player, as it does the player's character
-        var forThird = NetworkObject.Spawn<HarnessBody>(Host, HarnessBody.Scene, authority: 3).Name.ToString();
-        Expect.True(await WaitUntil(() => _third.GetNodeOrNull<HarnessBody>(forThird) is { } body && body.Object.Authority.IsLocal, 3),
-            "the peer the host spawned for does not simulate it");
+        // The peer that simulates it got the data too, and moves it with that velocity
+        var onThird = _third.GetNode<HarnessBody>($"Offset/{name}");
+        Expect.True(onThird.Object.Authority.IsLocal, "peer 3 does not simulate it");
     }
 
     [Test]
     public async Task FreeingASpawnOnItsAuthorityFreesItEverywhere()
     {
-        var spawned = NetworkObject.Spawn<HarnessBody>(Client, HarnessBody.Scene);
+        var spawned = HarnessBody.Spawn(Transform3D.Identity, parent: Client);
         var name = spawned.Name.ToString();
         Expect.True(await WaitUntil(() => Stacks.All(stack => stack.GetNodeOrNull(name) is not null), 3), "not spawned everywhere");
 
@@ -53,7 +58,7 @@ public partial class SpawnTests : HarnessSuite
     [Test]
     public async Task APeersPersonalSpawnsLeaveWithIt()
     {
-        var personal = NetworkObject.Spawn<HarnessBody>(_third, HarnessBody.Scene);
+        var personal = HarnessBody.Spawn(Transform3D.Identity, parent: _third);
         var name = personal.Name.ToString();
         Expect.True(await WaitUntil(() => Stacks.All(stack => stack.GetNodeOrNull(name) is not null), 3), "not spawned everywhere");
         // Nobody else may take it, the way a projectile or a player's character is

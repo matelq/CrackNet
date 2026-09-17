@@ -46,7 +46,6 @@ public partial class Playground : Node3D
     private LineEdit _address = null!;
     private Label _status = null!;
     private Camera3D _camera = null!;
-    private MultiplayerSpawner _playerSpawner = null!;
     private PlaygroundMesh _mesh = null!;
     private NetworkSimulator.Profile _profile = NetworkSimulator.Profile.Default;
     private double _sinceReadout = 1;
@@ -123,8 +122,8 @@ public partial class Playground : Node3D
     /// <summary>Once this peer is the server, by the Host button or by autoconnect: players for everyone who joins.</summary>
     private void StartHosting()
     {
+        // A player's character leaves with its peer on its own: nobody else may take it
         Multiplayer.PeerConnected += id => SpawnPlayer((int)id);
-        Multiplayer.PeerDisconnected += id => Players.GetNodeOrNull($"Player{id}")?.QueueFree();
         SpawnPlayer(1);
         _menu.Hide();
     }
@@ -146,7 +145,7 @@ public partial class Playground : Node3D
     {
         var taken = Players.GetChildren().OfType<PlaygroundPlayer>().Select(player => player.Slot).ToHashSet();
         var slot = Enumerable.Range(0, 64).First(candidate => !taken.Contains(candidate));
-        _playerSpawner.Spawn(new Godot.Collections.Array { peer, slot });
+        PlaygroundPlayer.Spawn(new Transform3D(Basis.Identity, new Vector3(-6 + slot * 2, 1, 6)), slot, parent: Players, authority: peer);
     }
 
     private void BuildWorld()
@@ -170,10 +169,6 @@ public partial class Playground : Node3D
         AddChild(Players);
         Shots = new Node3D { Name = "Shots" };
         AddChild(Shots);
-
-        _playerSpawner = new MultiplayerSpawner { Name = "PlayerSpawner", SpawnPath = new NodePath("../Players") };
-        _playerSpawner.SpawnFunction = Callable.From((Variant data) => (Node)PlaygroundPlayer.Create(data.AsGodotArray()[0].AsInt32(), data.AsGodotArray()[1].AsInt32()));
-        AddChild(_playerSpawner);
 
         _camera = new Camera3D { Position = new Vector3(0, 14, 16), RotationDegrees = new Vector3(-45, 0, 0) };
         AddChild(_camera);

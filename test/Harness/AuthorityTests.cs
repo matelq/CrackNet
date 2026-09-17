@@ -19,9 +19,9 @@ public partial class AuthorityTests : HarnessSuite
 
     private HarnessBody[] SpawnEverywhere(string name, Vector3 velocity = default, Vector3 location = default, int authority = 1)
         => [
-            HarnessBody.Spawn(Host, name, authority, velocity, location),
-            HarnessBody.Spawn(Client, name, authority, velocity, location),
-            HarnessBody.Spawn(_third, name, authority, velocity, location),
+            HarnessBody.Place(Host, name, authority, velocity, location),
+            HarnessBody.Place(Client, name, authority, velocity, location),
+            HarnessBody.Place(_third, name, authority, velocity, location),
         ];
 
     private static bool Agree(HarnessBody[] bodies, int authority, int owner)

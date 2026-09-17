@@ -3,11 +3,11 @@ using Godot;
 namespace Netfox.Examples.Playground;
 
 /// <summary>
-/// A slow projectile, spawned by its shooter with <see cref="NetworkObject.Spawn{T}"/> from shot.tscn. It belongs to
-/// its shooter, whose peer moves it and is the sole arbiter of every hit against the targets it displays. The first
+/// A slow projectile, spawned by its shooter with <c>PlaygroundShot.Spawn(at, velocity)</c> from PlaygroundShot.tscn.
+/// It belongs to its shooter, whose peer moves it and is the sole arbiter of every hit against the targets it displays. The first
 /// target receives knockback and the shot enters its despawn timeline immediately.
 /// </summary>
-public partial class PlaygroundShot : Node3D
+public partial class PlaygroundShot : Node3D, ISpawnedWith<Vector3>
 {
     private const float Lifetime = 2.5f, HitRadius = 0.7f, CrateImpulse = 6, PlayerKnock = 6;
 
@@ -21,10 +21,10 @@ public partial class PlaygroundShot : Node3D
     }
 
     public NetworkObject Object { get; private set; } = null!;
-    public static PackedScene Scene => GD.Load<PackedScene>("res://examples/playground/shot.tscn");
+    /// <summary>Spawn data; only the shooter's peer moves the shot.</summary>
+    public Vector3 Velocity { get; private set; }
 
-    /// <summary>Set by the shooter when spawning; only the shooter's peer moves the shot.</summary>
-    public Vector3 Velocity { get; set; }
+    public void OnSpawned(Vector3 velocity) => Velocity = velocity;
     private double _age;
     private bool _consumed;
 

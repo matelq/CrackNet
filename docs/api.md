@@ -17,6 +17,10 @@ Well-known command ids. Explicit so they do not depend on autoload order.
 
 Synced values on the wire: a type byte, then the value at float precision. `GD.VarToBytes` costs a 4-byte header per value on top of doubles; a Vector3 goes from 20 bytes to 13. Types without a case here fall back to it.
 
+### ISpawnedWith`1
+
+An object that needs data when it is created: `OnSpawned(`0` runs with the same arguments on every peer, late joiners included, before the root enters the tree. The generated `Spawn` of the class takes the argument, optional only when `OnSpawned(`0` declares a default value itself.
+
 ### ISyncedProperties
 
 Declares the synced properties of a node. Implemented by the source generator for every partial type with `[Synced]` properties; it can also be implemented by hand.
@@ -142,7 +146,6 @@ One replicated object. While its root is this peer's multiplayer authority it se
 | method | `Push(Netfox.NetworkObject,Godot.Vector3)` | This object struck `target`: takes the target when it can (`NetworkObject`), so a crate flies on this peer's simulation at once, then pushes it. A player, which cannot be taken, is pushed on its own peer. If the host gives the target to someone else, the winner's simulation stands and this push is lost with the claim. |
 | method | `Release` | Lets go of a held object. This peer keeps simulating it until someone else touches it. |
 | method | `Send(Godot.Variant)` | Delivers `payload` to whoever is this object's authority, reliably and exactly once, even if authority moves while it is on its way. On the authority itself it is raised at once. |
-| method | `Spawn``1(Godot.Node,Godot.PackedScene,System.Action{``0},System.Int32)` | Instances `scene` on every peer; see `Int32`. |
 | method | `TakeKnockback(System.Double,System.Single)` | The pushes received and not yet used up, decaying by `decay` per second: add it to a character's velocity each physics frame, before moving. |
 | method | `Teleport` | The next state this peer sends applies without interpolation on the others: a respawn, not a flight. |
 | method | `Throw(Godot.Vector3)` | Lets go of a held object with `velocity`: the throw flies on this peer's simulation. |
@@ -171,7 +174,6 @@ Sends the state of every `NetworkObject` this peer is authority for, once per ti
 | method | `HandleAuthority(System.Int32,System.Byte[])` | On the host: accepts a guest's change when it is newer and the object is free or already the guest's, and tells everyone; otherwise tells the guest what stands. On a guest: whatever the host says stands. |
 | method | `HandleEvent(System.Int32,System.Byte[])` | Raises an event on its object if this peer is the authority, and passes it on to the authority otherwise. |
 | method | `SendAllAuthorityTo(System.Int32)` | On the host: tells a peer that just joined who has authority over and who holds every object. |
-| method | `Spawn``1(Godot.Node,Godot.PackedScene,System.Action{``0},System.Int32)` | Instances `scene` under `parent` on every peer, simulated by `authority` (this peer when 0). `setup` runs here only, before the root enters the tree: set its transform there, and whatever only the authority needs, such as a projectile's speed. Others get the transform and authority; the rest arrives as state, and the object stays hidden until it does. |
 | method | `SubmitAuthority(Netfox.NetworkObject)` | Sends an authority change this peer just applied: a guest asks the host, the host tells everyone. |
 
 ### NetworkTickrateHandshake
@@ -227,6 +229,23 @@ The newest state tick received from a peer and the tick currently displayed for 
 | | Member | Summary |
 |---|---|---|
 | method | `#ctor(System.Double,System.Double)` | The newest state tick received from a peer and the tick currently displayed for that peer. |
+
+### SceneAttribute
+
+Makes a class spawnable with a generated `Spawn`. Without a path the scene is the one named after the class next to its script (`Crate.cs`, `Crate.tscn`).
+
+| | Member | Summary |
+|---|---|---|
+| property | `Path` | The `res://` path of the scene, or null for the one named after the class. |
+
+### Spawning
+
+What generated `Spawn` methods call; game code uses those instead.
+
+| | Member | Summary |
+|---|---|---|
+| method | `SceneOf(System.Type)` | The scene named after a class: its script's path with `.tscn` for `.cs`. |
+| method | `Spawn``1(System.String,Godot.Variant,Godot.Node,Godot.Variant,Godot.Node,System.Int32)` | Instances the scene of `T` on every peer. `scenePath` null means the scene named after the class next to its script. |
 
 ### SyncedAttribute
 
