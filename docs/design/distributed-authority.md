@@ -172,8 +172,6 @@ enum, strings, references) always step. `Teleport()` makes the next snapshot app
 
 ## Open
 
-- Review finding 3: `[Synced]` on a nested or generic type generates a separate empty type and replicates nothing,
-  silently. Plan: a compile error (NFX002).
 - Review finding 4: one object whose state is larger than `MaxSyncPacketSize` goes out as a single oversized
   unreliable packet, which the transport may drop, silently. Plan: a warning.
 - A simpler API. Candidates: `NetworkObject` handles a rigid body itself (freeze where not authoritative, touch on

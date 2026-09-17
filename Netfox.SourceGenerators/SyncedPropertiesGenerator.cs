@@ -30,6 +30,14 @@ public sealed class SyncedPropertiesGenerator : IIncrementalGenerator
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    private static readonly DiagnosticDescriptor MustBeTopLevel = new(
+        "NFX002",
+        "Synced properties need a top-level, non-generic type",
+        "'{0}' is nested or generic, which synced properties do not support: move the properties to a top-level, non-generic type",
+        "Netfox",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         context.RegisterPostInitializationOutput(ctx =>
@@ -65,6 +73,13 @@ public sealed class SyncedPropertiesGenerator : IIncrementalGenerator
             if (!IsPartial(type))
             {
                 context.ReportDiagnostic(Diagnostic.Create(MustBePartial, group.First().Location, type.Name));
+                continue;
+            }
+            // The generated declaration names neither the containing type nor type parameters, so it would declare a
+            // separate, empty type and the real one would silently replicate nothing
+            if (type.ContainingType is not null || type.IsGenericType)
+            {
+                context.ReportDiagnostic(Diagnostic.Create(MustBeTopLevel, group.First().Location, type.Name));
                 continue;
             }
 

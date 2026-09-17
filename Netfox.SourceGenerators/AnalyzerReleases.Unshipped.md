@@ -6,3 +6,4 @@
 Rule ID | Category | Severity | Notes
 --------|----------|----------|--------------------
 NFX001 | Netfox | Error | A type declaring netfox properties has to be partial
+NFX002 | Netfox | Error | A type declaring synced properties has to be top-level and non-generic
