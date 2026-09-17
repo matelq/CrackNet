@@ -3,8 +3,9 @@ using Godot;
 namespace Netfox.Examples.Playground;
 
 /// <summary>
-/// A slow projectile. It belongs to its shooter, whose peer moves it and is the sole arbiter of every hit against the
-/// targets it displays. The first target receives knockback and the shot enters its despawn timeline immediately.
+/// A slow projectile, spawned by its shooter with <see cref="NetworkObject.Spawn{T}"/> from shot.tscn. It belongs to
+/// its shooter, whose peer moves it and is the sole arbiter of every hit against the targets it displays. The first
+/// target receives knockback and the shot enters its despawn timeline immediately.
 /// </summary>
 public partial class PlaygroundShot : Node3D
 {
@@ -20,18 +21,19 @@ public partial class PlaygroundShot : Node3D
     }
 
     public NetworkObject Object { get; private set; } = null!;
-    private Vector3 _velocity;
+    public static PackedScene Scene => GD.Load<PackedScene>("res://examples/playground/shot.tscn");
+
+    /// <summary>Set by the shooter when spawning; only the shooter's peer moves the shot.</summary>
+    public Vector3 Velocity { get; set; }
     private double _age;
     private bool _consumed;
 
-    public static PlaygroundShot Create(Godot.Collections.Dictionary data, int shooter)
+    public override void _EnterTree()
     {
-        var shot = new PlaygroundShot { Name = data["name"].AsString(), Position = data["origin"].AsVector3(), _velocity = data["velocity"].AsVector3() };
-        shot.SetMultiplayerAuthority(shooter);
-        shot.AddChild(new MeshInstance3D { Mesh = new SphereMesh { Radius = 0.15f, Height = 0.3f }, MaterialOverride = new StandardMaterial3D { AlbedoColor = Playground.ColorOf(shooter), EmissionEnabled = true, Emission = Playground.ColorOf(shooter) } });
-        shot.Object = new NetworkObject { Name = "NetworkObject" };
-        shot.AddChild(shot.Object);
-        return shot;
+        var color = Playground.ColorOf(GetMultiplayerAuthority());
+        AddChild(new MeshInstance3D { Mesh = new SphereMesh { Radius = 0.15f, Height = 0.3f }, MaterialOverride = new StandardMaterial3D { AlbedoColor = color, EmissionEnabled = true, Emission = color } });
+        Object = new NetworkObject { Name = "NetworkObject" };
+        AddChild(Object);
     }
 
     public override void _PhysicsProcess(double delta)
@@ -39,7 +41,7 @@ public partial class PlaygroundShot : Node3D
         if (_consumed) return;
         if (!Object.IsAuthority) return;
 
-        GlobalPosition += _velocity * (float)delta;
+        GlobalPosition += Velocity * (float)delta;
         _age += delta;
 
         // Nearest first, and nothing when nothing is in reach: MinBy over a value tuple throws on an empty sequence,
@@ -59,13 +61,13 @@ public partial class PlaygroundShot : Node3D
                                      <= playerHit.GlobalPosition.DistanceTo(GlobalPosition)))
         {
             Object.Touch(crateHit.Object);
-            crateHit.Object.Knock(_velocity.Normalized() * CrateImpulse);
+            crateHit.Object.Knock(Velocity.Normalized() * CrateImpulse);
             Consume();
             return;
         }
         if (playerHit is not null)
         {
-            playerHit.Object.Knock(_velocity.Normalized() * PlayerKnock);
+            playerHit.Object.Knock(Velocity.Normalized() * PlayerKnock);
             Consume();
             return;
         }

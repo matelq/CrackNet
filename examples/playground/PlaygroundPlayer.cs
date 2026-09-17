@@ -18,8 +18,6 @@ public partial class PlaygroundPlayer : CharacterBody3D
 
     private Vector3 _knockback;
     private PlaygroundCrate? _held;
-    private MultiplayerSpawner _shots = null!;
-    private int _shotCount;
     private bool _grabWasDown, _pushWasDown, _shootWasDown;
 
     private Vector3 Forward => -GlobalBasis.Z;
@@ -45,11 +43,6 @@ public partial class PlaygroundPlayer : CharacterBody3D
         player.Object = new NetworkObject { Name = "NetworkObject" };
         player.AddChild(player.Object);
 
-        // Each player spawns its own shots, so the spawner's authority is the player's peer
-        player._shots = new MultiplayerSpawner { Name = "Shots", SpawnPath = new NodePath("../../../Shots") };
-        player._shots.SpawnFunction = Callable.From((Variant data) => (Node)PlaygroundShot.Create(data.AsGodotDictionary(), peer));
-        player._shots.SetMultiplayerAuthority(peer);
-        player.AddChild(player._shots);
         return player;
     }
 
@@ -137,14 +130,15 @@ public partial class PlaygroundPlayer : CharacterBody3D
 
     private void Shoot()
     {
-        var data = new Godot.Collections.Dictionary
+        var shots = GetParent().GetParent<Playground>().Shots;
+        // Chest height, so a shot can hit a crate on the floor as well as another player
+        var origin = GlobalPosition + Forward * 0.8f;
+        var velocity = Forward * ShotSpeed;
+        NetworkObject.Spawn<PlaygroundShot>(shots, PlaygroundShot.Scene, shot =>
         {
-            ["name"] = $"Shot{Peer}_{++_shotCount}",
-            // Chest height, so a shot can hit a crate on the floor as well as another player
-            ["origin"] = GlobalPosition + Forward * 0.8f,
-            ["velocity"] = Forward * ShotSpeed,
-        };
-        _shots.Spawn(data);
+            shot.Position = origin;
+            shot.Velocity = velocity;
+        });
     }
 
     /// <summary>The crate this player holds lets go when the player leaves.</summary>
