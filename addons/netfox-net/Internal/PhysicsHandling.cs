@@ -147,6 +147,14 @@ internal abstract class PhysicsHandling
             // Every body of the group has to have rested as long; a held one never counts
             var group = RestingGroup();
             if (group.Any(member => member.RestFrames < RestFramesBeforeReturning)) return;
+            // Not from under a player, local or replayed: handed over, each peer would have the other body a network
+            // delay behind, the two would overlap and the physics engine would throw the player up
+            if (group.Any(member => member.Root is RigidBody3D body
+                    && TouchingOf(body).Any(other => other.ResolvedKind == NetworkObject.ObjectKind.Personal)))
+            {
+                foreach (var member in group) member.RestFrames = 0;
+                return;
+            }
             foreach (var member in group)
             {
                 member.Authority.ReturnToHost();

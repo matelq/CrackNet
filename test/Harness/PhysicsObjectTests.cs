@@ -72,7 +72,9 @@ public partial class PhysicsObjectTests : HarnessSuite
         Expect.False(crates[1].Freeze, "the client simulates the crate it took");
         Expect.True(crates[0].Freeze, "the host plays it back");
 
-        // Stopped walking into it: once it has settled, it goes back
+        // Stepped back from it: once it has settled, it goes back. Leaning on it, the player would keep it
+        Client.GetNode<Walker>("World/Walker2").Walk = new Vector3(-4, 0, 0);
+        for (var i = 0; i < 10; i++) await NextFrame();
         Client.GetNode<Walker>("World/Walker2").Walk = Vector3.Zero;
         Expect.True(await WaitUntil(() => crates.All(crate => Net(crate).Authority.Peer == 1), 8),
             $"the settled crate never went back to the host: {string.Join(", ", crates.Select(crate => Net(crate).Authority.Peer))}");
@@ -327,5 +329,30 @@ public partial class PhysicsObjectTests : HarnessSuite
         await WaitUntil(() => onClient.PendingRequest == 0, 3);
         for (var i = 0; i < 20; i++) await NextFrame();
         Expect.True(onClient.Holder == 2 && dropped.Count == 0, $"the claim was undone on the claimer: {string.Join("; ", dropped)}");
+    }
+
+    [Test]
+    public async Task ACrateStaysWithThePlayerStandingOnIt()
+    {
+        // Playtest: the crate a player stood on went back to the host after resting under them, and from then on each
+        // peer had the other one a network delay behind: the bodies overlapped and the player was thrown up
+        Network.LatencyMs = 150;
+        var crates = new[] { Crate(Host, "Crate", new Vector3(0, 0.5f, 0)), Crate(Client, "Crate", new Vector3(0, 0.5f, 0)) };
+        Walker(Host, 2, new Vector3(0, 1.95f, 0), Vector3.Zero);
+        var walker = Walker(Client, 2, new Vector3(0, 1.95f, 0), Vector3.Zero);
+        walker.SafeMargin = 0.05f;   // as in the playground: at Godot's default Rapier bounces the crate off on its own
+        await NextFrame();
+        Expect.True(Net(crates[1]).Authority.Take());
+        var changes = new List<int>();
+        Net(crates[1]).AuthorityChanged += () => changes.Add(Net(crates[1]).Authority.Peer);
+
+        var walkerHighest = 0f;
+        for (var frame = 0; frame < 240; frame++)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+            walkerHighest = Math.Max(walkerHighest, walker.GlobalPosition.Y);
+        }
+        Expect.True(changes.Count == 0, $"the crate under a standing player changed authority: {string.Join(", ", changes)}");
+        Expect.True(walkerHighest < 2.0f && walker.GlobalPosition.Y > 1.8f, $"the player was thrown up to {walkerHighest}, ended at {walker.GlobalPosition}");
     }
 }

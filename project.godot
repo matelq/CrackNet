@@ -50,3 +50,4 @@ events/enabled=true
 [physics]
 
 3d/physics_engine="Rapier3D"
+rapier/solver/normalized_max_corrective_velocity=2.0
