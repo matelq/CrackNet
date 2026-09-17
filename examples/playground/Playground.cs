@@ -1,4 +1,5 @@
 using Godot;
+using Netfox.Examples.Steam;
 using Netfox.Extras;
 
 namespace Netfox.Examples.Playground;
@@ -51,6 +52,7 @@ public partial class Playground : Node3D
     private double _sinceReadout = 1;
     private string _delayReadout = "";
     private int _port = Port;
+    private SteamLobbyBootstrap? _steam;
 
     public override void _Ready()
     {
@@ -84,6 +86,8 @@ public partial class Playground : Node3D
                 StartMeshClient(simulator.Hostname, simulator.Conditions);
             }).CallDeferred();
         }
+
+        if (SteamLobbyBootstrap.IsAvailable && !OS.GetCmdlineUserArgs().Contains("--smoke")) StartSteam();
 
         if (OS.GetCmdlineUserArgs().Contains("--smoke")) AddChild(new PlaygroundSmoke { Name = "Smoke" });
         if (OS.GetCmdlineUserArgs().Contains("--host")) Host();
@@ -138,6 +142,28 @@ public partial class Playground : Node3D
         var error = _mesh.Join(address, _port, profile);
         if (error != Error.Ok) _status.Text = $"Joining failed: {error}";
         else _menu.Hide();
+    }
+
+    /// <summary>
+    /// Steam, when GodotSteam is installed and the Steam client runs: the host makes a friends-only lobby, a friend
+    /// joins it from the Steam overlay (Join game, or an invite) or by pasting the lobby id. Steam relays the traffic,
+    /// so no ports and no addresses. The simulated network profile does not apply here.
+    /// </summary>
+    private void StartSteam()
+    {
+        _steam = new SteamLobbyBootstrap { Name = "Steam" };
+        _steam.Failed += reason => _status.Text = $"Steam: {reason}";
+        _steam.LobbyReady += lobbyId =>
+        {
+            _menu.Hide();
+            if (!Multiplayer.IsServer()) return;
+            DisplayServer.ClipboardSet(lobbyId.ToString());
+            StartHosting();
+            Engine.GetSingleton("Steam").Call("activateGameOverlayInviteDialog", lobbyId);
+        };
+        AddChild(_steam);
+        if (Engine.GetSingleton("Steam") is { } steam)
+            steam.Connect("join_requested", Callable.From<ulong, ulong>((lobbyId, _) => _steam.Join(lobbyId)));
     }
 
     /// <summary>The lowest free slot, so a player who leaves hands their colour to the next one to join.</summary>
@@ -204,6 +230,18 @@ public partial class Playground : Node3D
         var join = new Button { Text = "Join" };
         join.Pressed += () => Join(_address.Text);
         menu.AddChild(join);
+
+        if (!SteamLobbyBootstrap.IsAvailable) return;
+        var steamHost = new Button { Text = "Host on Steam (invites a friend)" };
+        steamHost.Pressed += () => _steam?.Host();
+        menu.AddChild(steamHost);
+        var steamJoin = new Button { Text = "Join Steam lobby id above" };
+        steamJoin.Pressed += () =>
+        {
+            if (ulong.TryParse(_address.Text.Trim(), out var lobbyId)) _steam?.Join(lobbyId);
+            else _status.Text = "Paste the host's lobby id into the field";
+        };
+        menu.AddChild(steamJoin);
     }
 
     public override void _Process(double delta)
