@@ -133,6 +133,35 @@ authoritative, and plays back and interpolates otherwise. Properties in its subt
 enum, strings, references) always step. `Teleport()` makes the next snapshot apply without interpolation;
 `Despawn()` ends the object's playback timeline. Games report contacts through `Touch`, not by reimplementing policy.
 
+### Planned simplification (decided, not implemented)
+
+Goal: a crate needs no code and a player needs only its own movement. Paid for in bytes where needed.
+
+- **The library reacts to the root's type.** An unsupported root (`SoftBody3D`, `PhysicalBone3D` ragdolls) is an
+  error on the node in the editor, and at run time the game logs it and quits before connecting.
+- **What is sent, as a contract** shown read-only in the inspector ("Synced: transform, linear_velocity, ...") and
+  as one table in the guide:
+  - the root's full global transform, always, for any 2D or 3D root (no position-and-yaw variants for now:
+    a character is thrown and tumbles too);
+  - linear and angular velocity when the root is a `RigidBody2D/3D` or `CharacterBody2D/3D`;
+  - every `[Synced]` property of the root and its descendants, down to a nested `NetworkObject`;
+  - nothing else: child transforms, animation, wheels, particles only when marked `[Synced]`;
+  - changed state at the next send, unchanged once a second; applied on non-authority peers every frame, blended,
+    at the sender's playback delay.
+- **Kind** instead of `Transferable` / `SpreadsAuthority` flags, `Auto` by default from the root's type; named by the
+  rule, not by an example:
+  - `Personal`: authority stays with one peer and passes on contact (a player, a projectile, a grenade);
+  - `Shared`: taken by touch or grab and passes on contact (a crate, a ball);
+  - `World`: authority stays put and does not pass (a lift, a door, the match score) - not necessarily the host's;
+  - `Custom`: the flags by hand. No preset for "shared but does not pass on contact".
+- **Built-in behaviour for physics roots:** freeze where not authoritative (with the Rapier re-set), contact
+  monitoring and `Touch` on contact for rigid bodies, `Touch` on slide collisions for character bodies, return to the
+  host at rest.
+- **`Knock(Vector3)`** built in: an impulse on a rigid body's authority, a `Knocked` event on a character's. The
+  general event stays.
+- **One `Spawn` call** over a library-owned spawner instead of a `MultiplayerSpawner` per shooter.
+- **Removed:** `NetworkSchemas`, `PeerVisibilityFilter`; the public `NetworkTime` reduced to what games use.
+
 ## Tests the model needs
 
 1. Two peers grab one object at once: exactly one owner, and every peer agrees who.
@@ -172,11 +201,7 @@ enum, strings, references) always step. `Teleport()` makes the next snapshot app
 
 ## Open
 
-- A simpler API. Candidates: `NetworkObject` handles a rigid body itself (freeze where not authoritative, touch on
-  contact, return to host at rest); a ready synced body instead of three hand-written `[Synced]` properties; a
-  built-in knock instead of `SendToAuthority` with a raw `Variant`; sequences and diagnostics out of the main API;
-  one spawn call instead of a spawner per shooter; inspector presets (player, prop, projectile); remove unused
-  `NetworkSchemas` and `PeerVisibilityFilter`. Decide in a design session before implementing.
+- The simpler API below (API, decided so far): not implemented yet, and the design session is still going.
 
 ## Deferred
 
@@ -185,6 +210,8 @@ enum, strings, references) always step. `Teleport()` makes the next snapshot app
 - Extrapolating targets to the present for hit tests, in the style of Photon Fusion "Forecast". Revisit if dodges do
   not count on Casual or Realistic.
 - Sequence number overflow (review finding).
+- Smaller transforms per root type (position and yaw for an upright character, 2D rotation only). Everything sends the
+  full transform until measurements ask.
 - Objects larger than a state packet. Today such an object warns and goes out oversized, fragmented by the transport.
   Supporting it properly means splitting a sample across packets or sending it through a reliable large-block channel
   (Gaffer on Games, Sending Large Blocks of Data). Revisit when a game needs one.
