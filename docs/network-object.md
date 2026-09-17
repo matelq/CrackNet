@@ -73,7 +73,7 @@ a claim the host has not confirmed yet: then it waits for the host's answer, and
 
 ## Projectiles and hitscan
 
-A projectile belongs to its shooter: spawn it with `NetworkObject.Spawn`, and its plain `Node3D` root makes it
+A projectile belongs to its shooter: spawn it with its generated `Spawn`, and its plain `Node3D` root makes it
 `Personal`. The shooter's peer moves it and decides every hit against the targets it displays: it pushes the target
 and calls `Despawn()` in the same frame, so a projectile cannot pass through its first target or hit twice. To push a
 crate with one, `this.Push(crate, impulse)` takes it and pushes it. `PlaygroundShot` is the worked example.
@@ -83,8 +83,9 @@ displayed positions, so the ray hits what the shooter sees.
 
 ## Spawning, despawn and teleport
 
-- `NetworkObject.Spawn<T>(parent, scene, setup, authority)` instances a scene on every peer and on late joiners. `setup`
-  runs on the spawning peer before the root enters the tree; its transform is sent, the rest arrives as state.
+- `Shot.Spawn(node, data)` and `Shot.Spawn(at: transform, data)`, generated for `[Scene]` and `ISpawnedWith<T>` classes,
+  instance the class's scene on every peer and on late joiners; `OnSpawned(data)` runs everywhere before it enters the
+  tree. See [Getting started](getting-started.md#spawning).
 - `Despawn()` ends the object's timeline. The authority hides it and stops processing at once. Other peers keep
   showing it until their playback reaches the final sample, then hide it; the root is freed everywhere after a grace
   period. Do not `QueueFree` a replicated object yourself.

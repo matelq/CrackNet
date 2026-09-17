@@ -9,8 +9,9 @@ Drop `addons/netfox-net` into your project and enable the plugin in **Project Se
 autoloads (`NetworkTime`, `NetworkEvents`, the servers behind `NetworkObject`) in the order they need, and the project
 settings under **Netfox**.
 
-The addon compiles into your game's own assembly, so the project needs `ImplicitUsings` and `Nullable`. `[Synced]`
-comes from the source generator in the release zip:
+The addon compiles into your game's own assembly, so the project needs `ImplicitUsings` and `Nullable`. `[Synced]` and
+the generated `Spawn` come from the source generator in the release zip, which reads your scenes to check that every
+spawnable class has one:
 
 ```xml
 <PropertyGroup>
@@ -19,6 +20,7 @@ comes from the source generator in the release zip:
 </PropertyGroup>
 <ItemGroup>
   <Analyzer Include="addons/netfox-net/analyzers/Netfox.SourceGenerators.dll" />
+  <AdditionalFiles Include="**/*.tscn" Exclude=".godot/**" />
 </ItemGroup>
 ```
 
@@ -84,22 +86,36 @@ it slides into (a crate) is taken by that peer. Its transform and velocity are s
 Continuous values blend between samples; `[Synced(Interpolate = false)]` makes one step, and discrete types always
 step.
 
-The node's multiplayer authority is the object's authority. Set it before the node enters the tree - a
-`MultiplayerSpawner`'s spawn function or `NetworkObject.Spawn` does.
+The node's multiplayer authority is the object's authority. Set it before the node enters the tree - the generated
+`Spawn` does.
 
 ## Spawning
 
+A class with `[Scene]`, or one implementing `ISpawnedWith<T>`, gets a generated `Spawn`. Its scene is the one named after
+the class next to its script (`Shot.cs`, `Shot.tscn`), or the path given to `[Scene("res://...")]`.
+
 ```csharp
-var shot = NetworkObject.Spawn<Shot>(shotsParent, ShotScene, shot =>
+[Scene]
+public partial class Crate : RigidBody3D { }
+
+public partial class Shot : Node3D, ISpawnedWith<Vector3>
 {
-    shot.Position = muzzle;       // sent with the spawn
-    shot.Velocity = direction;    // only the shooter needs it
-});
+    public void OnSpawned(Vector3 velocity) { /* the same on every peer */ }
+}
+
+Crate.Spawn(at: transform);                          // at a global transform
+Shot.Spawn(Muzzle, -Muzzle.GlobalBasis.Z * 18);      // where a node is, with its spawn data
+Player.Spawn(SpawnPoint, authority: peer);           // the host spawns a character another peer simulates
 ```
 
-The scene appears on every peer, simulated by the peer that spawned it (or pass `authority:`). A peer that joins later
-gets it too. Freeing it on its authority frees it everywhere; call `Object.Despawn()` rather than `QueueFree` so
-observers see it to the end first.
+The scene appears on every peer and on late joiners, simulated by the caller unless `authority:` says otherwise, under
+the current scene unless `parent:` does. `OnSpawned` runs everywhere before the object enters the tree, so data the
+host sets for another peer's object reaches that peer too. Spawn data travels in a Godot `Variant`; it is required
+unless `OnSpawned` declares a default value. A missing scene, a class at the root of two scenes, or spawn data a
+`Variant` cannot hold fails the build.
+
+Freeing an object on its authority frees it everywhere; call `Despawn()` rather than `QueueFree` so observers see it
+to the end first.
 
 ## What is sent
 
