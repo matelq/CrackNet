@@ -187,6 +187,29 @@ Goal: a crate needs no code and a player needs only its own movement. Paid for i
 Judged by `docs/examples.md`; the owner found sections 3 (players and objects) and 5 (shooting) hard to read.
 Proposals came from independent Claude and Codex reviews.
 
+### Naming, decided (not implemented)
+
+Words the game writes every day sit on its own nodes, so each has to say "this is the networked part" without a prefix
+or a nested accessor (both were considered and rejected: `node.Net.Authority` only moves the noise). Where a term of
+the trade exists it wins over a game word; where none does, the library's own model words win over generic English.
+
+| Now | Becomes | Why |
+|---|---|---|
+| `Touch(other)` (internal) | `Spread(other)` | The model already says spread: `SpreadCause`, `SpreadDepth`, `SpreadsAuthority` |
+| `Holder` | `ClaimedBy` | Pairs with `TryClaim`; "holder" says nothing about claiming |
+| `Release()` | `ReleaseClaim()` | Says what is released |
+| `Throw(velocity)` | `ReleaseClaim(velocity)` | One concept, letting go, with or without a shove |
+| `TryCarry(item, anchor)` | `TryAttach(item, anchor)`, `Detach(item)`, `Attached` | The trade's word: Unreal's `AttachmentReplication`, NGO's `AttachableBehaviour` |
+| `Push`, `Pushed`, `PushStrength` | `Impulse`, `Impulsed`, `ImpulseStrength` | Physics term rather than a plain verb, and the family stays together |
+| `TakeKnockback(delta)` | `TakeImpulses(delta)` | Drains the impulses that arrived as events; "knockback" is a genre word |
+| `Teleport()` | `Snap()` | The interpolation word: the next sample applies without gliding |
+| none | `PlaybackState` (`Pending`, `Playing`, `Ending`) | Replaces games reading `Visible` to tell whether an object has arrived or is leaving |
+| `Spawn`, `Despawn`, `ISpawnedWith<T>` | kept | Not generic English here but the trade's term, shared with Unity NGO, Fusion and Mirror; renaming them costs every reader who arrives from those. `Introduce`/`Retire` was the only workable alternative and was turned down |
+
+Two more from the same review, decided: `PlaybackStatus` carries milliseconds beside ticks, since that is what a HUD
+shows; and autoconnect elects the role without building a peer, so a game can hand netfox its own transport instead of
+closing the one autoconnect just made (`HostPeerFactory` / `JoinPeerFactory` go away with it).
+
 - **`this.` stays.** Extension members only apply to an explicit receiver, so a node's own calls read
   `this.Authority.IsLocal`, `this.TakeKnockback(delta)`; on another node there is no `this` (`crate.TryClaim()`).
   Considered and deliberately not done: a generator writing those members into each game class (they are already
