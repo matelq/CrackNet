@@ -59,7 +59,6 @@ internal abstract class PhysicsHandling
     private sealed class Rigid3D : PhysicsHandling
     {
         private readonly RigidBody3D _body;
-        private int _restFrames;
 
         public Rigid3D(NetworkObject obj, RigidBody3D body) : base(obj)
         {
@@ -91,11 +90,13 @@ internal abstract class PhysicsHandling
         }
 
         /// <summary>The objects whose bodies touch this one: resting contacts too, which a frozen body reports none of.</summary>
-        private IEnumerable<NetworkObject> Touching()
+        private IEnumerable<NetworkObject> Touching() => TouchingOf(_body);
+
+        private static IEnumerable<NetworkObject> TouchingOf(RigidBody3D body)
         {
-            if (!_body.IsInsideTree()) yield break;
-            var space = _body.GetWorld3D().DirectSpaceState;
-            foreach (var shape in _body.GetChildren().OfType<CollisionShape3D>())
+            if (!body.IsInsideTree()) yield break;
+            var space = body.GetWorld3D().DirectSpaceState;
+            foreach (var shape in body.GetChildren().OfType<CollisionShape3D>())
             {
                 if (shape.Shape is null || shape.Disabled) continue;
                 var query = new PhysicsShapeQueryParameters3D
@@ -103,8 +104,8 @@ internal abstract class PhysicsHandling
                     Shape = shape.Shape,
                     Transform = shape.GlobalTransform,
                     Margin = 0.05f,
-                    CollisionMask = _body.CollisionMask,
-                    Exclude = [_body.GetRid()],
+                    CollisionMask = body.CollisionMask,
+                    Exclude = [body.GetRid()],
                 };
                 foreach (var hit in space.IntersectShape(query, 16))
                     if (hit["collider"].AsGodotObject() is Node node && NetworkObject.Of(node) is { } other)
@@ -113,24 +114,44 @@ internal abstract class PhysicsHandling
         }
 
         /// <summary>
-        /// Resting against a body this peer still simulates and that is held or moving: going back alone would leave
-        /// this one frozen on the host's word here, hanging for a network delay when that body moves away.
+        /// The bodies this peer simulates that touch this one, and the ones touching those: a stack or a pile. It goes
+        /// back to the host as a whole or not at all. Handed back one crate at a time, a pile ends up simulated half here
+        /// and half on the host; the host's half bumps this peer's and takes it, and what was taken hangs on this
+        /// peer's screen for a network delay.
         /// </summary>
-        private bool LeansOnOwnMovingBody()
-            => Touching().Any(other => other.IsAuthority
-                                       && (other.Holder != 0
-                                           || other.Root is RigidBody3D body && !body.Sleeping && body.LinearVelocity.Length() >= RestSpeed));
+        private List<NetworkObject> RestingGroup()
+        {
+            var group = new List<NetworkObject> { Object };
+            for (var i = 0; i < group.Count; i++)
+            {
+                if (group[i].Root is not RigidBody3D body) continue;
+                foreach (var other in TouchingOf(body))
+                    // Only shared bodies: a player leaning on a crate keeps its own authority and has no rest to wait for
+                    if (other.IsAuthority && other.Root is RigidBody3D && other.ResolvedKind == NetworkObject.ObjectKind.Shared
+                        && !group.Contains(other))
+                        group.Add(other);
+            }
+            return group;
+        }
 
         public override void PhysicsProcess()
         {
             if (Object.ResolvedKind != NetworkObject.ObjectKind.Shared || !Object.Authority.IsLocal || Object.Holder != 0 || IsHost)
             {
-                _restFrames = 0;
+                Object.RestFrames = 0;
                 return;
             }
-            _restFrames = _body.Sleeping || _body.LinearVelocity.Length() < RestSpeed ? _restFrames + 1 : 0;
-            if (_restFrames < RestFramesBeforeReturning) return;
-            if (LeansOnOwnMovingBody() || Object.Authority.ReturnToHost()) _restFrames = 0;
+            Object.RestFrames = _body.Sleeping || _body.LinearVelocity.Length() < RestSpeed ? Object.RestFrames + 1 : 0;
+            if (Object.RestFrames < RestFramesBeforeReturning) return;
+
+            // Every body of the group has to have rested as long; a held one never counts
+            var group = RestingGroup();
+            if (group.Any(member => member.RestFrames < RestFramesBeforeReturning)) return;
+            foreach (var member in group)
+            {
+                member.Authority.ReturnToHost();
+                member.RestFrames = 0;
+            }
         }
     }
 

@@ -223,4 +223,60 @@ public partial class PhysicsObjectTests : HarnessSuite
         for (var i = 0; i < 120; i++) await NextFrame();
         Expect.Equal(2, onClient[1].Authority.Peer, "the top crate went back to the host while resting on a held one");
     }
+
+    [Test]
+    public async Task ATouchingGroupGoesBackToTheHostTogether()
+    {
+        // Each crate counted its own rest. The top one settled first and went back alone, leaving a stack simulated
+        // half here and half on the host: the host's crate then bumped the client's one and took it, and the stack
+        // hung on the client's screen
+        NetworkObject[] Stack(NetfoxStack stack) =>
+        [
+            Net(Crate(stack, "Bottom", new Vector3(0, 0.5f, 0))),
+            Net(Crate(stack, "Top", new Vector3(0, 1.5f, 0))),
+        ];
+        Stack(Host);
+        var onClient = Stack(Client);
+        for (var i = 0; i < 30; i++) await NextFrame();
+
+        Expect.True(onClient[0].TryClaim(), "the client could not claim the bottom crate");
+        Expect.True(await WaitUntil(() => onClient[1].Authority.Peer == 2, 3), "the top crate never followed");
+        // The top crate rests part of the way to going back, the bottom one has not started counting
+        for (var i = 0; i < 45; i++) await NextFrame();
+        Expect.True(onClient[0].Release(), "could not release the bottom crate");
+
+        var split = 0;
+        for (var frame = 0; frame < 150 && onClient.Any(obj => obj.Authority.Peer == 2); frame++)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+            if (onClient[0].Authority.Peer != onClient[1].Authority.Peer) split++;
+        }
+        Expect.True(onClient.All(obj => obj.Authority.Peer == 1), "the group never went back");
+        Expect.Equal(0, split, "physics frames in which the touching crates were simulated on different peers");
+    }
+
+    [Test]
+    public async Task AGroupDoesNotGoBackWhileOneOfItsCratesMoves()
+    {
+        // Two crates side by side, both the client's: one settles, the other keeps sliding along it
+        NetworkObject[] Pair(NetfoxStack stack) =>
+        [
+            Net(Crate(stack, "Still", new Vector3(0, 0.5f, 0))),
+            Net(Crate(stack, "Sliding", new Vector3(1.02f, 0.5f, 0))),
+        ];
+        Pair(Host);
+        var onClient = Pair(Client);
+        for (var i = 0; i < 20; i++) await NextFrame();
+        Expect.True(onClient[0].Authority.Take() && onClient[1].Authority.Take(), "the client could not take the crates");
+
+        var sliding = (RigidBody3D)onClient[1].Root!;
+        var returned = false;
+        for (var frame = 0; frame < 90; frame++)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+            sliding.LinearVelocity = new Vector3(0, 0, 0.5f);
+            returned |= onClient[0].Authority.Peer == 1;
+        }
+        Expect.False(returned, "the still crate went back while the one touching it was moving");
+    }
 }

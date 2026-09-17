@@ -292,6 +292,9 @@ public partial class NetworkObjectServer : Node
             if (sender != NetworkObject.HostPeer) return;
             if (obj is not null)
             {
+                Logger.Debug("AUTH host says {0}: authority {1} holder {2} seq {3}/{4} answering {5} (had authority {6} seq {7}/{8})",
+                    obj.Root!.Name, authority, owner, ownershipSequence, authoritySequence, requestId,
+                    obj.Authority.Peer, obj.OwnershipSequence, obj.AuthoritySequence);
                 ApplyRecord(obj, record);
                 obj.Answered(requestId);
             }
@@ -331,7 +334,11 @@ public partial class NetworkObjectServer : Node
         if (authorityAllowed || configurationAllowed)
         {
             if (authorityAllowed)
+            {
+                Logger.Debug("AUTH accepted {0} from #{1}: authority {2} holder {3} seq {4}/{5} cause '{6}'",
+                    obj.Root!.Name, sender, authority, owner, ownershipSequence, authoritySequence, spreadCause);
                 ApplyRecord(obj, record);
+            }
             else
                 obj.Apply(obj.Authority.Peer, obj.Holder, obj.AuthoritySequence, obj.OwnershipSequence,
                     transferable, transferableSequence, obj.SpreadCause, obj.SpreadDepth, obj.SpreadLimit);

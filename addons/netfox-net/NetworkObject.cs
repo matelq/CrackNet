@@ -139,6 +139,9 @@ public partial class NetworkObject : Node
     internal int LastSentTick { get; set; }
     internal bool WarnedOversized { get; set; }
 
+    /// <summary>Physics frames a simulated body has been at rest, counted by its physics handling.</summary>
+    internal int RestFrames { get; set; }
+
     /// <summary>Who simulates the object and sends its state, and taking or returning that by hand.</summary>
     public ObjectAuthority Authority { get; }
 
@@ -364,6 +367,9 @@ public partial class NetworkObject : Node
             : Context.NetworkIdentityServer.GetIdentifierOf(cause.Root!)?.FullName;
         if (cause is not null && causeName is null) return false;
 
+        Logger.Debug("AUTH request {0}: authority {1} holder {2} seq {3}/{4} cause '{5}' depth {6} (was authority {7} seq {8}/{9})",
+            Root.Name, authority, owner, ownershipSequence, authoritySequence, causeName ?? "", spreadDepth,
+            AuthorityPeer, OwnershipSequence, AuthoritySequence);
         var changed = Apply(authority, owner, authoritySequence, ownershipSequence, _transferable, TransferableSequence,
             causeName ?? "", spreadDepth, spreadLimit, notify: false);
         // Sent before anyone hears of the change: a body taken here takes what rests on it, and those requests name

@@ -129,6 +129,11 @@ public partial class TestRunner : Node
         var failed = 0;
         var failures = new List<string>();
 
+        // -- --test=Suite or --test=Suite.Case (repeatable): run only those, for a quick check or a mutant
+        var filters = OS.GetCmdlineUserArgs().Where(arg => arg.StartsWith("--test=")).Select(arg => arg["--test=".Length..]).ToList();
+        bool Selected(string suite, string test)
+            => filters.Count == 0 || filters.Any(filter => filter == suite || filter == $"{suite}.{test}");
+
         var suites = Assembly.GetExecutingAssembly().GetTypes()
             .Where(t => !t.IsAbstract && t.IsSubclassOf(typeof(TestSuite)))
             .OrderBy(t => t.Name);
@@ -136,7 +141,7 @@ public partial class TestRunner : Node
         foreach (var suiteType in suites)
         {
             var tests = suiteType.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-                .Where(m => m.GetCustomAttribute<TestAttribute>() is not null)
+                .Where(m => m.GetCustomAttribute<TestAttribute>() is not null && Selected(suiteType.Name, m.Name))
                 .ToList();
             if (tests.Count == 0) continue;
 
@@ -175,6 +180,13 @@ public partial class TestRunner : Node
                     await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 }
             }
+        }
+
+        if (filters.Count > 0 && passed + failed == 0)
+        {
+            GD.Print($"No test matched {string.Join(", ", filters)}");
+            GetTree().Quit(1);
+            return;
         }
 
         GD.Print($"\n{passed} passed, {failed} failed");
