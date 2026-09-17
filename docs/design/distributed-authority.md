@@ -200,7 +200,7 @@ Proposals came from independent Claude and Codex reviews.
   `Throw(velocity)`, and `TryCarry(item, anchor)` where the item follows an anchor node of the carrier (a marker, a
   bone attachment), with `CarriedItems` on the carrier. Carrying belongs in the library, not in extras: only the
   library can place a carried item on each peer's own copy of the anchor instead of playing back its samples.
-  Details wait for the carrying and animation research.
+  See Carrying below.
 - **Spawn** is generated per class: `Crate.Spawn(at: transform)` and `Shot.Spawn(Muzzle)` (from a node's transform);
   `parent` defaults to the current scene's root and `authority` to the calling peer. The scene is `<Class>.tscn` next
   to the script or `[Scene("res://...")]`. Data an object needs when created goes through `ISpawnedWith<TArgs>`:
@@ -214,6 +214,38 @@ Proposals came from independent Claude and Codex reviews.
 - **Projectiles** need their own design pass (trajectories, not just straight lines) before a `NetworkProjectile`
   node is added.
 - **Renaming the library** later must also rename the diagnostic ids (`NFX...`), namespaces and generated attributes.
+
+### Carrying and animation (decided, next stage after the second pass)
+
+From independent Claude and Codex research; the approach matches Fiedler's VR demo (a held cube stops being sent and
+rides in the avatar state), Unity Boss Room and NGO `AttachableBehaviour`, Unreal `AttachmentReplication` and Fusion's
+parent sync.
+
+- **Carrying is state, not a transform stream.** While carried, an item sends no transform; its samples carry the
+  attachment instead (carrier, anchor path relative to the carrier, offset). Every peer, the authority included, puts it
+  on its own copy of the anchor after that peer's animation, so a hand animated locally from synced parameters and the
+  item in it cannot drift apart.
+- **The anchor is a node:** `this.TryCarry(item, Shoulder)` takes the `Marker3D` (under a `BoneAttachment3D` for a bone).
+  The library sends its path relative to the carrier and resolves it on each peer; an anchor outside the carrier is an
+  error.
+- **Attach and detach switch at the carrier's playback time,** inside the sample stream. Keying presentation off
+  `Holder`, which applies when the host's record arrives, would put the item in the hand one playback delay before the
+  hand gets there.
+- **Detach blends** the gap between the observer's anchor and the thrower's first free sample over about 0.1-0.2 s, in
+  presentation only.
+- **Carried players** keep their authority. The carried player's peer decides whether to accept being carried (first
+  request wins); every peer, including a third one and the carried player's own, shows it on its own displayed carrier,
+  or a third peer sees it doubly delayed. A throw is detach plus push. Cycles are refused.
+- **Animation stays parameters:** games mark AnimationTree parameters `[Synced]`, applied at the display tick like any
+  state. Root motion runs on the authority only; its result is the transform. One-shots (grab, throw) are a `[Synced]`
+  counter incremented in the same tick as the change to the item, documented as a pattern, not new API. No pose sync.
+- **Frame order:** an item is placed after the carrier's AnimationTree and bone attachments update, or the hand leads
+  by a frame. To verify on Godot 4.7.2.
+- **Deliberate gap: animation phase on late join.** A peer joining mid-animation starts looping animations from phase
+  zero, since only parameters are replicated, not state and start tick. Accepted for now; revisit when a game shows it.
+- **Tests first:** per frame on a remote peer during a carried walk with animation, item-to-anchor distance near zero,
+  failing on today's carry before the change; attach and detach at the carrier's display tick; no jump during the
+  detach blend; a third peer's carried player on its displayed carrier; a late joiner sees the item in the hand.
 
 ## Tests the model needs
 
