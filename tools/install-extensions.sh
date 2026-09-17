@@ -126,11 +126,11 @@ esac
 echo
 echo "Done. Restart Godot, then check what came up:"
 if [ "$what" != steam ]; then
-  echo "  <godot> --headless --path . res://examples/physics/RapierCheck.tscn"
+  echo "  <godot> --headless --path . res://test/TestRunner.tscn -- --test=PhysicsObjectTests"
 fi
 if [ "$what" != rapier ]; then
   echo "  <godot> --headless --path . res://examples/steam/SteamSmoke.tscn   # needs the Steam client running"
 fi
-if [ "$what" != steam ] && [ "$enable_rapier" = no ]; then
+if [ "$what" != steam ] && ! grep -q '^3d/physics_engine="Rapier3D"' "$root/project.godot"; then
   echo "  Rapier is installed but not selected: set physics/3d/physics_engine=\"Rapier3D\", or rerun with --enable-rapier"
 fi
