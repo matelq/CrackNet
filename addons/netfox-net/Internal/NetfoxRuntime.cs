@@ -21,8 +21,6 @@ internal static class NetfoxRuntime
         NetfoxLogger.Level = NetfoxSettings.Instance.LogLevel;
         NetfoxLogger.ModuleLevels["netfox"] = NetfoxSettings.Instance.NetfoxLogLevel;
         NetfoxLogger.ModuleLevels["netfox.extras"] = NetfoxSettings.Instance.NetfoxExtrasLogLevel;
-
-        Snapshot.ValueComparer = VariantComparer.Instance;
     }
 }
 

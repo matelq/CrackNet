@@ -1,4 +1,3 @@
-using Netfox.Core.Collections;
 using Netfox.Core.Data;
 using Netfox.Core.Serialization;
 
@@ -31,37 +30,6 @@ public class CodecTests
         var writer = new ByteWriter();
         VarUint.Encode(0, writer);
         Assert.Equal(new byte[] { 0 }, writer.ToArray());
-    }
-
-    [Fact]
-    public void VarBits_ShouldRoundtripSevenBits()
-    {
-        var bits = Bitset.OfBools([false, true, false, true, true, false, true]);
-        var writer = new ByteWriter();
-        VarBits.Encode(bits, writer);
-        Assert.Equal(1, writer.Size);
-        Assert.Equal(bits, VarBits.Decode(new ByteReader(writer.ToArray())));
-    }
-
-    [Fact]
-    public void VarBits_ShouldRoundtripFourteenBits()
-    {
-        var bits = Bitset.OfBools([false, true, false, true, true, false, true, false, true, true, true, false, false, true]);
-        var writer = new ByteWriter();
-        VarBits.Encode(bits, writer);
-        Assert.Equal(2, writer.Size);
-        Assert.Equal(bits, VarBits.Decode(new ByteReader(writer.ToArray())));
-    }
-
-    [Fact]
-    public void VarBits_ShouldPadToMultipleOfSeven()
-    {
-        var bits = Bitset.OfBools([true, false, true]);
-        var writer = new ByteWriter();
-        VarBits.Encode(bits, writer);
-        var decoded = VarBits.Decode(new ByteReader(writer.ToArray()));
-        Assert.Equal(7, decoded.BitCount);
-        Assert.Equal([0, 2], decoded.GetSetIndices());
     }
 
     [Theory]

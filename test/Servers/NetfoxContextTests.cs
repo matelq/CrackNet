@@ -1,3 +1,5 @@
+using Godot;
+
 namespace Netfox.Tests;
 
 public partial class NetfoxContextTests : TestSuite
@@ -34,10 +36,14 @@ public partial class NetfoxContextTests : TestSuite
     public async Task NodesResolveTheContextTheyAreUnder()
     {
         var stack = await Mount(new NetfoxContextRoot { Name = "Stack" });
-        var inside = new PeerVisibilityFilter { Name = "Inside" };
-        stack.AddChild(inside);
+        var inside = new NetworkObject { Name = "Inside" };
+        var insideRoot = new Node { Name = "InsideRoot" };
+        insideRoot.AddChild(inside);
+        stack.AddChild(insideRoot);
 
-        var outside = await Mount(new PeerVisibilityFilter { Name = "Outside" });
+        var outsideRoot = await Mount(new Node { Name = "OutsideRoot" });
+        var outside = new NetworkObject { Name = "Outside" };
+        outsideRoot.AddChild(outside);
 
         Expect.True(ReferenceEquals(inside.Context, stack.Context));
         Expect.True(outside.Context.IsDefault);

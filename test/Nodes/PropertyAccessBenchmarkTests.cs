@@ -48,14 +48,7 @@ public partial class PropertyAccessBenchmarkTests : TestSuite
             node.Position = value;
         });
 
-        // What netfox actually uses: PropertyEntry resolves the name once, PropertyAccess keeps a shared cache
-        var entry = PropertyEntry.Parse(node, ":position");
-        var throughEntry = Measure(() =>
-        {
-            var value = entry.GetValue();
-            entry.SetValue(value);
-        });
-
+        // What netfox actually uses: PropertyAccess keeps a shared cache
         var throughCache = Measure(() =>
         {
             var value = node.GetValue(path);
@@ -65,13 +58,11 @@ public partial class PropertyAccessBenchmarkTests : TestSuite
         var line = FormattableString.Invariant(
             $"PROPERTY ACCESS over {Iterations} get+set pairs: GetIndexed/SetIndexed {indexed:F1}ms, Get/Set {direct:F1}ms");
         var line2 = FormattableString.Invariant(
-            $"PropertyEntry {throughEntry:F1}ms, PropertyAccess cache {throughCache:F1}ms, C# property {typed:F1}ms");
+            $"PropertyAccess cache {throughCache:F1}ms, C# property {typed:F1}ms");
         GD.Print($"{line}, {line2}");
 
-        // Guards the optimization itself: both netfox paths have to stay clear of the indexed one. The margin is
+        // Guards the optimization itself: the netfox path has to stay clear of the indexed one. The margin is
         // generous because this runs on shared CI hardware, where the ratio is nearer 0.6 than the 0.3 seen locally.
-        Expect.True(throughEntry < indexed * 0.8,
-            $"PropertyEntry ({throughEntry:F1}ms) should stay clear of GetIndexed/SetIndexed ({indexed:F1}ms)");
         Expect.True(throughCache < indexed * 0.8,
             $"the PropertyAccess cache ({throughCache:F1}ms) should stay clear of GetIndexed/SetIndexed ({indexed:F1}ms)");
     }

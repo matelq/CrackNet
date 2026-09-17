@@ -1,5 +1,4 @@
 using System.Text;
-using Netfox.Core.Collections;
 using Netfox.Core.Data;
 
 namespace Netfox.Core.Serialization;
@@ -33,41 +32,6 @@ public static class VarUint
 
     public static void Encode(int value, ByteWriter buffer) => Encode((ulong)value, buffer);
     public static int DecodeInt(ByteReader buffer) => (int)Decode(buffer);
-}
-
-/// <summary>Variable-length bitset: 7 bits per byte, high bit marks continuation. Decoded bit count is a multiple of 7. Port of _VariableBitsetSerializer.</summary>
-public static class VarBits
-{
-    public static void Encode(Bitset bitset, ByteWriter buffer)
-    {
-        if (bitset.IsEmpty)
-        {
-            buffer.PutU8(0);
-            return;
-        }
-
-        for (var i = 0; i < bitset.BitCount; i += 7)
-        {
-            byte b = 0;
-            for (var bit = 0; bit < 7; bit++)
-                if (bitset.BitCount > i + bit && bitset.GetBit(i + bit)) b |= (byte)(1 << bit);
-            if (bitset.BitCount > i + 7) b |= 0x80;
-            buffer.PutU8(b);
-        }
-    }
-
-    public static Bitset Decode(ByteReader buffer)
-    {
-        var bools = new List<bool>();
-        while (true)
-        {
-            var b = buffer.GetU8();
-            for (var bit = 0; bit < 7; bit++)
-                bools.Add((b & (1 << bit)) != 0);
-            if ((b & 0x80) == 0) break;
-        }
-        return Bitset.OfBools(bools);
-    }
 }
 
 /// <summary>Zero-terminated UTF-8 string. Port of _CStringSerializer.</summary>
