@@ -53,6 +53,8 @@ public partial class Playground : Node3D
     private string _delayReadout = "";
     private int _port = Port;
     private SteamLobbyBootstrap? _steam;
+    /// <summary>The last word from Steam, kept under the status line, which is rewritten every frame.</summary>
+    private string _steamNote = "";
 
     public override void _Ready()
     {
@@ -152,12 +154,13 @@ public partial class Playground : Node3D
     private void StartSteam()
     {
         _steam = new SteamLobbyBootstrap { Name = "Steam", Conditions = _profile };
-        _steam.Failed += reason => _status.Text = $"Steam: {reason}";
+        _steam.Failed += reason => _steamNote = $"\nSteam: {reason}";
         _steam.LobbyReady += lobbyId =>
         {
             _menu.Hide();
             if (!Multiplayer.IsServer()) return;
             DisplayServer.ClipboardSet(lobbyId.ToString());
+            _steamNote = $"\nSteam lobby {lobbyId} (copied to the clipboard)";
             StartHosting();
             Engine.GetSingleton("Steam").Call("activateGameOverlayInviteDialog", lobbyId);
         };
@@ -239,7 +242,7 @@ public partial class Playground : Node3D
         steamJoin.Pressed += () =>
         {
             if (ulong.TryParse(_address.Text.Trim(), out var lobbyId)) _steam?.Join(lobbyId);
-            else _status.Text = "Paste the host's lobby id into the field";
+            else _steamNote = "\nSteam: paste the host's lobby id into the field";
         };
         menu.AddChild(steamJoin);
     }
@@ -274,6 +277,7 @@ public partial class Playground : Node3D
             : $"Peer {Multiplayer.GetUniqueId()}  tick {time.Tick}  rtt {time.RemoteRtt * 1000:F0}ms  network: {profile}\n" +
               "WASD move, Space jump, F grab / throw, E push a player, left mouse or Enter shoot. Crates show who simulates them." +
               delayReadout;
+        _status.Text += _steamNote;
 
         if (local is not null)
             _camera.GlobalPosition = _camera.GlobalPosition.Lerp(local.GlobalPosition + new Vector3(0, 11, 11), (float)Math.Min(1, delta * 6));
