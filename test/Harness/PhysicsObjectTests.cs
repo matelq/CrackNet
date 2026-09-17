@@ -201,4 +201,26 @@ public partial class PhysicsObjectTests : HarnessSuite
         var with = await Travel(2, "CrateB");
         Expect.True(with > without + 0.5f, $"with PushStrength the crate moved to {with}, without to {without}");
     }
+
+    [Test]
+    public async Task ACrateRestingOnOneThisPeerStillSimulatesDoesNotGoBackAlone()
+    {
+        // The top crate settles while the bottom one is held. Handed back on its own, it would be the host's, frozen
+        // here, and hang in the air for a network delay the moment the bottom one is lifted away
+        NetworkObject[] Stack(NetfoxStack stack) =>
+        [
+            Net(Crate(stack, "Bottom", new Vector3(0, 0.5f, 0))),
+            Net(Crate(stack, "Top", new Vector3(0, 1.5f, 0))),
+        ];
+        var onHost = Stack(Host);
+        var onClient = Stack(Client);
+        for (var i = 0; i < 30; i++) await NextFrame();
+
+        Expect.True(onClient[0].TryClaim(), "the client could not claim the bottom crate");
+        Expect.True(await WaitUntil(() => onHost[1].Authority.Peer == 2, 3), "the top crate never followed the bottom one");
+
+        // Well past the half second of rest after which a crate goes back
+        for (var i = 0; i < 120; i++) await NextFrame();
+        Expect.Equal(2, onClient[1].Authority.Peer, "the top crate went back to the host while resting on a held one");
+    }
 }

@@ -91,10 +91,14 @@ public partial class PlaygroundSmoke : Node
             // never reached: pick a host crate at chest height with nothing else on the line
             var crates = _playground.GetNode("Crates").GetChildren().OfType<PlaygroundCrate>().ToList();
             _target = crates
-                .Where(crate => crate.Object.Authority.Peer == 1 && crate.GlobalPosition.Y < 1.2f)
+                // Out of reach too: a crate the bot bumps while turning to aim is taken by the bump, not by the shot
+                .Where(crate => crate.Object.Authority.Peer == 1 && crate.GlobalPosition.Y < 1.2f
+                                && crate.GlobalPosition.DistanceTo(me.GlobalPosition) > 2.5f)
                 .Where(crate => crates.All(other => other == crate || !Blocks(me.GlobalPosition, crate.GlobalPosition, other.GlobalPosition)))
                 .OrderBy(crate => crate.GlobalPosition.DistanceTo(me.GlobalPosition))
                 .FirstOrDefault() ?? _target;
+            PlaygroundShot.Diagnose = true;
+            GD.Print($"SHOT AIM at {_target.Name} (authority {_target.Object.Authority.Peer}) at {_target.GlobalPosition} from {me.GlobalPosition}");
             foreach (var crate in crates)
                 crate.Object.AuthorityChanged += () =>
                     _shotTookCrate |= crate.Object.Authority.IsLocal && crate.Object.SpreadCause.Contains("/Shots/");

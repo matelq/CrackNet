@@ -83,7 +83,17 @@ internal abstract class PhysicsHandling
 
         private void TouchOverlapping()
         {
-            if (!_body.IsInsideTree()) return;
+            var touching = Touching().ToList();
+            Logger.Debug("{0} taken at {1}: overlap query found {2}", _body.Name, _body.GlobalPosition,
+                touching.Count == 0 ? "nothing" : string.Join(", ", touching.Select(other => other.Root!.Name)));
+            foreach (var other in touching)
+                Logger.Debug("{0} touches {1}: {2}", _body.Name, other.Root!.Name, Object.Touch(other));
+        }
+
+        /// <summary>The objects whose bodies touch this one: resting contacts too, which a frozen body reports none of.</summary>
+        private IEnumerable<NetworkObject> Touching()
+        {
+            if (!_body.IsInsideTree()) yield break;
             var space = _body.GetWorld3D().DirectSpaceState;
             foreach (var shape in _body.GetChildren().OfType<CollisionShape3D>())
             {
@@ -96,18 +106,20 @@ internal abstract class PhysicsHandling
                     CollisionMask = _body.CollisionMask,
                     Exclude = [_body.GetRid()],
                 };
-                var hits = space.IntersectShape(query, 16);
-                Logger.Debug("{0} taken at {1}: overlap query found {2}", _body.Name, _body.GlobalPosition,
-                    hits.Count == 0 ? "nothing" : string.Join(", ", hits.Select(hit => hit["collider"].AsGodotObject() is Node node ? $"{node.Name}" : "?")));
-                foreach (var hit in hits)
-                {
-                    var collider = hit["collider"].AsGodotObject();
-                    if (collider is not Node node || NetworkObject.Of(node) is not { } other) continue;
-                    var touched = Object.Touch(other);
-                    Logger.Debug("{0} touches {1}: {2}", _body.Name, node.Name, touched);
-                }
+                foreach (var hit in space.IntersectShape(query, 16))
+                    if (hit["collider"].AsGodotObject() is Node node && NetworkObject.Of(node) is { } other)
+                        yield return other;
             }
         }
+
+        /// <summary>
+        /// Resting against a body this peer still simulates and that is held or moving: going back alone would leave
+        /// this one frozen on the host's word here, hanging for a network delay when that body moves away.
+        /// </summary>
+        private bool LeansOnOwnMovingBody()
+            => Touching().Any(other => other.IsAuthority
+                                       && (other.Holder != 0
+                                           || other.Root is RigidBody3D body && !body.Sleeping && body.LinearVelocity.Length() >= RestSpeed));
 
         public override void PhysicsProcess()
         {
@@ -117,7 +129,8 @@ internal abstract class PhysicsHandling
                 return;
             }
             _restFrames = _body.Sleeping || _body.LinearVelocity.Length() < RestSpeed ? _restFrames + 1 : 0;
-            if (_restFrames >= RestFramesBeforeReturning && Object.Authority.ReturnToHost()) _restFrames = 0;
+            if (_restFrames < RestFramesBeforeReturning) return;
+            if (LeansOnOwnMovingBody() || Object.Authority.ReturnToHost()) _restFrames = 0;
         }
     }
 

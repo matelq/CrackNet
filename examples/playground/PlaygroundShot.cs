@@ -25,6 +25,9 @@ public partial class PlaygroundShot : Node3D, ISpawnedWith<Vector3>
     public Vector3 Velocity { get; private set; }
 
     public void OnSpawned(Vector3 velocity) => Velocity = velocity;
+
+    /// <summary>The smoke prints what every shot did, so a missed check says why.</summary>
+    public static bool Diagnose { get; set; }
     private double _age;
     private bool _consumed;
 
@@ -60,18 +63,22 @@ public partial class PlaygroundShot : Node3D, ISpawnedWith<Vector3>
                                      || crateHit.GlobalPosition.DistanceTo(GlobalPosition)
                                      <= playerHit.GlobalPosition.DistanceTo(GlobalPosition)))
         {
+            if (Diagnose) GD.Print($"SHOT {Name} hit {crateHit.Name} (authority {crateHit.Net().Authority.Peer}) at {GlobalPosition}");
             this.Push(crateHit, Velocity.Normalized() * CrateImpulse);
             Consume();
             return;
         }
         if (playerHit is not null)
         {
+            if (Diagnose) GD.Print($"SHOT {Name} hit {playerHit.Name} at {GlobalPosition}");
             this.Push(playerHit, Velocity.Normalized() * PlayerKnock);
             Consume();
             return;
         }
 
-        if (_age > Lifetime) Consume();
+        if (_age <= Lifetime) return;
+        if (Diagnose) GD.Print($"SHOT {Name} expired at {GlobalPosition}");
+        Consume();
     }
 
     private void Consume()
