@@ -337,6 +337,9 @@ other peer shows late overlaps what is around it.
   moment, set by the worst link, so one bad connection slows everyone. Per screen: each viewer uses the deepest of its
   own links, so only the players on a bad link pay. Revisit if playtests show objects of different players visibly out
   of step with each other outside interactions, which authority transfer already puts on one clock.
+- Ghost pairs cost O(n) per authority change: every change of a shared 3D body visits every other shared body to set
+  or clear its collision exception. Fine for dozens of crates; a spatial index (or per-island bookkeeping) when a game
+  has hundreds. 2D bodies have no ghosts yet.
 - Seeding the jitter estimate before a match from the clock-sync pings, for a lobby that exchanges no object state.
 
 ## Sources
