@@ -42,7 +42,10 @@ class per `.cs` file, named after the file - a second class in the same file sil
 `Netfox.SourceGenerators` turns `[Synced]` on a property into the declaring interface `NetworkObject` gathers from, so
 the paths come from the symbols and cannot go stale on a rename. The type has to be `partial` (NFX001 otherwise), and
 properties only: Godot exposes a partial class's properties to `Get`/`Set`, not its plain fields. It is referenced as an
-analyzer and ships built in the release zip under `addons/netfox-net/analyzers/`.
+analyzer and ships built in the release zip under `addons/netfox-net/analyzers/`. `NetworkedNodeAnalyzer` (NFX006)
+reads the same `.tscn` additional files to check that a class using `this.Authority`, `crate.TryClaim()` and the rest
+has a scene with a `NetworkObject`; the harness builds bodies in code and disables it with a pragma. Roslyn 5.0 is
+required by the analyzer project: C# 14 extension members are what it looks for.
 
 Rapier keeps a body's last kinematic target and returns to it on the next freeze: re-set the transform after
 switching `Freeze` (`PhysicsHandling.SetFrozen`), or a crate handed back after a throw jumps to where it was held.

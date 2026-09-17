@@ -1,3 +1,7 @@
+// The harness builds its bodies in code, to vary mass, shapes and push strength per case rather than keep a scene for
+// each: NFX006, which asks for a scene with a NetworkObject, has nothing to check here
+#pragma warning disable NFX006
+
 using Godot;
 
 namespace Netfox.Tests;

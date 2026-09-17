@@ -10,3 +10,4 @@ NFX002 | Netfox | Error | A type with synced properties or a spawnable type has 
 NFX003 | Netfox | Error | A spawnable class needs a scene
 NFX004 | Netfox | Error | A spawnable class is the root of more than one scene
 NFX005 | Netfox | Error | Spawn data has to fit in a Variant
+NFX006 | Netfox | Error | A node used over the network needs a NetworkObject in its scene

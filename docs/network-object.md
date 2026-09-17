@@ -52,6 +52,12 @@ Every call below also works on the game's own node: `crate.Push(...)`, `crate.Tr
 `this.TakeKnockback(delta)`, `crate.Holder`. `node.Net()` returns the `NetworkObject` itself, for the rarer
 `Send` and `Diagnostics`.
 
+Every one of them needs a `NetworkObject` on the node it reaches, and the build says so when it is missing: `NFX006`
+asks the class you used it on for a scene whose root has a `NetworkObject` as a direct child. Calls on engine types
+(`PhysicsBody3D` from a shape query) are left alone, since nothing at build time says what those nodes will be. A class
+built in code instead of instantiated from a scene — a test, a generated level — silences the rule with
+`#pragma warning disable NFX006`.
+
 A node that wants to know when it itself changed hands implements `IAuthorityChanged` instead of subscribing, so there
 is nothing to unsubscribe in `_ExitTree`:
 
