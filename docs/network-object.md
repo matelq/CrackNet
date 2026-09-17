@@ -1,8 +1,21 @@
 # NetworkObject
 
-One `NetworkObject` per replicated thing. It holds who simulates the object and who holds it, sends the `[Synced]`
-state of its subtree while this peer is the authority, and plays that state back everywhere else. The reasoning behind
-every rule here is in the [design document](design/distributed-authority.md).
+One `NetworkObject` per replicated thing, as a child of the node it replicates (its root). It holds who simulates the
+object and who holds it, sends the root's state while this peer is the authority, and plays that state back
+everywhere else. The reasoning behind every rule here is in the [design document](design/distributed-authority.md).
+
+## Kinds
+
+`Kind` decides how authority moves. The default, `Auto`, reads the root's type.
+
+| Kind | Rule | Auto for | Examples |
+|---|---|---|---|
+| `Personal` | stays with one peer, passes authority on contact | `CharacterBody2D/3D`, plain `Node2D/3D` | a player, a projectile |
+| `Shared` | taken by touch or grab, passes authority on contact | `RigidBody2D/3D`, `VehicleBody3D` | a crate, a ball |
+| `World` | stays put, does not pass authority on contact | `StaticBody`, `AnimatableBody`, `Area`, `Node`, `Control` | a lift, a door, the score |
+| `Custom` | `Transferable` and `SpreadsAuthority` by hand, no physics handling | never | anything unusual |
+
+Pick a kind by hand only when the type says the wrong thing: a grenade is a rigid body nobody may take, so `Personal`.
 
 ## Authority and ownership
 
@@ -10,61 +23,83 @@ every rule here is in the [design document](design/distributed-authority.md).
 |---|---|
 | `Authority`, `IsAuthority` | The peer that simulates the object and sends its state. Godot's multiplayer authority of the root. |
 | `Holder` | The peer holding the object, or 0. A held object cannot be taken by anyone else. |
-| `Transferable` | Whether other peers may take it at all. Off for player characters and projectiles. Replicated. |
-| `AuthorityChanged` | Raised on every peer after authority or holder changed. Refresh freeze state and visuals here. |
+| `AuthorityChanged` | Raised on every peer after authority or holder changed. |
 
 Every change is optimistic: it applies on the requesting peer at once and goes to the host, which accepts it or
-corrects the requester. Guests take the host's word. Each request returns false when it cannot even be tried (someone
-else holds the object, it is not transferable, or this peer is not connected); true means applied here and sent, not
-yet accepted.
+corrects the requester. A request returns false when it cannot even be tried (someone else holds the object, it is
+not transferable, or this peer is not connected); true means applied here and sent, not yet accepted.
+
+For physics roots the library makes these calls itself: a rigid body touches what it hits while moving and returns to
+the host at rest, a character body touches what it slides into. Games call:
 
 | Call | When |
 |---|---|
-| `TryTakeAuthority()` | This peer interacts with a free object in a way that is not a contact from another object. |
-| `Touch(other)` | An object this peer simulates made contact with `other`. Needs `SpreadsAuthority` on the caller. |
-| `TryGrab()` | This peer picks the object up: authority and ownership. |
-| `Release()` | Lets go. This peer keeps simulating it, so a throw flies on the thrower's machine. |
-| `ReturnToHost()` | The object has come to rest; the host takes it back. |
+| `TryGrab()` | This peer picks the object up: authority and ownership. The body is frozen while held; move it by hand. |
+| `Throw(velocity)` | Lets go with a velocity: the throw flies on this peer's simulation. |
+| `Release()` | Lets go without one. |
+| `Touch(other)` | Contact the physics engine does not report: a projectile that moves itself, a melee swing. |
+| `TryTakeAuthority()`, `ReturnToHost()` | The same by hand, for `Custom` objects. |
 
-Conflicts are settled by the host. A grab beats a touch, and of two touches the first one to arrive wins. A touch
-carries its cause, so the counter-touch fails once its own cause has been taken. `MaxSpreadDepth` limits how many
-objects a chain can pass authority through, counted from its source.
+Conflicts are settled by the host. A grab beats a touch, and of two touches the first one to arrive wins.
+`MaxSpreadDepth` limits how many objects a chain can pass authority through, counted from its source.
 
-What counts as contact and as rest is up to the game. The rule to hold on to: **every interaction has exactly one
-arbiter**, the authority of the object that started it. If two peers can both decide the same hit or grab, the
-mechanic is not finished.
+The rule to hold on to: **every interaction has exactly one arbiter**, the authority of the object that started it.
+If two peers can both decide the same hit or grab, the mechanic is not finished.
 
-## Events: pushes and hits
+## Knocks and events
 
 ```csharp
-target.Object.SendToAuthority(impulse);                            // from anyone
-Object.EventReceived += (fromPeer, payload) => _knockback += payload.AsVector3();   // on the target's authority
+target.Object.Knock(impulse);                            // from anyone
+Object.Knocked += impulse => _knockback += impulse;      // a character's authority applies it
 ```
 
-`SendToAuthority` delivers the payload reliably, exactly once, to whoever simulates the object. If authority moves
-while the payload is on its way, the peer that no longer simulates the object passes it on. On the authority itself
-it is raised at once - unless that authority is a claim the host has not confirmed yet: then it waits for the
-host's answer, and goes to the winner if the claim lost.
+`Knock` reaches whoever simulates the object: a rigid body takes the impulse itself, anything else raises `Knocked`.
+Players do not collide with each other, since each would push a copy of the other in the past: a push is a knock.
 
-Players do not collide with each other: each would be pushing a copy of the other in the past. A push is an event to
-the pushed player's peer, applied as knockback there.
+```csharp
+target.Object.Send("opened");                            // from anyone
+Object.Received += (fromPeer, payload) => { ... };       // on the authority
+```
 
-## Projectiles
+Both are delivered reliably, exactly once, to the authority. If authority moves while one is on its way, the peer that
+no longer simulates the object passes it on. On the authority itself it is raised at once - unless that authority is
+a claim the host has not confirmed yet: then it waits for the host's answer, and goes to the winner if the claim lost.
 
-A projectile belongs to its shooter. Spawn it through a `MultiplayerSpawner` whose authority is the shooter, with
-`Transferable = false`. The shooter's peer moves it and decides every hit against the targets it displays: it sends
-the effect with `SendToAuthority` and calls `Despawn()` in the same frame, so a projectile cannot pass through its
-first target or hit twice. `PlaygroundShot` is the worked example.
+## Projectiles and hitscan
 
-To push a crate with a projectile, `Touch` the crate first and then send the impulse. The touch takes the crate for
-the shooter, and the event reaches whoever ends up simulating it.
+A projectile belongs to its shooter: spawn it with `NetworkObject.Spawn`, and its plain `Node3D` root makes it
+`Personal`. The shooter's peer moves it and decides every hit against the targets it displays: it knocks the target
+and calls `Despawn()` in the same frame, so a projectile cannot pass through its first target or hit twice. To push a
+crate with one, `Touch` the crate first, then `Knock` it. `PlaygroundShot` is the worked example.
 
-## Despawn and teleport
+Hitscan needs nothing extra: the shooter runs an ordinary ray query. Bodies other peers simulate sit frozen at their
+displayed positions, so the ray hits what the shooter sees.
 
+## Spawning, despawn and teleport
+
+- `NetworkObject.Spawn<T>(parent, scene, setup, authority)` instances a scene on every peer and on late joiners. `setup`
+  runs on the spawning peer before the root enters the tree; its transform is sent, the rest arrives as state.
 - `Despawn()` ends the object's timeline. The authority hides it and stops processing at once. Other peers keep
-  showing it until their playback reaches the final sample, then hide it; the node is freed after a grace period. Do
-  not `QueueFree` a replicated object yourself.
+  showing it until their playback reaches the final sample, then hide it; the root is freed everywhere after a grace
+  period. Do not `QueueFree` a replicated object yourself.
 - `Teleport()` makes the next sample apply without blending: a respawn, not a flight across the map.
+
+## What is sent
+
+`SyncedSummary` in the inspector lists it, in order:
+
+- the root's full transform, for any 2D or 3D root;
+- velocity for a character body, linear and angular velocity for a rigid body;
+- every `[Synced]` property of the root and its descendants, down to a nested `NetworkObject`.
+
+Nothing else. State goes out every `NetworkObjectServer.StateIntervalTicks` ticks (15 Hz at the default 30 Hz tick);
+an unchanged object only once a second. Every object that changed is packed into as few packets per peer as fit
+**Max Sync Packet Size** (1200 bytes by default, under the MTU of any real route).
+
+**One object has to fit in one packet.** A crate is about 80 bytes. An object whose state is larger - a long array, a
+dictionary, dozens of properties - is sent as a packet over the limit, which the transport fragments, and losing any
+fragment loses the whole sample; a warning says which object. Split it into several `NetworkObject`s, or send large,
+rarely changing state as an event.
 
 ## Playback
 
@@ -76,20 +111,9 @@ A remote object is shown from its authority's samples, a little in the past:
   The buffer absorbs jitter; it cannot absorb latency, because nothing can be shown before it arrives.
 - **No freezing, no rewriting.** On underrun the object holds its last value; after an outage playback catches up
   quickly. A late sample never rewrites what was already shown.
-- **Rest costs almost nothing.** An unchanged object is sent once a second as a heartbeat, and starts moving on
-  observers exactly when it did on its authority.
 - **Objects start at their first sample.** A spawned object is hidden until playback reaches its first sample. A
   projectile starts at the muzzle, not hanging there or appearing down range.
 
-`NetworkObjectServer.Instance.GetPlaybackStatus(peer)` reports, averaged over a second, how old that peer's state is on
-arrival and how long it waits in the buffer. `DisplayTick`, `SampleSent` and `SampleReceived` are there for checks
-and diagnostics.
-
-State goes out every `NetworkObjectServer.StateIntervalTicks` ticks (15 Hz at the default 30 Hz tick). Every object
-that changed is packed into as few packets per peer as fit **Max Sync Packet Size** (1200 bytes by default, under the
-MTU of any real route).
-
-**One object has to fit in one packet.** A crate is about 80 bytes. An object whose state is larger - a long array, a
-dictionary, dozens of properties - is sent as a packet over the limit, which the transport fragments, and losing any
-fragment loses the whole sample; a warning says which object. Split it into several `NetworkObject`s, or send large,
-rarely changing state as an event.
+`NetworkObjectServer.Instance.Diagnostics.GetPlaybackStatus(peer)` reports, averaged over a second, how old that peer's
+state is on arrival and how long it waits in the buffer. `Object.Diagnostics` has the sequences, the display tick and
+the sample events, for checks rather than game logic.

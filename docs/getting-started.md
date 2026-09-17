@@ -36,26 +36,42 @@ Multiplayer.MultiplayerPeer = peer;
 Guests send state straight to each other, so the intended transport is a full mesh: `SteamMultiplayerPeer` joins every
 lobby member, and `examples/playground/PlaygroundMesh.cs` builds the same over ENet.
 
+## A crate
+
+```
+Crate (RigidBody3D)
+├── CollisionShape3D
+├── MeshInstance3D
+└── NetworkObject
+```
+
+That is the whole crate. `NetworkObject` reads its parent's type: a rigid body is **Shared**, so the library
+
+- sends its transform and both velocities while this peer simulates it, and plays them back everywhere else;
+- freezes it wherever another peer simulates it, so no second physics runs on top of received state;
+- passes authority to whatever it hits while moving, and takes the bodies resting on and against it when it is taken,
+  so a whole pile follows the player who pushed it;
+- hands it back to the host once it has been at rest for half a second.
+
+Put the crate in the scene of every peer under the same name, or spawn it (below). It starts with the host.
+
 ## A player
 
-A player's character is always simulated by its own peer: input applies at once, with no prediction.
+```
+Player (CharacterBody3D)
+├── CollisionShape3D
+├── MeshInstance3D
+└── NetworkObject
+```
 
 ```csharp
 public partial class Player : CharacterBody3D
 {
-    [Synced] public Vector3 NetPosition { get => GlobalPosition; set => GlobalPosition = value; }
-    [Synced] public float NetYaw { get => Rotation.Y; set => Rotation = new Vector3(0, value, 0); }
+    [Synced] public int Health { get; set; }
 
-    public NetworkObject Object { get; private set; } = null!;
+    private NetworkObject Object => GetNode<NetworkObject>("NetworkObject");
 
-    public static Player Create(int peer)
-    {
-        var player = new Player { Name = $"Player{peer}" };
-        player.SetMultiplayerAuthority(peer);
-        player.Object = new NetworkObject { Name = "NetworkObject", Transferable = false };
-        player.AddChild(player.Object);
-        return player;
-    }
+    public override void _Ready() => Object.Knocked += impulse => Velocity += impulse;
 
     public override void _PhysicsProcess(double delta)
     {
@@ -65,56 +81,42 @@ public partial class Player : CharacterBody3D
 }
 ```
 
-What makes it work:
+A character body is **Personal**: it stays with its own peer, input applies at once with no prediction, and whatever
+it slides into (a crate) is taken by that peer. Its transform and velocity are sent without being marked;
+`[Synced]` is for the rest of its state. The type has to be `partial`, and synced state has to be a property.
+Continuous values blend between samples; `[Synced(Interpolate = false)]` makes one step, and discrete types always
+step.
 
-- **`[Synced]` marks state.** The type has to be `partial`, and it has to be a property: Godot does not expose plain
-  fields to `Get` and `Set`. Continuous values blend between samples; `[Synced(Interpolate = false)]` makes one step.
-  Discrete types (bool, int, enums, strings, references) always step.
-- **`NetworkObject` sends and plays back its subtree.** It gathers `[Synced]` properties from its parent and the
-  parent's descendants, stopping at any nested `NetworkObject`. While this peer is the authority it sends them; on
-  every other peer it writes them from playback.
-- **The node's multiplayer authority is the object's authority.** Set it before the node enters the tree, as a
-  `MultiplayerSpawner`'s spawn function does. `Transferable = false` keeps it there.
+The node's multiplayer authority is the object's authority. Set it before the node enters the tree - a
+`MultiplayerSpawner`'s spawn function or `NetworkObject.Spawn` does.
 
-Spawn players with a `MultiplayerSpawner` on the host, so late joiners get them too. The host also sends a late joiner
-who holds and simulates every object.
-
-## A crate
-
-A crate starts on the host and moves to whoever touches it.
+## Spawning
 
 ```csharp
-public partial class Crate : RigidBody3D
+var shot = NetworkObject.Spawn<Shot>(shotsParent, ShotScene, shot =>
 {
-    [Synced] public Transform3D NetTransform { get => GlobalTransform; set => GlobalTransform = value; }
-    [Synced] public Vector3 NetLinearVelocity { get => LinearVelocity; set => LinearVelocity = value; }
-    [Synced] public Vector3 NetAngularVelocity { get => AngularVelocity; set => AngularVelocity = value; }
-
-    public NetworkObject Object { get; private set; } = null!;
-
-    public override void _Ready()
-    {
-        FreezeMode = FreezeModeEnum.Kinematic;
-        Object.AuthorityChanged += Refresh;
-        Refresh();
-        BodyEntered += other =>
-        {
-            if (other is Crate crate && Object.IsAuthority) Object.Touch(crate.Object);
-        };
-    }
-
-    private void Refresh() => Freeze = !Object.IsAuthority || Object.Holder != 0;
-}
+    shot.Position = muzzle;       // sent with the spawn
+    shot.Velocity = direction;    // only the shooter needs it
+});
 ```
 
-- **Only the authority simulates it.** Everywhere else it is kinematic and follows playback; running physics on top
-  of received state is how two peers end up disagreeing.
-- **Contact passes authority.** The player's `NetworkObject` and the crate's both have `SpreadsAuthority` on. The
-  player calls `Object.Touch(crate.Object)` when it walks into a crate, and the crate does the same for what it knocks
-  over, so a whole pile follows the player who pushed it.
-- **Rest returns it.** After the crate has been still for a while, its authority calls `Object.ReturnToHost()`.
+The scene appears on every peer, simulated by the peer that spawned it (or pass `authority:`). A peer that joins later
+gets it too. Freeing it on its authority frees it everywhere; call `Object.Despawn()` rather than `QueueFree` so
+observers see it to the end first.
 
-With Rapier, set the transform again after switching `Freeze`: Rapier returns a body to its last kinematic target on
-the next freeze. `PlaygroundCrate.SetFrozen` shows how.
+## What is sent
 
-Next: **[NetworkObject](network-object.md)** for grabbing, events and projectiles.
+Shown read-only on every `NetworkObject` in the inspector:
+
+| Root | Sent |
+|---|---|
+| `RigidBody2D/3D` | transform, linear and angular velocity, then `[Synced]` |
+| `CharacterBody2D/3D` | transform, velocity, then `[Synced]` |
+| other `Node2D/3D` | transform, then `[Synced]` |
+| `Node`, `Control` | `[Synced]` only |
+
+Nothing else: child transforms, animation and particles only when marked `[Synced]`. Changed state goes out at the
+next send (15 times a second), unchanged state once a second. `SoftBody3D` and ragdoll bones are not supported: the
+node shows an error and the game quits at start.
+
+Next: **[NetworkObject](network-object.md)** for kinds, grabbing, knocks and events.

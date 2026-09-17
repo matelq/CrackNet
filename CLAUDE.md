@@ -41,7 +41,7 @@ properties only: Godot exposes a partial class's properties to `Get`/`Set`, not 
 analyzer and ships built in the release zip under `addons/netfox-net/analyzers/`.
 
 Rapier keeps a body's last kinematic target and returns to it on the next freeze: re-set the transform after
-switching `Freeze` (`PlaygroundCrate.SetFrozen`), or a crate handed back after a throw jumps to where it was held.
+switching `Freeze` (`PhysicsHandling.SetFrozen`), or a crate handed back after a throw jumps to where it was held.
 
 Two-process checks: give the host a longer head start than feels necessary. The Rapier GDExtension loads slower than
 stock Godot, and a client that starts first simply never connects.

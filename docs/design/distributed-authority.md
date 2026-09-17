@@ -133,7 +133,7 @@ authoritative, and plays back and interpolates otherwise. Properties in its subt
 enum, strings, references) always step. `Teleport()` makes the next snapshot apply without interpolation;
 `Despawn()` ends the object's playback timeline. Games report contacts through `Touch`, not by reimplementing policy.
 
-### Planned simplification (decided, not implemented)
+### Simplification (implemented on `simplified-api`)
 
 Goal: a crate needs no code and a player needs only its own movement. Paid for in bytes where needed.
 
@@ -143,7 +143,7 @@ Goal: a crate needs no code and a player needs only its own movement. Paid for i
   as one table in the guide:
   - the root's full global transform, always, for any 2D or 3D root (no position-and-yaw variants for now:
     a character is thrown and tumbles too);
-  - linear and angular velocity when the root is a `RigidBody2D/3D` or `CharacterBody2D/3D`;
+  - linear and angular velocity when the root is a `RigidBody2D/3D`, velocity for a `CharacterBody2D/3D`;
   - every `[Synced]` property of the root and its descendants, down to a nested `NetworkObject`;
   - nothing else: child transforms, animation, wheels, particles only when marked `[Synced]`;
   - changed state at the next send, unchanged once a second; applied on non-authority peers every frame, blended,
@@ -162,7 +162,8 @@ Goal: a crate needs no code and a player needs only its own movement. Paid for i
   host at rest.
 - **`Knock(Vector3)`** built in: an impulse on a rigid body's authority, a `Knocked` event on a character's. The
   general event stays.
-- **One `Spawn(scene, transform)` call** over a library-owned spawner instead of a `MultiplayerSpawner` per shooter.
+- **One `Spawn(parent, scene, setup, authority)` call** instead of a `MultiplayerSpawner` per shooter: `setup` runs
+  on the spawning peer before the root enters the tree, and the root's transform goes with the spawn.
   It sends the scene path, with no registry of spawnable scenes (clients are trusted). No separate spawn data: what a
   new object needs is `[Synced]`, and the object stays hidden until its first sample brings it.
 - **Grab:** `TryGrab()`, `Release()`, plus `Throw(Vector3 velocity)` so a throw's velocity is set by the library.
@@ -208,16 +209,12 @@ Goal: a crate needs no code and a player needs only its own movement. Paid for i
 - [x] Full ENet mesh and per-link in-process simulation under named profiles
 - [x] Three-process smoke (`--smoke`) including client-A-to-client-B state, comparing displayed positions during motion
 - [x] Per-player delay readout split into network age and playback depth
-- [ ] The playground on the simplified API
+- [x] The playground on the simplified API (crates without code, shots through `Spawn`)
 - [ ] Soft separation of overlapping players (optional, built in)
 - [ ] Hitscan (a plain ray query by the shooter)
 - [ ] QTE: press together within a window (example over `Send`)
 - [ ] Standing on, carrying and throwing a player: playtest the sketch in Deferred before deciding
 - [ ] Steam transport (the playground mesh exercises the intended route over ENet)
-
-## Open
-
-- The simpler API below (API, decided so far): not implemented yet, and the design session is still going.
 
 ## Deferred
 

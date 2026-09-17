@@ -33,26 +33,28 @@ uses an ENet full mesh that follows the same route.
 3. Enable `ImplicitUsings` and `Nullable`, and reference `addons/netfox-net/analyzers/Netfox.SourceGenerators.dll` as
    an `Analyzer` for `[Synced]`.
 4. Assign `Multiplayer.MultiplayerPeer`. The clock starts on its own once the session does.
-5. Add a `NetworkObject` under each replicated node and mark its state `[Synced]`.
+5. Add a `NetworkObject` under each replicated node.
+
+A crate needs no code at all:
+
+```
+Crate (RigidBody3D)
+├── CollisionShape3D
+└── NetworkObject        Kind = Auto → Shared
+```
+
+Its transform and velocities are sent; it is frozen wherever another peer simulates it, passes authority to what it
+hits, and goes back to the host at rest. A player needs only its own movement:
 
 ```csharp
-public partial class Crate : RigidBody3D
+public partial class Player : CharacterBody3D
 {
-    [Synced] public Transform3D NetTransform { get => GlobalTransform; set => GlobalTransform = value; }
+    [Synced] public int Health { get; set; }        // game state; the transform is sent anyway
 
-    [Export] public NetworkObject Object { get; set; } = null!;   // SpreadsAuthority on
-
-    // Frozen wherever another peer simulates it: it follows that peer's samples
-    public override void _Ready()
+    public override void _PhysicsProcess(double delta)
     {
-        Object.AuthorityChanged += () => Freeze = !Object.IsAuthority;
-        Freeze = !Object.IsAuthority;
-    }
-
-    private void OnBodyEntered(Node other)
-    {
-        // Whoever simulates a moving crate simulates what it knocks over too
-        if (other is Crate crate) Object.Touch(crate.Object);
+        if (!GetNode<NetworkObject>("NetworkObject").IsAuthority) return;
+        // read input, MoveAndSlide: crates walked into are taken automatically
     }
 }
 ```

@@ -5,15 +5,6 @@ start; this is the index for when you know roughly what you want and not what it
 
 ## Netfox
 
-### BaseSnapshotSerializer
-
-Shared identity and schema handling for snapshot serializers. Port of serializers/base-snapshot-serializer.gd.
-
-| | Member | Summary |
-|---|---|---|
-| method | `PacketsFor(System.Int32)` | The shared packet buffer, set up to prefix each packet with `tick`. |
-| method | `ReadProperty(Godot.Node,Godot.NodePath,Netfox.Core.Serialization.ByteReader)` | Returns Nil if the buffer ends before the property could be read. |
-
 ### CommandIds
 
 Well-known command ids. Explicit so they do not depend on autoload order.
@@ -25,10 +16,6 @@ Well-known command ids. Explicit so they do not depend on autoload order.
 ### CompactValues
 
 Synced values on the wire: a type byte, then the value at float precision. `GD.VarToBytes` costs a 4-byte header per value on top of doubles; a Vector3 goes from 20 bytes to 13. Types without a case here fall back to it.
-
-### DenseSnapshotSerializer
-
-Full state: every registered property of every auth subject. Port of serializers/dense-snapshot-serializer.gd.
 
 ### ISyncedProperties
 
@@ -117,32 +104,45 @@ Tracks network identities: nodes are referenced by scene path, replaced with com
 
 ### NetworkObject
 
-One replicated object. While its root is this peer's multiplayer authority it sends the `[Synced]` properties of its subtree every tick; otherwise it plays them back from the authority's samples, a few ticks behind, on the clock shared by everything that peer sends. See docs/design/distributed-authority.md. Authority moves at runtime: `TryTakeAuthority` when this peer touches the object, `TryGrab` when it holds it, `Release` and `ReturnToHost` after. Every change applies here at once and goes to the host, which accepts it or corrects this peer. A change is newer when its ownership sequence is higher, or equal with a higher authority sequence, so a grab beats a touch. A nested `NetworkObject` owns its own subtree: a crate carried inside a player is not part of the player.
+One replicated object. While its root is this peer's multiplayer authority it sends the root's transform, velocity for a physics body, and the `[Synced]` properties of its subtree; otherwise it plays them back from the authority's samples, a few ticks behind, on the clock shared by everything that peer sends. See docs/design/distributed-authority.md. `Kind` decides how authority moves, and for a physics body the library does the rest: it freezes the body where another peer simulates it, passes authority on contact and hands a settled body back to the host. A nested `NetworkObject` owns its own subtree: a crate carried inside a player is not part of the player.
 
 | | Member | Summary |
 |---|---|---|
 | property | `Context` | The stack this object belongs to; resolved when it enters the tree. |
-| property | `DisplayTick` | The tick this object was last displayed at on a remote peer, including its opening catch-up cursor. |
+| property | `Diagnostics` | Sequences, display tick and sample events: for checks and diagnostics, not for game logic. |
 | property | `Holder` | The peer holding the object, or 0 when nobody does. |
 | property | `IsAuthority` | True when this peer simulates the object and sends its state. |
+| property | `Kind` | How authority over this object moves. Read when the object enters the tree. |
 | property | `LastSentBody` | What this peer last sent for the object, and when: an unchanged object is not sent again for a while. |
 | property | `MaxSpreadDepth` | Maximum contacts from the source of a spread chain, or -1 for unlimited. |
+| property | `PendingRequest` | The id of this guest's latest authority request the host has not answered yet, or 0. |
+| property | `ResolvedKind` | `Kind` with `Auto` resolved from the root's type. |
 | property | `Root` | The node that is the object: authority, identity and the synced subtree. The parent by default. |
-| property | `SpreadsAuthority` | Whether this object passes its authority to another object when `NetworkObject` is called. |
-| property | `Transferable` | Whether other peers may take authority or ownership. The current authority sends runtime changes through the host, and the value is included in late-join authority records. |
+| property | `SpreadsAuthority` | Whether this object passes its authority on with `NetworkObject`. Set by `Kind`. |
+| property | `SyncedSummary` | What this object sends, in the order it is sent. Read-only; shown in the inspector. |
+| property | `Transferable` | Whether other peers may take authority or ownership. Set by `Kind`; by hand only for `Custom`. The current authority sends runtime changes through the host. |
+| method | `Answered(System.Int32)` | The host answered `requestId`: events held for it go wherever authority now is. |
+| method | `AutoProperties(Godot.Node)` | What is sent for a root of this type before its `[Synced]` properties. |
+| method | `Deliver(System.Int32,Netfox.NetworkObject.EventKind,Godot.Variant,System.Int32)` | Raises an event here if this peer is the authority, and passes it on otherwise. While this peer's own request is unanswered its authority may be about to be taken back, so the event waits for the host's answer. |
+| method | `DescribeSynced` | The inspector's list. In the editor a script without `[Tool]` is a placeholder, so its `[Synced]` properties are read from the compiled type the script path points at. |
 | method | `Despawn` | Ends this authoritative object's timeline. It is hidden and stops processing here immediately; remote peers hide it when their playback reaches the flagged final sample, and the root is freed after the playback grace period so a `MultiplayerSpawner` cannot remove it from observers early. |
 | method | `IsNewer(System.Int32,System.Int32)` | True when ( `ownershipSequence`, `authoritySequence`) is newer than what this object has. |
+| method | `KindFor(Godot.Node)` | What `Auto` resolves to for a root of this type. |
+| method | `Knock(Godot.Vector3)` | Pushes this object from wherever the caller is: its authority applies `impulse` to a rigid body (X and Y for 2D) or raises `Knocked`. Delivered like `Variant`. |
+| method | `Of(Godot.Node)` | The object whose root is `root`, or null when it is not a registered object. |
 | method | `Release` | Lets go of a held object. This peer keeps simulating it until someone else touches it. |
-| method | `ReturnToHost` | Hands a free object this peer simulates back to the host, typically once it has come to rest. |
-| method | `SendToAuthority(Godot.Variant)` | Delivers `payload` to whoever is this object's authority, reliably and exactly once, even if authority moves while it is on its way: the transport does not duplicate, and a peer that is no longer the authority passes the event on instead of raising it. On the authority itself it is raised at once. |
+| method | `ReturnToHost` | Hands a free object this peer simulates back to the host. A settled `Shared` physics body does this itself. |
+| method | `Send(Godot.Variant)` | Delivers `payload` to whoever is this object's authority, reliably and exactly once, even if authority moves while it is on its way. On the authority itself it is raised at once. |
+| method | `Spawn``1(Godot.Node,Godot.PackedScene,System.Action{``0},System.Int32)` | Instances `scene` on every peer; see `Int32`. |
 | method | `Teleport` | The next state this peer sends applies without interpolation on the others: a respawn, not a flight. |
-| method | `Touch(Netfox.NetworkObject)` | Passes this object's authority to `other` after game code detects contact. The source's depth limit follows the whole chain; the host verifies this object as the cause and arbitrates opposing requests. |
+| method | `Throw(Godot.Vector3)` | Lets go of a held object with `velocity`: the throw flies on this peer's simulation. |
+| method | `Touch(Netfox.NetworkObject)` | Passes this object's authority to `other` after contact. Physics bodies call it themselves; call it for contact the physics engine does not report. The source's depth limit follows the whole chain; the host verifies this object as the cause and arbitrates opposing requests. |
 | method | `TryGrab` | Takes ownership and authority. False when someone else holds it. |
-| method | `TryTakeAuthority` | Takes authority over a free object this peer touched. False when it is held by someone else, or when this peer is not connected; true means applied here and sent, not yet accepted by the host. |
-| event | `AuthorityChanged` | Raised after the authority or the owner changed, on every peer. |
-| event | `EventReceived` | Raised on the authority, exactly once per `Variant` call anywhere: the peer that sent it and what it sent. A push, damage, "this projectile hit me". |
-| event | `SampleReceived` | Raised on a peer playing the object back, for every sample of the authority's state it kept: the tick it is for. What arrived, as against what was sent - for diagnostics and checks. |
-| event | `SampleSent` | Raised on the authority for every state it sends: the tick. Not every tick - an unchanged object is sent only as a heartbeat - so this is the ground truth a check compares playback against. |
+| method | `TryTakeAuthority` | Takes authority over a free object this peer interacts with. Physics bodies do this themselves on contact; call it for other interactions, or for a `Custom` object. False when it is held by someone else, or when this peer is not connected; true means applied here and sent, not yet accepted by the host. |
+| method | `UnsupportedReason(Godot.Node)` | Why a root of this type cannot be replicated, or null when it can. |
+| event | `AuthorityChanged` | Raised after the authority or the holder changed, on every peer. |
+| event | `Knocked` | Raised on the authority of a root that is not a rigid body, exactly once per `Vector3`: the impulse, for the game to apply as knockback. A rigid body takes the impulse itself. |
+| event | `Received` | Raised on the authority, exactly once per `Variant` call anywhere: the peer that sent it and what it sent. |
 
 ### NetworkObjectServer
 
@@ -151,6 +151,7 @@ Sends the state of every `NetworkObject` this peer is authority for, once per ti
 | | Member | Summary |
 |---|---|---|
 | property | `Context` | The stack this server belongs to; resolved when it enters the tree. |
+| property | `Diagnostics` | Playback timing per peer: for readouts and checks rather than for game logic. |
 | property | `PlaybackDelayTicks` | How many ticks behind the newest sample remote objects are shown. |
 | field | `MaxPlaybackDepthTicks` | The deepest a playback buffer grows to absorb jitter; also what a despawn waits out. |
 | field | `RestHeartbeatTicks` | An object whose state has not changed is sent again only this often. |
@@ -161,35 +162,8 @@ Sends the state of every `NetworkObject` this peer is authority for, once per ti
 | method | `HandleAuthority(System.Int32,System.Byte[])` | On the host: accepts a guest's change when it is newer and the object is free or already the guest's, and tells everyone; otherwise tells the guest what stands. On a guest: whatever the host says stands. |
 | method | `HandleEvent(System.Int32,System.Byte[])` | Raises an event on its object if this peer is the authority, and passes it on to the authority otherwise. |
 | method | `SendAllAuthorityTo(System.Int32)` | On the host: tells a peer that just joined who has authority over and who holds every object. |
+| method | `Spawn``1(Godot.Node,Godot.PackedScene,System.Action{``0},System.Int32)` | Instances `scene` under `parent` on every peer, simulated by `authority` (this peer when 0). `setup` runs here only, before the root enters the tree: set its transform there, and whatever only the authority needs, such as a projectile's speed. Others get the transform and authority; the rest arrives as state, and the object stays hidden until it does. |
 | method | `SubmitAuthority(Netfox.NetworkObject)` | Sends an authority change this peer just applied: a guest asks the host, the host tells everyone. |
-
-### NetworkSchemaSerializer
-
-Base class for schema serializers. Encode a Variant into a ByteWriter, decode it back from a ByteReader. Extend to implement custom serializers and pass them to RollbackSynchronizer.SetSchema. Port of schemas/network-schema-serializer.gd.
-
-| | Member | Summary |
-|---|---|---|
-| field | `_quantizeBuffer` | Reused across calls, because this runs on the record path for every schema'd property every tick. Per thread rather than shared: nothing here is synchronized, and a second thread encoding into the same buffer would corrupt both answers rather than merely slow them down. |
-| method | `Quantize(Godot.Variant)` | The value as it will come back out the other end. For a lossy schema this is not the value that went in, and that difference is the point: a peer recording what it actually has and every other peer recording what it was sent are then simulating from two different numbers for the same tick. The error is tiny - half precision is about 5e-4 relative - but it is systematic rather than noise, so it never averages out and produces a steady trickle of corrections no amount of bandwidth removes. State Synchronization prescribes exactly this: quantize the simulation as if it had been sent, on both sides. The default round trips through `ByteWriter` and `ByteReader`, so a custom serializer is correct without doing anything. Override it where the answer is cheaper to compute directly, or where the encoding is lossless and the whole round trip can be skipped. |
-
-### NetworkSchemas
-
-Factory of schema serializers. Port of schemas/network-schemas.gd; naming follows the original (uint16, vec3f32, ...). `Variant` and `String` read like the types of the same name on purpose: they are kept as upstream names them, so the upstream schema documentation applies here unchanged. C# resolves the two without ambiguity, and renaming them would cost that mapping for a cosmetic gain.
-
-| | Member | Summary |
-|---|---|---|
-| method | `ArrayOf(Netfox.NetworkSchemaSerializer,Netfox.NetworkSchemaSerializer)` | Godot Array with a size prefix, each item with `item`. |
-| method | `CString` | UTF-8 string terminated by a zero byte. |
-| method | `Degrees8` | Angle in degrees, wrapped to [0, 360) and quantized to 8 bits. |
-| method | `Dictionary(Netfox.NetworkSchemaSerializer,Netfox.NetworkSchemaSerializer,Netfox.NetworkSchemaSerializer)` | Godot Dictionary with a size prefix. |
-| method | `Normal2T(Netfox.NetworkSchemaSerializer)` | Unit Vector2 as a single angle. |
-| method | `Normal3T(Netfox.NetworkSchemaSerializer)` | Unit Vector3 as two octahedron-encoded components. |
-| method | `Radians8` | Angle in radians, wrapped to [0, TAU) and quantized to 8 bits. |
-| method | `Sfrac8` | Signed fraction in [-1, 1] quantized to 8 bits. |
-| method | `String` | UTF-8 string prefixed by a 32-bit length. |
-| method | `Ufrac8` | Unsigned fraction in [0, 1] quantized to 8 bits. |
-| method | `Variant` | Any type supported by GD.VarToBytes; size depends on the value. |
-| method | `Varuint` | Variable-length unsigned integer, 1 to 10 bytes. |
 
 ### NetworkTickrateHandshake
 
@@ -204,32 +178,22 @@ Exchanges the configured tickrate with the host when peers join. Port of time/ne
 
 ### NetworkTime
 
-Drives network ticks and keeps them synced to the host. Port of network-time.gd.
+The shared tick clock: runs ticks at a fixed rate and keeps them in step with the host. Started and stopped by `NetworkEvents` with the session; samples are stamped with `Tick`.
 
 | | Member | Summary |
 |---|---|---|
-| property | `ClockOffset` | Reference clock minus simulation clock. |
-| property | `ClockStretchFactor` | Current clock speed multiplier; above 1.0 speeds up to catch the host, below slows down. |
 | property | `Context` | The stack this server belongs to; resolved when it enters the tree. |
-| property | `PhysicsFactor` | Multiplier from physics-process speeds to tick speeds; multiply velocities by it around MoveAndSlide. |
-| property | `RemoteClockOffset` | Same as NetworkTimeSynchronizer.RemoteOffset. |
 | property | `RemoteRtt` | Estimated roundtrip time to the server. Always 0 on the server. |
-| property | `StallThreshold` | Seconds without frames before the game is considered stalled and catch-up ticks are skipped. |
 | property | `Tick` | Current network time in ticks, continuously synced with the server. |
 | property | `TickFactor` | 0.0 right after a tick, 1.0 right before the next. |
 | property | `Tickrate` | Ticks per second. Equals the physics tickrate when SyncToPhysics is on. |
 | property | `Ticktime` | Duration of a single tick, in seconds. |
 | property | `Time` | Current network time in seconds, continuously synced with the server. |
-| method | `IsClientSynced(System.Int32)` | Whether the given client finished its time sync. Only meaningful on the server. |
 | method | `Start` | Start NetworkTime: synchronize with the host, then emit ticks. On clients, ticks start after the initial sync. Returns Ok, AlreadyInUse if already running, or Unavailable without a multiplayer peer. |
 | method | `Stop` | Stop NetworkTime and the background sync. No ticks until the next Start. |
-| event | `AfterClientSync` | Emitted on the server when a client finishes its time sync. (peer id) |
 | event | `AfterSync` | Emitted after time is synchronized; instantly on the server. |
-| event | `AfterTick` | (delta, tick) |
-| event | `AfterTickLoop` | Emitted after the tick loop is run. |
-| event | `BeforeTick` | (delta, tick) |
-| event | `BeforeTickLoop` | Emitted before a tick loop is run. |
-| event | `OnTick` | (delta, tick) |
+| event | `AfterTick` | After every tick's `OnTick`, when state is sent: (delta, tick). |
+| event | `OnTick` | Every tick: (delta, tick). |
 | event | `OnTickrateMismatch` | (peer, tickrate). Emitted when the tickrate mismatch action is Signal. |
 
 ### NetworkTimeSynchronizer
@@ -247,17 +211,6 @@ Continuously synchronizes the reference clock to the host. Transport and timing 
 | event | `OnInitialSync` | Emitted once the initial timestamp is received and the sync loop starts. |
 | event | `OnPanic` | Emitted when clocks are so far apart that the clock gets hard-reset. Carries the offset. |
 
-### PeerVisibilityFilter
-
-Decides which peers can see a synchronized node. Port of peer-visibility-filter.gd.
-
-| | Member | Summary |
-|---|---|---|
-| property | `Context` | The netfox stack this node uses; resolved when it enters the tree. |
-| method | `GetRpcTargetPeers` | Peer ids to pass to RpcId: a broadcast, a single exclusion (negative id), or an explicit list. |
-| method | `SetVisibilityFor(System.Int32,System.Boolean)` | Peer 0 sets the default visibility. |
-| method | `UpdateVisibility(System.Collections.Generic.IReadOnlyList{System.Int32})` | Recomputes visible peers. Defaults to the current multiplayer peers. |
-
 ### PlaybackStatus
 
 The newest state tick received from a peer and the tick currently displayed for that peer.
@@ -265,23 +218,6 @@ The newest state tick received from a peer and the tick currently displayed for 
 | | Member | Summary |
 |---|---|---|
 | method | `#ctor(System.Double,System.Double)` | The newest state tick received from a peer and the tick currently displayed for that peer. |
-
-### PropertyEntry
-
-Parses "Node/Path:property" strings relative to a root node. Port of properties/property-entry.gd.
-
-| | Member | Summary |
-|---|---|---|
-| method | `MakePath(Godot.Node,System.Object,System.String)` | Builds a "node:property" path string. Node may be a string, NodePath, or Node relative to `root`. |
-| method | `Parse(Godot.Node,System.String)` | The part before the colon is a node path relative to `root`, the rest is the property. |
-
-### RedundantSnapshotSerializer
-
-Packs several snapshots into one packet, for input redundancy. Port of serializers/redundant-snapshot-serializer.gd. The first snapshot goes in full and the rest only as how they differ from it, which is what upstream's TODO(#560) asks for: consecutive ticks of input are mostly identical, so a redundant copy is usually a few bytes of header. Every subject the older snapshot has still gets a frame, empty when nothing changed, so the reader can tell an unchanged subject from one that was not in that tick at all.
-
-### SparseSnapshotSerializer
-
-Diff state: only properties present in the snapshot, flagged by a bitset. Port of serializers/sparse-snapshot-serializer.gd.
 
 ### SyncedAttribute
 
@@ -299,16 +235,6 @@ A property a NetworkObject replicates: its path relative to the declaring node, 
 |---|---|---|
 | method | `#ctor(System.String,System.Boolean)` | A property a NetworkObject replicates: its path relative to the declaring node, and whether playback blends it. |
 
-## Netfox.Core.Collections
-
-### Bitset
-
-Stores a list of booleans packed into bytes. Port of netfox.internals/bitset.gd.
-
-### HistoryBuffer`1
-
-Maps ticks to arbitrary data, stored in a sliding ring buffer. Port of netfox.internals/history-buffer.gd.
-
 ## Netfox.Core.Data
 
 ### NetworkIdentifier`1
@@ -322,32 +248,6 @@ Maps a subject to its local id and per-peer ids. Port of servers/data/network-id
 ### NetworkIdentityReference
 
 Either a compact numeric id or a full node name. Port of servers/data/network-identity-reference.gd.
-
-### ObjectSnapshot`3
-
-Snapshot data for a single object. Port of servers/data/object-snapshot.gd.
-
-### PerObjectHistory`3
-
-Per-object timeline of ObjectSnapshots. Port of servers/data/per-object-history.gd.
-
-| | Member | Summary |
-|---|---|---|
-| method | `Clear` | Drops every recorded tick for every subject. Subjects get a fresh history on their next write. |
-
-### PropertyPool`2
-
-A set of properties, each belonging to a subject. Port of servers/data/property-pool.gd.
-
-### Snapshot`3
-
-Stores property values of multiple subjects, recorded for a specific tick. Port of servers/data/snapshot.gd. Engine-specific operations (record from / apply to the subject, authority checks) live in Netfox.Godot as extension methods.
-
-| | Member | Summary |
-|---|---|---|
-| property | `ValueComparer` | Comparer used for value equality in patches, merges and Equals. Netfox.Godot sets a Variant-aware one. |
-| method | `CopySubjectTo(`0,Netfox.Core.Data.Snapshot{`0,`1,`2})` | Copies the data of `subject` into `target`. If there is no data, erases it from target too. |
-| method | `Sanitize(System.Func{`0,System.Boolean})` | Removes every subject for which `isValid` returns false. |
 
 ## Netfox.Core.Logging
 
@@ -385,22 +285,6 @@ Serializes (full name, local id) pairs, used when sending local ids to other pee
 ### NetRef
 
 Encodes a NetworkIdentityReference as varuint id, or 0 followed by a c-string name. Port of _NetworkIdentityReferenceSerializer.
-
-### NetworkSchema`3
-
-Maps (subject, property) to a serializer, with a fallback. Port of schemas/network-schema.gd.
-
-### PacketBuffer
-
-Packs data chunks into packets of a specified size. Multiple chunks may go into a single packet, as long as they fit MaxPacketSize. Port of serializers/packet-buffer.gd.
-
-| | Member | Summary |
-|---|---|---|
-| property | `PacketSetup` | Called on every fresh packet before data is written, e.g. to add a header. |
-
-### VarBits
-
-Variable-length bitset: 7 bits per byte, high bit marks continuation. Decoded bit count is a multiple of 7. Port of _VariableBitsetSerializer.
 
 ### VarUint
 
