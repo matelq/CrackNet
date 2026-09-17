@@ -8,7 +8,7 @@ namespace Netfox.Examples.Playground;
 /// wherever another peer simulates it, passes authority to what it hits and goes back to the host at rest. All this
 /// class adds is a tint in the colour of the peer simulating it right now.
 /// </summary>
-public partial class PlaygroundCrate : RigidBody3D
+public partial class PlaygroundCrate : RigidBody3D, IAuthorityChanged
 {
     private StandardMaterial3D _material = null!;
 
@@ -19,12 +19,14 @@ public partial class PlaygroundCrate : RigidBody3D
         _material = (StandardMaterial3D)mesh.MaterialOverride.Duplicate();
         mesh.MaterialOverride = _material;
 
-        this.Net().AuthorityChanged += Refresh;
         Playground.SlotsChanged += Refresh;
         Refresh();
     }
 
     public override void _ExitTree() => Playground.SlotsChanged -= Refresh;
+
+    /// <summary>The library calls this on every peer once the crate has changed hands.</summary>
+    public void OnAuthorityChanged() => Refresh();
 
     private void Refresh()
     {

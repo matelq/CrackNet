@@ -17,6 +17,14 @@ Well-known command ids. Explicit so they do not depend on autoload order.
 
 Synced values on the wire: a type byte, then the value at float precision. `GD.VarToBytes` costs a 4-byte header per value on top of doubles; a Vector3 goes from 20 bytes to 13. Types without a case here fall back to it.
 
+### IAuthorityChanged
+
+Implemented by a replicated node that wants to know when it changed hands: who simulates it, or who holds it. The library calls `OnAuthorityChanged` on every peer, right after it has applied the change, so `this.Authority` and `this.Holder` already read the new values. Preferred over subscribing to `AuthorityChanged` from the node itself: nothing to unsubscribe in `_ExitTree`. The event stays for watching someone else's object. `public partial class Crate : RigidBody3D, IAuthorityChanged { public void OnAuthorityChanged() => _material.AlbedoColor = ColorOf(this.Authority.Peer); }`
+
+| | Member | Summary |
+|---|---|---|
+| method | `OnAuthorityChanged` | Called on every peer after the authority or the holder of this node changed. |
+
 ### ISpawnedWith`1
 
 An object that needs data when it is created: `OnSpawned(`0` runs with the same arguments on every peer, late joiners included, before the root enters the tree. The generated `Spawn` of the class takes the argument, optional only when `OnSpawned(`0` declares a default value itself.

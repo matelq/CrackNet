@@ -426,6 +426,8 @@ public partial class NetworkObject : Node
     private void NotifyAuthorityChanged()
     {
         _body?.AuthorityChanged();
+        // The node's own hook first: a game reacts to what it now owns before anyone watching it from outside does
+        if (Root is IAuthorityChanged root) root.OnAuthorityChanged();
         AuthorityChanged?.Invoke();
     }
 
@@ -522,7 +524,7 @@ public partial class NetworkObject : Node
         if (!IsAuthority) SetShown(false);
         if (ResolvedKind != ObjectKind.Custom) _body = PhysicsHandling.For(this);
         Context.NetworkObjectServer.Register(this);
-        _body?.AuthorityChanged();
+        NotifyAuthorityChanged();   // the node learns who has it before its first frame
     }
 
     private PhysicsHandling? _body;

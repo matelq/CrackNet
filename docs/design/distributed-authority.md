@@ -187,6 +187,9 @@ Goal: a crate needs no code and a player needs only its own movement. Paid for i
 Judged by `docs/examples.md`; the owner found sections 3 (players and objects) and 5 (shooting) hard to read.
 Proposals came from independent Claude and Codex reviews.
 
+- **`IAuthorityChanged`** on the node itself (`OnAuthorityChanged`, called on every peer after the change), beside the
+  `AuthorityChanged` event, which is for watching another object: extension members cannot declare events, and a node
+  subscribing to its own would have to unsubscribe in `_ExitTree`.
 - **`node.Net()`** extension instead of `GetNode<NetworkObject>("NetworkObject")` and `NetworkObject.Of(node)!`.
   Everyday calls become extensions on the game's own nodes, so game code rarely names `NetworkObject`.
 - **`Push`** replaces `Knock`: `crate.Push(impulse)` delivers a push to whoever simulates the target (an explosion, a

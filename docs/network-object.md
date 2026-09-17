@@ -23,7 +23,7 @@ Pick a kind by hand only when the type says the wrong thing: a grenade is a rigi
 |---|---|
 | `Authority.Peer`, `Authority.IsLocal` | The peer that simulates the object and sends its state (Godot's multiplayer authority of the root), and whether it is this one. |
 | `Holder` | The peer holding the object, or 0. A held object cannot be taken by anyone else. |
-| `AuthorityChanged` | Raised on every peer after authority or holder changed. |
+| `AuthorityChanged` | Raised on every peer after authority or holder changed; for watching someone else's object. |
 
 Every change is optimistic: it applies on the requesting peer at once and goes to the host, which accepts it or
 corrects the requester. A request returns false when it cannot even be tried (someone else holds the object, it is
@@ -50,7 +50,17 @@ If two peers can both decide the same hit or grab, the mechanic is not finished.
 
 Every call below also works on the game's own node: `crate.Push(...)`, `crate.TryClaim()`, `this.Authority.IsLocal`,
 `this.TakeKnockback(delta)`, `crate.Holder`. `node.Net()` returns the `NetworkObject` itself, for the rarer
-`AuthorityChanged`, `Send` and `Diagnostics`.
+`Send` and `Diagnostics`.
+
+A node that wants to know when it itself changed hands implements `IAuthorityChanged` instead of subscribing, so there
+is nothing to unsubscribe in `_ExitTree`:
+
+```csharp
+public partial class Crate : RigidBody3D, IAuthorityChanged
+{
+    public void OnAuthorityChanged() => Tint(this.Authority.Peer);   // every peer, after the change applied
+}
+```
 
 ```csharp
 this.Push(target, impulse);                              // my object struck yours: takes a crate, pushes a player
