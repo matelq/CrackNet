@@ -332,9 +332,12 @@ public partial class NetworkObject : Node
             : Context.NetworkIdentityServer.GetIdentifierOf(cause.Root!)?.FullName;
         if (cause is not null && causeName is null) return false;
 
-        Apply(authority, owner, authoritySequence, ownershipSequence, _transferable, TransferableSequence,
-            causeName ?? "", spreadDepth, spreadLimit);
+        var changed = Apply(authority, owner, authoritySequence, ownershipSequence, _transferable, TransferableSequence,
+            causeName ?? "", spreadDepth, spreadLimit, notify: false);
+        // Sent before anyone hears of the change: a body taken here takes what rests on it, and those requests name
+        // this one as their cause, so the host has to receive this one first or it refuses them
         Context.NetworkObjectServer.SubmitAuthority(this);
+        if (changed) NotifyAuthorityChanged();
         return true;
     }
 
@@ -343,7 +346,8 @@ public partial class NetworkObject : Node
         => ownershipSequence > OwnershipSequence
            || (ownershipSequence == OwnershipSequence && authoritySequence > AuthoritySequence);
 
-    internal void Apply(
+    /// <returns>Whether the authority or the holder changed.</returns>
+    internal bool Apply(
         int authority,
         int owner,
         int authoritySequence,
@@ -352,7 +356,8 @@ public partial class NetworkObject : Node
         int transferableSequence,
         string spreadCause = "",
         int spreadDepth = 0,
-        int spreadLimit = -1)
+        int spreadLimit = -1,
+        bool notify = true)
     {
         var changed = authority != Authority || owner != Holder;
         if (authority != Authority)
@@ -379,7 +384,12 @@ public partial class NetworkObject : Node
         SpreadCause = spreadCause;
         SpreadDepth = spreadDepth;
         SpreadLimit = spreadLimit;
-        if (!changed) return;
+        if (changed && notify) NotifyAuthorityChanged();
+        return changed;
+    }
+
+    private void NotifyAuthorityChanged()
+    {
         _body?.AuthorityChanged();
         AuthorityChanged?.Invoke();
     }

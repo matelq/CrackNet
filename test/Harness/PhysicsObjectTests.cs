@@ -111,4 +111,33 @@ public partial class PhysicsObjectTests : HarnessSuite
         Expect.True(crates[1].LinearVelocity.X > 5, $"thrown at {crates[1].LinearVelocity}");
         Expect.True(await WaitUntil(() => crates[0].GlobalPosition.X > 1, 3), $"the host never saw it fly: {crates[0].GlobalPosition}");
     }
+
+    [Test]
+    public async Task TakingTheBottomOfAStackTakesTheWholeStack()
+    {
+        // The crates above are taken the moment the bottom one is. Their requests name the bottom crate as the cause,
+        // so the host has to hear about the bottom crate first, or it refuses them and the stack hangs in the air
+        NetworkObject[] Stack(NetfoxStack stack) =>
+        [
+            Net(Crate(stack, "Bottom", new Vector3(0, 0.5f, 0))),
+            Net(Crate(stack, "Middle", new Vector3(0, 1.5f, 0))),
+            Net(Crate(stack, "Top", new Vector3(0, 2.5f, 0))),
+        ];
+        var onHost = Stack(Host);
+        var onClient = Stack(Client);
+        for (var i = 0; i < 30; i++) await NextFrame();
+
+        // A settled stack goes back to the host half a second later, so what counts is that each crate went to the client
+        var reachedClient = new HashSet<string>();
+        foreach (var obj in onHost)
+            obj.AuthorityChanged += () => { if (obj.Authority == 2) reachedClient.Add(obj.Root!.Name); };
+        var rejected = new HashSet<string>();
+        foreach (var obj in onClient)
+            obj.AuthorityChanged += () => { if (obj.Authority == 1 && reachedClient.Count < 3) rejected.Add(obj.Root!.Name); };
+
+        Expect.True(onClient[0].TryTakeAuthority());
+        await WaitUntil(() => reachedClient.Count == 3, 2);
+        Expect.True(reachedClient.Count == 3 && rejected.Count == 0,
+            $"reached the client on the host: {string.Join(", ", reachedClient)}; taken back from the client: {string.Join(", ", rejected)}");
+    }
 }

@@ -348,7 +348,10 @@ public partial class NetworkObjectServer : Node
         }
         else
         {
-            Logger.Debug("Rejected authority change on {0} from #{1}", identifier.FullName, sender);
+            Logger.Debug("Rejected authority change on {0} from #{1}: transferable {2}, newer {3}, free {4}, cause {5} ({6}: authority {7}, depth {8}/{9})",
+                identifier.FullName, sender, obj.Transferable, obj.IsNewer(authoritySequence, ownershipSequence),
+                obj.Holder == 0 || obj.Holder == sender, causeAllowed, spreadCause,
+                cause?.Authority, spreadDepth, cause is null ? -1 : cause.SpreadDepth + 1);
             SendAuthority(obj, sender, requestId, answering: sender);
         }
     }

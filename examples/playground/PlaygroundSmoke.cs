@@ -163,7 +163,11 @@ public partial class PlaygroundSmoke : Node
         // hanging over nothing, waiting for the host's word that it fell
         var underneathGone = new Vector2(_crate.GlobalPosition.X - _onTop.GlobalPosition.X, _crate.GlobalPosition.Z - _onTop.GlobalPosition.Z).Length() > 1.0f;
         if (!_isHost && !_isObserver && underneathGone && _onTop.GlobalPosition.Y > 1.2f && _onTop.Freeze && !_onTop.Object.IsAuthority)
-            _stackHangingFrames++;
+        {
+            if (_stackHangingFrames++ % 60 == 0)
+                GD.Print($"STACK HANGING frame {_stackHangingFrames}: Crate4 at {_onTop.GlobalPosition} authority {_onTop.Object.Authority} " +
+                         $"holder {_onTop.Object.Holder} frozen {_onTop.Freeze}; Crate0 at {_crate.GlobalPosition} authority {_crate.Object.Authority} holder {_crate.Object.Holder}");
+        }
 
         if (_isHost && !_crate.Object.IsAuthority)
         {

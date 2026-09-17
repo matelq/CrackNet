@@ -1,4 +1,5 @@
 using Godot;
+using Netfox.Core.Logging;
 
 namespace Netfox.Internal;
 
@@ -8,6 +9,8 @@ namespace Netfox.Internal;
 /// </summary>
 internal abstract class PhysicsHandling
 {
+    private static readonly NetfoxLogger Logger = NetfoxLogger.ForNetfox("PhysicsHandling");
+
     protected readonly NetworkObject Object;
 
     protected PhysicsHandling(NetworkObject obj) => Object = obj;
@@ -93,8 +96,16 @@ internal abstract class PhysicsHandling
                     CollisionMask = _body.CollisionMask,
                     Exclude = [_body.GetRid()],
                 };
-                foreach (var hit in space.IntersectShape(query, 16))
-                    TouchCollider(hit["collider"].AsGodotObject());
+                var hits = space.IntersectShape(query, 16);
+                Logger.Debug("{0} taken at {1}: overlap query found {2}", _body.Name, _body.GlobalPosition,
+                    hits.Count == 0 ? "nothing" : string.Join(", ", hits.Select(hit => hit["collider"].AsGodotObject() is Node node ? $"{node.Name}" : "?")));
+                foreach (var hit in hits)
+                {
+                    var collider = hit["collider"].AsGodotObject();
+                    if (collider is not Node node || NetworkObject.Of(node) is not { } other) continue;
+                    var touched = Object.Touch(other);
+                    Logger.Debug("{0} touches {1}: {2}", _body.Name, node.Name, touched);
+                }
             }
         }
 
