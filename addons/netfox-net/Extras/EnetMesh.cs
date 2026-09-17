@@ -1,13 +1,18 @@
 using Godot;
-using Netfox.Extras;
 
-namespace Netfox.Examples.Playground;
+namespace Netfox.Extras;
 
 /// <summary>
-/// ENet rendezvous and full-mesh setup for the playground. The host assigns compact peer IDs over a temporary ENet
-/// lobby; every gameplay pair then owns one <see cref="ENetConnection"/> and traffic no longer relays through peer 1.
+/// A full ENet mesh over a local network, for running a session in several windows or over a LAN. Guests send state
+/// straight to each other in this model, so a star through the host would add a hop to every sample: the host hands
+/// out compact peer ids over a temporary ENet lobby, then every pair owns one <see cref="ENetConnection"/>.
+/// <para>
+/// A development tool, like <see cref="NetworkSimulator"/> and autoconnect: it needs a reachable port per pair, which
+/// rules it out over the internet. There, hand netfox a transport that is a mesh already - the Steam peer in
+/// <c>examples/steam</c> - or any other <c>MultiplayerPeer</c>; netfox never creates one itself.
+/// </para>
 /// </summary>
-public partial class PlaygroundMesh : Node
+public partial class EnetMesh : Node
 {
     private const int MaxPeers = 8;
     // The rendezvous is the base port itself. Editor autoconnect elects the host by who binds that port first; a host

@@ -36,7 +36,7 @@ Multiplayer.MultiplayerPeer = peer;
 ```
 
 Guests send state straight to each other, so the intended transport is a full mesh: `SteamMultiplayerPeer` joins every
-lobby member, and `examples/playground/PlaygroundMesh.cs` builds the same over ENet.
+lobby member, and `Netfox.Extras.EnetMesh` builds the same over ENet for local windows and a LAN.
 
 ## A crate
 

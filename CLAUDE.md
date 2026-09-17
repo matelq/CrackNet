@@ -11,7 +11,7 @@ parity checks) do not apply here; `reworked` and `master` keep the port. Roadmap
 - `addons/netfox-net/` — the addon (namespace `Netfox`, extras in `Netfox.Extras`). Autoloads expose `Instance`; order is fixed in `Editor/NetfoxPlugin.cs` and `project.godot` (dependencies first).
 - `test/` — Godot-side tests (`TestSuite` + `[Test]`), `Netfox.Core.Tests/` — xUnit. `test/Harness/` runs several stacks in one tree over a loopback peer.
 - `NetfoxContext`: servers register into `NetfoxContext.Default`; a `NetfoxContextRoot` node gives its subtree a second stack. Nodes resolve `Context` in `_EnterTree`; `Instance` still points at the default stack.
-- `examples/playground/` — the co-op sample and its two-process smoke; `examples/steam/` — GodotSteam bootstrap under `#if GODOTSTEAM`.
+- `examples/playground/` — the co-op sample (its smoke lives in `test/Playground/`); `examples/steam/` — GodotSteam bootstrap under `#if GODOTSTEAM`.
 - Repo root is the Godot project. Godot 4.7.2 mono binary: `.tools/godot/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe` (gitignored). Use exactly this version: older editors downgrade the SDK in Netfox.csproj.
 - **Rapier-first** (netfox-net#52): `project.godot` asks for `Rapier3D`, and the extension is gitignored, so a fresh clone
   needs `sh tools/install-extensions.sh rapier` before anything with a physics body runs (`steam` installs GodotSteam).

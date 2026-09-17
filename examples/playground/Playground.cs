@@ -46,7 +46,7 @@ public partial class Playground : Node3D
     private LineEdit _address = null!;
     private Label _status = null!;
     private Camera3D _camera = null!;
-    private PlaygroundMesh _mesh = null!;
+    private EnetMesh _mesh = null!;
     private readonly Dictionary<PlaygroundCrate, Transform3D> _crateStarts = new();
     private NetworkSimulator.Profile _profile = NetworkSimulator.Profile.Default;
     private double _sinceReadout = 1;
@@ -63,7 +63,7 @@ public partial class Playground : Node3D
         Players = GetNode<Node3D>("Players");
         Shots = GetNode<Node3D>("Shots");
         _camera = GetNode<Camera3D>("Camera3D");
-        _mesh = GetNode<PlaygroundMesh>("Mesh");
+        _mesh = GetNode<EnetMesh>("Mesh");
         BindUi();
         // Where the scene put each crate, for the Reset button
         foreach (var crate in GetNode("Crates").GetChildren().OfType<PlaygroundCrate>()) _crateStarts[crate] = crate.GlobalTransform;

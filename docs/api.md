@@ -414,6 +414,10 @@ The arithmetic of the NetworkTime tick loop without any side effects: clock stre
 
 ## Netfox.Extras
 
+### EnetMesh
+
+A full ENet mesh over a local network, for running a session in several windows or over a LAN. Guests send state straight to each other in this model, so a star through the host would add a hop to every sample: the host hands out compact peer ids over a temporary ENet lobby, then every pair owns one `ENetConnection`. A development tool, like `NetworkSimulator` and autoconnect: it needs a reachable port per pair, which rules it out over the internet. There, hand netfox a transport that is a mesh already - the Steam peer in `examples/steam` - or any other `MultiplayerPeer`; netfox never creates one itself.
+
 ### NetworkSimulator
 
 Editor convenience: the first launched instance hosts and later ones join. Link conditions are applied in process by `SimulatedMultiplayerPeer`, once as each packet leaves for a remote peer.
