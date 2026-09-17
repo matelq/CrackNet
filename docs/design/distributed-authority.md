@@ -247,6 +247,28 @@ parent sync.
   failing on today's carry before the change; attach and detach at the carrier's display tick; no jump during the
   detach blend; a third peer's carried player on its displayed carrier; a late joiner sees the item in the hand.
 
+### Physics between peers (decided, in progress)
+
+Every peer has its own bodies, dynamic and in the present, and copies of the others', kinematic and a playback delay
+behind. Playtests and the smoke found three ways this breaks, each of which had been patched case by case: a kinematic
+copy pushes a local body with infinite mass, so neither mass nor Rapier's corrective velocity limits the speed it
+gives (a thrown crate's copy on the host shot the host's stack off); a contact happens at different times on
+different peers, so authority moves after the hit instead of before it; and a body frozen or unfrozen at a pose the
+other peer shows late overlaps what is around it.
+
+- **Copies of Shared bodies do not collide with local Shared bodies** ("ghosts"). Only the peer simulating a body
+  resolves its hits; authority still spreads by touch, found by overlap queries as when a body is taken. Copies keep
+  colliding with characters, so a player can stand on one. Cost: during a transfer (one playback delay) a thrown crate
+  may pass visibly into a stack on the host. Backup if that looks bad in playtests: simulate every body on every peer
+  and pull copies towards the received state (Fiedler's VR demo), which gives finite-mass contacts at the price of CPU,
+  correction jitter and a different playback model.
+- **Standing or riding** on another peer's body: a character's position is sent relative to its base, and every peer
+  places it on its own copy of that base. Done with carrying (below), which needs the same mechanism.
+- **Handover:** decided after measuring with ghosts in place. Launches are a physics problem (infinite-mass pushes,
+  depenetration), not a presentation one; a presentation blend comes after, if a visible snap remains.
+- Already in: a character does not take what it stands on; a group touched by any character does not go back to the
+  host; Rapier's `normalized_max_corrective_velocity` is 2 in the playground project.
+
 ## Tests the model needs
 
 1. Two peers grab one object at once: exactly one owner, and every peer agrees who.
@@ -282,7 +304,9 @@ parent sync.
 - [ ] Hitscan (a plain ray query by the shooter)
 - [ ] QTE: press together within a window (example over `Send`)
 - [ ] Standing on, carrying and throwing a player: playtest the sketch in Deferred before deciding
-- [ ] Steam transport (the playground mesh exercises the intended route over ENet)
+- [x] Steam transport: host a friends-only lobby, join from the overlay or by lobby id, simulated profile on top
+- [ ] Production-ready playground: scenes with proper node trees for every object and for the level instead of
+  building them in code, and code clean enough to copy into a game
 
 ## Deferred
 
