@@ -34,6 +34,21 @@ public partial class HarnessBody : Node3D
         return body;
     }
 
+    /// <summary>The scene <see cref="NetworkObject.Spawn{T}"/> instances in harness cases.</summary>
+    public static PackedScene Scene => GD.Load<PackedScene>("res://test/Harness/harness_body.tscn");
+
+    public override void _EnterTree()
+    {
+        // Instanced from the scene rather than built by Create
+        if (GetNodeOrNull<NetworkObject>("NetworkObject") is { } existing)
+        {
+            Object = existing;
+            return;
+        }
+        Object = new NetworkObject { Name = "NetworkObject", Kind = NetworkObject.ObjectKind.Custom };
+        AddChild(Object);
+    }
+
     public override void _Ready()
     {
         _time = NetfoxContext.For(this).NetworkTime;

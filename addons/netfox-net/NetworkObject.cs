@@ -145,6 +145,10 @@ public partial class NetworkObject : Node
     /// <summary>The object whose root is <paramref name="root"/>, or null when it is not a registered object.</summary>
     public static NetworkObject? Of(Node root) => NetfoxContext.For(root).NetworkObjectServer?.Find(root);
 
+    /// <summary>Instances <paramref name="scene"/> on every peer; see <see cref="NetworkObjectServer.Spawn{T}"/>.</summary>
+    public static T Spawn<T>(Node parent, PackedScene scene, Action<T>? setup = null, int authority = 0) where T : Node
+        => NetfoxContext.For(parent).NetworkObjectServer.Spawn(parent, scene, setup, authority);
+
     /// <summary>The next state this peer sends applies without interpolation on the others: a respawn, not a flight.</summary>
     public void Teleport() => TeleportPending = true;
 

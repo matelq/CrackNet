@@ -3,7 +3,7 @@ using Godot;
 namespace Netfox.Tests;
 
 /// <summary>
-/// Projectiles belong to their shooter, are spawned with Godot's MultiplayerSpawner, and on other peers appear only when
+/// Projectiles belong to their shooter, are spawned with NetworkObject.Spawn, and on other peers appear only when
 /// playback reaches the tick they were fired at.
 /// </summary>
 public partial class ProjectileTests : HarnessSuite
@@ -18,26 +18,18 @@ public partial class ProjectileTests : HarnessSuite
         await base.BeforeCase();
         _third = AddPeer(3);
         _stacks = [Host, Client, _third];
-        foreach (var stack in _stacks)
-        {
-            var spawner = new MultiplayerSpawner { Name = "ShooterSpawner", SpawnPath = new NodePath("..") };
-            spawner.SpawnFunction = Callable.From((Variant data) => (Node)HarnessBody.Create(data.AsString(), Shooter, Speed));
-            spawner.SetMultiplayerAuthority(Shooter);
-            stack.AddChild(spawner);
-        }
-
         var synced = await WaitUntil(() => Client.Context.NetworkTime.IsInitialSyncDone() && _third.Context.NetworkTime.IsInitialSyncDone(), 5);
         Expect.True(synced, "peers never synced");
     }
 
-    private HarnessBody Fire(string name) => (HarnessBody)Client.GetNode<MultiplayerSpawner>("ShooterSpawner").Spawn(name);
+    private HarnessBody Fire() => NetworkObject.Spawn<HarnessBody>(Client, HarnessBody.Scene, body => body.Velocity = Speed);
 
     [Test]
     public async Task AProjectileAppearsOnOthersWhenPlaybackReachesItsFiringTick()
     {
         Network.LatencyMs = 40;
         var firedAt = Client.Context.NetworkTime.Tick;
-        var fired = Fire("Bullet");
+        var fired = Fire();
         Expect.True(fired.Visible, "the shooter sees its own projectile at once");
 
         HarnessBody? onHost = null;
@@ -45,7 +37,7 @@ public partial class ProjectileTests : HarnessSuite
         for (var frame = 0; frame < 300; frame++)
         {
             await NextFrame();
-            onHost ??= Host.GetNodeOrNull<HarnessBody>("Bullet");
+            onHost ??= Host.GetNodeOrNull<HarnessBody>(fired.Name.ToString());
             if (onHost is null) continue;
             if (!onHost.Visible)
             {
@@ -70,13 +62,13 @@ public partial class ProjectileTests : HarnessSuite
     {
         Network.LatencyMs = 10;
         Network.ReliableExtraLatencyMs = 300;
-        Fire("DelayedSpawn");
+        var fired = Fire();
 
         HarnessBody? onHost = null;
         for (var frame = 0; frame < 300; frame++)
         {
             await NextFrame();
-            onHost ??= Host.GetNodeOrNull<HarnessBody>("DelayedSpawn");
+            onHost ??= Host.GetNodeOrNull<HarnessBody>(fired.Name.ToString());
             if (onHost is not { Visible: true }) continue;
 
             var perTick = Speed.X / Host.Context.NetworkTime.Tickrate;
@@ -92,9 +84,9 @@ public partial class ProjectileTests : HarnessSuite
     public async Task ObserversKeepAProjectileUntilItsDespawnSampleIsDisplayed()
     {
         Network.LatencyMs = 40;
-        var fired = Fire("TimedDespawn");
+        var fired = Fire();
         HarnessBody? onHost = null;
-        Expect.True(await WaitUntil(() => (onHost = Host.GetNodeOrNull<HarnessBody>("TimedDespawn")) is { Visible: true }, 5),
+        Expect.True(await WaitUntil(() => (onHost = Host.GetNodeOrNull<HarnessBody>(fired.Name.ToString())) is { Visible: true }, 5),
             "projectile never became visible");
 
         var now = Client.Context.NetworkTime.Tick;
@@ -105,7 +97,7 @@ public partial class ProjectileTests : HarnessSuite
         for (var frame = 0; frame < 180; frame++)
         {
             await NextFrame();
-            onHost = Host.GetNodeOrNull<HarnessBody>("TimedDespawn");
+            onHost = Host.GetNodeOrNull<HarnessBody>(fired.Name.ToString());
             var shown = Host.Context.NetworkObjectServer.Diagnostics.GetDisplayTick(Shooter);
             if (shown is null || shown < despawnTick)
             {

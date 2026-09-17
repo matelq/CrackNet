@@ -77,6 +77,7 @@ public partial class NetworkObjectServer : Node
     private NetworkCommandServer.Command _cmdState = null!;
     private NetworkCommandServer.Command _cmdAuthority = null!;
     private NetworkCommandServer.Command _cmdEvent = null!;
+    private Spawns _spawns = null!;
 
     public override void _EnterTree()
     {
@@ -91,8 +92,11 @@ public partial class NetworkObjectServer : Node
         _cmdState = Context.NetworkCommandServer.RegisterCommandAt(CommandIds.ObjectState, HandleState, MultiplayerPeer.TransferModeEnum.Unreliable);
         _cmdAuthority = Context.NetworkCommandServer.RegisterCommandAt(CommandIds.ObjectAuthority, HandleAuthority, MultiplayerPeer.TransferModeEnum.Reliable);
         _cmdEvent = Context.NetworkCommandServer.RegisterCommandAt(CommandIds.ObjectEvent, HandleEvent, MultiplayerPeer.TransferModeEnum.Reliable);
+        _spawns = new Spawns(this);
         Context.NetworkTime.AfterTick += SendState;
         Context.NetworkEvents.OnPeerLeave += ErasePeer;
+        // Spawns first: the authority records name objects the joiner has to have
+        Context.NetworkEvents.OnPeerJoin += _spawns.SendAllTo;
         Context.NetworkEvents.OnPeerJoin += SendAllAuthorityTo;
     }
 
@@ -102,6 +106,7 @@ public partial class NetworkObjectServer : Node
         if (Context.NetworkEvents is { } events)
         {
             events.OnPeerLeave -= ErasePeer;
+            events.OnPeerJoin -= _spawns.SendAllTo;
             events.OnPeerJoin -= SendAllAuthorityTo;
         }
         if (ReferenceEquals(Context.NetworkObjectServer, this)) Context.NetworkObjectServer = null!;
@@ -140,6 +145,15 @@ public partial class NetworkObjectServer : Node
         public PlaybackStatus? GetPlaybackStatus(int peer) => _server.GetPlaybackStatus(peer);
     }
 
+    /// <summary>
+    /// Instances <paramref name="scene"/> under <paramref name="parent"/> on every peer, simulated by
+    /// <paramref name="authority"/> (this peer when 0). <paramref name="setup"/> runs here only, before the root enters
+    /// the tree: set its transform there, and whatever only the authority needs, such as a projectile's speed. Others
+    /// get the transform and authority; the rest arrives as state, and the object stays hidden until it does.
+    /// </summary>
+    public T Spawn<T>(Node parent, PackedScene scene, Action<T>? setup = null, int authority = 0) where T : Node
+        => _spawns.Spawn(parent, scene, setup, authority);
+
     internal NetworkObject? Find(Node root) => _byRoot.GetValueOrDefault(root);
 
     internal void Deregister(NetworkObject obj)
@@ -147,6 +161,7 @@ public partial class NetworkObjectServer : Node
         _objects.Remove(obj);
         _byRoot.Remove(obj.Root!);
         obj.Registered = false;
+        _spawns?.Deregistered(obj);
         Context.NetworkIdentityServer?.DeregisterNode(obj.Root!);
     }
 
@@ -158,6 +173,7 @@ public partial class NetworkObjectServer : Node
     {
         _clocks.Remove(peer);
         _ages.Remove(peer);
+        _spawns.ErasePeer(peer);
         if (!Multiplayer.IsServer()) return;
 
         foreach (var obj in _objects)
