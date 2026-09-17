@@ -47,6 +47,10 @@ port_override=6550
 general/clear_settings=false
 events/enabled=true
 
+[playground]
+
+playtest_log=false
+
 [physics]
 
 3d/physics_engine="Rapier3D"
