@@ -181,6 +181,40 @@ Goal: a crate needs no code and a player needs only its own movement. Paid for i
   shows what a shared node should be.
 - **Order:** implement this API and move the playground onto it first, then the remaining playground mechanics.
 
+### Second pass (decided, not implemented)
+
+Judged by `docs/examples.md`; the owner found sections 3 (players and objects) and 5 (shooting) hard to read.
+Proposals came from independent Claude and Codex reviews.
+
+- **`node.Net()`** extension instead of `GetNode<NetworkObject>("NetworkObject")` and `NetworkObject.Of(node)!`.
+  Everyday calls become extensions on the game's own nodes, so game code rarely names `NetworkObject`.
+- **`Push`** replaces `Knock`: `crate.Push(impulse)` delivers a push to whoever simulates the target (an explosion, a
+  trap); `this.Push(crate, impulse)` is "my object struck yours": it takes the target by `Touch` when it can, then
+  delivers the push, so a crate and a player are struck the same way. No `Try`: the push is always delivered. The
+  event is `Pushed`.
+- **`PushStrength`** on a character body's `NetworkObject`: the library pushes the rigid bodies the character slides
+  into, along the contact normal. 0 is off, and a game that pushes along its input keeps its own loop.
+- **`TakeKnockback(delta)`**: the object accumulates pushes for a non-rigid root; `Velocity += TakeKnockback(delta)`
+  replaces a field, a subscription and a decay line. `Pushed` stays for a custom curve.
+- **Owning and carrying:** `TryClaim()` (mine, nobody else may take it, frozen, the game moves it), `Release()`,
+  `Throw(velocity)`, and `TryCarry(item, anchor)` where the item follows an anchor node of the carrier (a marker, a
+  bone attachment), with `CarriedItems` on the carrier. Carrying belongs in the library, not in extras: only the
+  library can place a carried item on each peer's own copy of the anchor instead of playing back its samples.
+  Details wait for the carrying and animation research.
+- **Spawn** is generated per class: `Crate.Spawn(at: transform)` and `Shot.Spawn(Muzzle)` (from a node's transform);
+  `parent` defaults to the current scene's root and `authority` to the calling peer. The scene is `<Class>.tscn` next
+  to the script or `[Scene("res://...")]`. Data an object needs when created goes through `ISpawnedWith<TArgs>`:
+  `OnSpawned(args)` runs on every peer and late joiner before the root enters the tree, and the arguments travel in
+  the spawn message - `Player.Spawn(SpawnPoint, Colors.Blue, authority: 3)` makes the player blue on the peer that
+  simulates it too, which a setup callback run only by the caller could not. The argument is optional only when
+  `OnSpawned` declares a default value itself; a struct's implicit default does not count, so a forgotten fuse is a
+  build error. The transform stays a library concern: it must be global and set before the first physics frame.
+- **Analyzers:** a spawned type without a scene, a script used by two scenes, or an `OnSpawned` that does not match
+  its `ISpawnedWith<T>` fail the build. `.tscn` files reach the analyzer as additional files.
+- **Projectiles** need their own design pass (trajectories, not just straight lines) before a `NetworkProjectile`
+  node is added.
+- **Renaming the library** later must also rename the diagnostic ids (`NFX...`), namespaces and generated attributes.
+
 ## Tests the model needs
 
 1. Two peers grab one object at once: exactly one owner, and every peer agrees who.
