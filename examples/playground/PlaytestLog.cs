@@ -14,6 +14,8 @@ namespace Netfox.Examples.Playground;
 /// <item>LAUNCH: a crate simulated here went faster than <see cref="LaunchSpeed"/>; the half second before it follows,
 /// every frame, for the crates and players within four metres.</item>
 /// </list>
+/// Off unless <c>playground/playtest_log</c> is on in Project Settings, <c>-- --log</c> is on the command line, or F3
+/// is pressed in game, which also says so on screen. Never on under <c>--smoke</c>.
 /// </summary>
 public static class PlaytestLog
 {
@@ -22,13 +24,24 @@ public static class PlaytestLog
     private const int FramesBefore = 30;
 
     private static FileAccess? _file;
+    private static bool? _on;
+
+    /// <summary>Whether the log is being written; F3 in the playground toggles it.</summary>
+    public static bool On
+    {
+        get => _on ??= !OS.GetCmdlineUserArgs().Contains("--smoke")
+                       && (OS.GetCmdlineUserArgs().Contains("--log")
+                           || ProjectSettings.GetSetting("playground/playtest_log", false).AsBool());
+        set => _on = value && !OS.GetCmdlineUserArgs().Contains("--smoke");
+    }
+
     private static readonly Queue<(ulong Frame, Vector3 At, string Line)> Recent = new();
     private static ulong _lastLaunch;
 
     private static FileAccess? File(Node node)
     {
+        if (!On) return null;
         if (_file is not null) return _file;
-        if (OS.GetCmdlineUserArgs().Contains("--smoke")) return null;
         DirAccess.MakeDirRecursiveAbsolute("user://playtest");
         var start = Time.GetDatetimeStringFromSystem().Replace(':', '-')[..16];
         _file = FileAccess.Open($"user://playtest/{start}_pid{OS.GetProcessId()}.log", FileAccess.ModeFlags.Write);

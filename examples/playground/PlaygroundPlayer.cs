@@ -10,7 +10,6 @@ namespace Netfox.Examples.Playground;
 public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
 {
     private const float Speed = 6, JumpSpeed = 5, Gravity = 14, PushStrength = 4, ThrowSpeed = 9, ShotSpeed = 18;
-    private const uint WorldLayer = 1, PlayerLayer = 2, CrateLayer = 4;
 
     public NetworkObject Object { get; private set; } = null!;
     public int Peer { get; private set; }
@@ -34,17 +33,11 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
     {
         Peer = GetMultiplayerAuthority();
         Name = $"Player{Peer}";
-        CollisionLayer = PlayerLayer;
-        CollisionMask = WorldLayer | CrateLayer;
+        Object = GetNode<NetworkObject>("NetworkObject");   // it pushes and takes the crates this body walks into
 
-        AddChild(new CollisionShape3D { Shape = new CapsuleShape3D { Radius = 0.4f, Height = 1.8f } });
+        // The scene's capsule is white: this player's slot colour, and a material of its own to hold it
         var color = Playground.SlotColors[Slot % Playground.SlotColors.Length];
-        AddChild(new MeshInstance3D { Mesh = new CapsuleMesh { Radius = 0.4f, Height = 1.8f }, MaterialOverride = new StandardMaterial3D { AlbedoColor = color } });
-        AddChild(new MeshInstance3D { Mesh = new BoxMesh { Size = new Vector3(0.2f, 0.2f, 0.4f) }, Position = new Vector3(0, 0.5f, -0.45f), MaterialOverride = new StandardMaterial3D { AlbedoColor = Colors.Black } });
-
-        // Crates walked into are taken and pushed by the NetworkObject itself
-        Object = new NetworkObject { Name = "NetworkObject", PushStrength = 0.6f };
-        AddChild(Object);
+        GetNode<MeshInstance3D>("Body").MaterialOverride = new StandardMaterial3D { AlbedoColor = color };
 
         Playground.SetSlot(Peer, Slot);
     }

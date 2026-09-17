@@ -34,9 +34,8 @@ public partial class PlaygroundShot : Node3D, ISpawnedWith<Vector3>
     public override void _EnterTree()
     {
         var color = Playground.ColorOf(GetMultiplayerAuthority());
-        AddChild(new MeshInstance3D { Mesh = new SphereMesh { Radius = 0.15f, Height = 0.3f }, MaterialOverride = new StandardMaterial3D { AlbedoColor = color, EmissionEnabled = true, Emission = color } });
-        Object = new NetworkObject { Name = "NetworkObject" };
-        AddChild(Object);
+        GetNode<MeshInstance3D>("Body").MaterialOverride = new StandardMaterial3D { AlbedoColor = color, EmissionEnabled = true, Emission = color };
+        Object = GetNode<NetworkObject>("NetworkObject");
     }
 
     public override void _PhysicsProcess(double delta)

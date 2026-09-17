@@ -3,30 +3,24 @@ using Godot;
 namespace Netfox.Examples.Playground;
 
 /// <summary>
-/// A crate anyone can push, grab and throw. Its <see cref="NetworkObject"/> does the networking: the crate is a rigid
-/// body, so it is Shared, frozen wherever another peer simulates it, passes authority to what it hits and goes back to
-/// the host at rest. All this class adds is a tint in the colour of the peer simulating it right now.
+/// A crate anyone can push, grab and throw, from PlaygroundCrate.tscn: a rigid body, a box shape, a box mesh and a
+/// <see cref="NetworkObject"/>. That node does the networking: the crate is a rigid body, so it is Shared, frozen
+/// wherever another peer simulates it, passes authority to what it hits and goes back to the host at rest. All this
+/// class adds is a tint in the colour of the peer simulating it right now.
 /// </summary>
 public partial class PlaygroundCrate : RigidBody3D
 {
     public NetworkObject Object { get; private set; } = null!;
     private StandardMaterial3D _material = null!;
 
-    public static PlaygroundCrate Create(string name, Vector3 position)
-    {
-        var crate = new PlaygroundCrate { Name = name, Position = position, Mass = 2 };
-        crate.SetMultiplayerAuthority(1);
-        crate.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = Vector3.One } });
-        crate._material = new StandardMaterial3D();
-        crate.AddChild(new MeshInstance3D { Mesh = new BoxMesh { Size = Vector3.One }, MaterialOverride = crate._material });
-        crate.Object = new NetworkObject { Name = "NetworkObject" };
-        crate.AddChild(crate.Object);
-        crate.AddToGroup("crates");
-        return crate;
-    }
-
     public override void _Ready()
     {
+        Object = GetNode<NetworkObject>("NetworkObject");
+        var mesh = GetNode<MeshInstance3D>("MeshInstance3D");
+        // Its own copy: the scene's material is shared by every crate, and each shows its own peer's colour
+        _material = (StandardMaterial3D)mesh.MaterialOverride.Duplicate();
+        mesh.MaterialOverride = _material;
+
         Object.AuthorityChanged += Refresh;
         Playground.SlotsChanged += Refresh;
         Refresh();

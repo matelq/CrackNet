@@ -1,0 +1,26 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://examples/playground/PlaygroundCrate.cs" id="1"]
+[ext_resource type="Script" path="res://addons/netfox-net/NetworkObject.cs" id="2"]
+
+[sub_resource type="BoxShape3D" id="1"]
+size = Vector3(1, 1, 1)
+
+[sub_resource type="BoxMesh" id="2"]
+
+[sub_resource type="StandardMaterial3D" id="3"]
+albedo_color = Color(0.55, 0.36, 0.22, 1)
+
+[node name="Crate" type="RigidBody3D" groups=["crates"]]
+mass = 2.0
+script = ExtResource("1")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("1")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("2")
+material_override = SubResource("3")
+
+[node name="NetworkObject" type="Node" parent="."]
+script = ExtResource("2")

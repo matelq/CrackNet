@@ -29,7 +29,9 @@ public partial class CrateFreezeTests : TestSuite
         floor.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(100, 1, 100) } });
         await Mount(floor);
 
-        var crate = PlaygroundCrate.Create("Crate", new Vector3(0, 3, 0));
+        var crate = GD.Load<PackedScene>("res://examples/playground/PlaygroundCrate.tscn").Instantiate<PlaygroundCrate>();
+        crate.Name = "Crate";
+        crate.Position = new Vector3(0, 3, 0);
         await Mount(crate);
 
         // Held: kinematic, moved by hand to where it is released

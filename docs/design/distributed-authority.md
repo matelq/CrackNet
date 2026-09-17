@@ -361,6 +361,9 @@ Two decisions here are made but not built, and both matter enough to keep in sig
 - Ghost pairs cost O(n) per authority change: every change of a shared 3D body visits every other shared body to set
   or clear its collision exception. Fine for dozens of crates; a spatial index (or per-island bookkeeping) when a game
   has hundreds.
+- `AThrowFliesOnTheThrowersSimulation` fails rarely, seen in full runs right after a rebuild and never when repeated
+  (6 of 6, whole suite green). The host does not see the throw fly at all, so it looks like a first-run timing effect,
+  not physics. Revisit if it starts failing twice in a row.
 - Seeding the jitter estimate before a match from the clock-sync pings, for a lobby that exchanges no object state.
 
 ## Sources

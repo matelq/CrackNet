@@ -16,7 +16,6 @@ namespace Netfox.Examples.Playground;
 public partial class Playground : Node3D
 {
     public const int Port = 9999;
-    private const int CrateCount = 12;
 
     /// <summary>One colour per player slot, in joining order: the host is red, the next player blue, and so on.</summary>
     public static readonly Color[] SlotColors =
@@ -48,6 +47,7 @@ public partial class Playground : Node3D
     private Label _status = null!;
     private Camera3D _camera = null!;
     private PlaygroundMesh _mesh = null!;
+    private readonly Dictionary<PlaygroundCrate, Transform3D> _crateStarts = new();
     private NetworkSimulator.Profile _profile = NetworkSimulator.Profile.Default;
     private double _sinceReadout = 1;
     private string _delayReadout = "";
@@ -60,16 +60,19 @@ public partial class Playground : Node3D
     {
         _profile = ReadProfile();
         _port = ReadPort();
-        BuildWorld();
-        BuildUi();
+        Players = GetNode<Node3D>("Players");
+        Shots = GetNode<Node3D>("Shots");
+        _camera = GetNode<Camera3D>("Camera3D");
+        _mesh = GetNode<PlaygroundMesh>("Mesh");
+        BindUi();
+        // Where the scene put each crate, for the Reset button
+        foreach (var crate in GetNode("Crates").GetChildren().OfType<PlaygroundCrate>()) _crateStarts[crate] = crate.GlobalTransform;
 
-        _mesh = new PlaygroundMesh { Name = "Mesh" };
         _mesh.MeshReady += id =>
         {
             _menu.Hide();
             if (id == 1) StartHosting();
         };
-        AddChild(_mesh);
 
         // Editor autoconnect (Project Settings > Netfox > Autoconnect > Enabled): the first instance hosts, the rest
         // join. The simulator's temporary star elects the role, then the playground replaces it with its ENet mesh.
@@ -132,6 +135,24 @@ public partial class Playground : Node3D
         Multiplayer.PeerConnected += id => SpawnPlayer((int)id);
         SpawnPlayer(1);
         _menu.Hide();
+        GetNode<Button>("Ui/Menu/ResetCrates").Show();
+    }
+
+    /// <summary>
+    /// Puts every crate back where the scene had it, on the host: it takes each one first, so whoever was simulating
+    /// a crate sees it move through the usual state stream rather than by a second authority writing over it.
+    /// </summary>
+    private void ResetCrates()
+    {
+        foreach (var (crate, start) in _crateStarts)
+        {
+            crate.Object.Release();
+            crate.Object.Authority.Take();
+            crate.GlobalTransform = start;
+            crate.LinearVelocity = Vector3.Zero;
+            crate.AngularVelocity = Vector3.Zero;
+            crate.Sleeping = false;
+        }
     }
 
     public void Join(string address)
@@ -177,74 +198,31 @@ public partial class Playground : Node3D
         PlaygroundPlayer.Spawn(new Transform3D(Basis.Identity, new Vector3(-6 + slot * 2, 1, 6)), slot, parent: Players, authority: peer);
     }
 
-    private void BuildWorld()
+    private void BindUi()
     {
-        AddChild(new DirectionalLight3D { RotationDegrees = new Vector3(-50, 30, 0), ShadowEnabled = true });
-        AddChild(new WorldEnvironment { Environment = new Godot.Environment { BackgroundMode = Godot.Environment.BGMode.Color, BackgroundColor = new Color(0.55f, 0.65f, 0.75f), AmbientLightSource = Godot.Environment.AmbientSource.Color, AmbientLightColor = new Color(0.5f, 0.5f, 0.55f) } });
-
-        AddStatic("Floor", new Vector3(0, -0.5f, 0), new Vector3(40, 1, 40), new Color(0.4f, 0.42f, 0.4f));
-        AddStatic("WallNorth", new Vector3(0, 1, -20), new Vector3(40, 2, 1), new Color(0.3f, 0.3f, 0.35f));
-        AddStatic("WallSouth", new Vector3(0, 1, 20), new Vector3(40, 2, 1), new Color(0.3f, 0.3f, 0.35f));
-        AddStatic("WallEast", new Vector3(20, 1, 0), new Vector3(1, 2, 40), new Color(0.3f, 0.3f, 0.35f));
-        AddStatic("WallWest", new Vector3(-20, 1, 0), new Vector3(1, 2, 40), new Color(0.3f, 0.3f, 0.35f));
-
-        // Scene objects: every peer creates the same crates under the same names, and the host simulates them first
-        var crates = new Node3D { Name = "Crates" };
-        AddChild(crates);
-        for (var i = 0; i < CrateCount; i++)
-            crates.AddChild(PlaygroundCrate.Create($"Crate{i}", new Vector3(-6 + i % 4 * 4, 0.5f + i / 4 * 1.01f, -4)));
-
-        Players = new Node3D { Name = "Players" };
-        AddChild(Players);
-        Shots = new Node3D { Name = "Shots" };
-        AddChild(Shots);
-
-        _camera = new Camera3D { Position = new Vector3(0, 14, 16), RotationDegrees = new Vector3(-45, 0, 0) };
-        AddChild(_camera);
-    }
-
-    private void AddStatic(string name, Vector3 position, Vector3 size, Color color)
-    {
-        var body = new StaticBody3D { Name = name, Position = position };
-        body.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = size } });
-        body.AddChild(new MeshInstance3D { Mesh = new BoxMesh { Size = size }, MaterialOverride = new StandardMaterial3D { AlbedoColor = color } });
-        AddChild(body);
-    }
-
-    private void BuildUi()
-    {
-        var layer = new CanvasLayer();
-        AddChild(layer);
-
-        _status = new Label { Position = new Vector2(12, 8) };
-        layer.AddChild(_status);
-
-        var menu = new VBoxContainer { Position = new Vector2(12, 80), CustomMinimumSize = new Vector2(240, 0) };
-        _menu = menu;
-        layer.AddChild(menu);
-
-        var host = new Button { Text = "Host" };
-        host.Pressed += Host;
-        menu.AddChild(host);
-
-        _address = new LineEdit { Text = "127.0.0.1" };
-        menu.AddChild(_address);
-
-        var join = new Button { Text = "Join" };
-        join.Pressed += () => Join(_address.Text);
-        menu.AddChild(join);
+        _status = GetNode<Label>("Ui/Status");
+        _menu = GetNode<Control>("Ui/Menu");
+        _address = GetNode<LineEdit>("Ui/Menu/Address");
+        GetNode<Button>("Ui/Menu/Host").Pressed += Host;
+        GetNode<Button>("Ui/Menu/Join").Pressed += () => Join(_address.Text);
+        GetNode<Button>("Ui/Menu/ResetCrates").Pressed += ResetCrates;
 
         if (!SteamLobbyBootstrap.IsAvailable) return;
-        var steamHost = new Button { Text = "Host on Steam (invites a friend)" };
+        var steamHost = GetNode<Button>("Ui/Menu/SteamHost");
         steamHost.Pressed += () => _steam?.Host();
-        menu.AddChild(steamHost);
-        var steamJoin = new Button { Text = "Join Steam lobby id above" };
+        steamHost.Show();
+        var steamJoin = GetNode<Button>("Ui/Menu/SteamJoin");
         steamJoin.Pressed += () =>
         {
             if (ulong.TryParse(_address.Text.Trim(), out var lobbyId)) _steam?.Join(lobbyId);
             else _steamNote = "\nSteam: paste the host's lobby id into the field";
         };
-        menu.AddChild(steamJoin);
+        steamJoin.Show();
+    }
+
+    public override void _UnhandledKeyInput(InputEvent @event)
+    {
+        if (@event is InputEventKey { Pressed: true, PhysicalKeycode: Key.F3 }) PlaytestLog.On = !PlaytestLog.On;
     }
 
     public override void _PhysicsProcess(double delta)
@@ -279,7 +257,8 @@ public partial class Playground : Node3D
         _status.Text = Multiplayer.MultiplayerPeer is null or OfflineMultiplayerPeer
             ? $"Host, or join an address. Network: {profile}"
             : $"Peer {Multiplayer.GetUniqueId()}  tick {time.Tick}  rtt {time.RemoteRtt * 1000:F0}ms  network: {profile}\n" +
-              "WASD move, Space jump, F grab / throw, E push a player, left mouse or Enter shoot. Crates show who simulates them." +
+              "WASD move, Space jump, F grab / throw, E push a player, left mouse or Enter shoot. Crates show who simulates them.\n" +
+              $"F3: playtest log {(PlaytestLog.On ? "on" : "off")} (user://playtest, or Project Settings > Playground)" +
               delayReadout;
         _status.Text += _steamNote;
 
