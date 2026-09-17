@@ -170,6 +170,13 @@ Goal: a crate needs no code and a player needs only its own movement. Paid for i
 - **Diagnostics** out of the main API: sequences, `DisplayTick`, `SampleSent/Received` move to `Object.Diagnostics`,
   a peer's playback status to `NetworkObjectServer.Diagnostics`.
 - **Removed:** `NetworkSchemas`, `PeerVisibilityFilter`; the public `NetworkTime` reduced to what games use.
+- **Soft separation** of `Personal` character bodies built in and optional: `SeparationStrength` in the inspector,
+  0 turns it off. Each peer nudges its own character away from the displayed neighbours.
+- **Hitscan** needs no API: the shooter runs an ordinary Godot ray query, since non-authority bodies sit frozen at
+  their displayed positions, and follows with `Knock` or `Send`. Documented in the guide.
+- **QTE** is a playground example over `Send` and a `World` object, not a library node, until a second kind of QTE
+  shows what a shared node should be.
+- **Order:** implement this API and move the playground onto it first, then the remaining playground mechanics.
 
 ## Tests the model needs
 
@@ -201,11 +208,11 @@ Goal: a crate needs no code and a player needs only its own movement. Paid for i
 - [x] Full ENet mesh and per-link in-process simulation under named profiles
 - [x] Three-process smoke (`--smoke`) including client-A-to-client-B state, comparing displayed positions during motion
 - [x] Per-player delay readout split into network age and playback depth
-- [ ] Soft separation of overlapping players
-- [ ] Standing on and carrying a player (attach to the displayed transform)
-- [ ] Throwing a player: `Transferable` carried by the authority command, so the thrown player can hand itself over
-- [ ] Hitscan
-- [ ] QTE: press together within a window
+- [ ] The playground on the simplified API
+- [ ] Soft separation of overlapping players (optional, built in)
+- [ ] Hitscan (a plain ray query by the shooter)
+- [ ] QTE: press together within a window (example over `Send`)
+- [ ] Standing on, carrying and throwing a player: playtest the sketch in Deferred before deciding
 - [ ] Steam transport (the playground mesh exercises the intended route over ENet)
 
 ## Open
@@ -219,6 +226,9 @@ Goal: a crate needs no code and a player needs only its own movement. Paid for i
 - Extrapolating targets to the present for hit tests, in the style of Photon Fusion "Forecast". Revisit if dodges do
   not count on Casual or Realistic.
 - Sequence number overflow (review finding).
+- Carrying a player, standing on one, and throwing one. Sketch: `AttachTo(other, offset)` / `Detach()` called by the
+  carried player, which follows the carrier's displayed transform; a throw is a knock that also detaches, so
+  authority over a player never moves. Needs playtesting before it becomes API; may stay game code.
 - Typed events (`Send<T>` / `On<T>`) for several kinds of event per object without unpacking a `Variant`.
 - Smaller transforms per root type (position and yaw for an upright character, 2D rotation only). Everything sends the
   full transform until measurements ask.
