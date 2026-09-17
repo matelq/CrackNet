@@ -156,7 +156,9 @@ public partial class PhysicsObjectTests : HarnessSuite
 
         striker.Push(crates[1], new Vector3(0, 0, 8));
         Expect.Equal(2, crates[1].Net().Authority.Peer, "the striker took the crate");
-        for (var i = 0; i < 3; i++) await NextFrame();
+        // Physics steps, not rendered frames: a rendered frame may run none, and a body switching from frozen static to
+        // dynamic takes the impulse on its second step
+        for (var i = 0; i < 3; i++) await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
         Expect.True(crates[1].LinearVelocity.Z > 1, $"the crate did not fly at once on the striker's peer: {crates[1].LinearVelocity}");
         Expect.True(await WaitUntil(() => crates[0].Net().Authority.Peer == 2 && crates[0].GlobalPosition.Z > 0.3f, 3),
             $"the host never saw it: authority {crates[0].Net().Authority.Peer}, at {crates[0].GlobalPosition}");
@@ -395,5 +397,28 @@ public partial class PhysicsObjectTests : HarnessSuite
         Expect.True(await WaitUntil(() => target[1].GlobalPosition.X > 3.2f, 2),
             $"the crate passed through or stopped: target at {target[1].GlobalPosition} authority {Net(target[1]).Authority.Peer}, thrown at {thrown[1].GlobalPosition}");
         Expect.True(thrown[1].GlobalPosition.X < target[1].GlobalPosition.X, $"the thrown crate went through: {thrown[1].GlobalPosition} vs {target[1].GlobalPosition}");
+    }
+
+    [Test]
+    public async Task APlayerIsNotLaunchedByTheCrateUnderItJumping()
+    {
+        // Playtest: players flew 140 m up. A crate simulated elsewhere is kinematic here, and Rapier gives a kinematic
+        // body the velocity of its last move: a copy that snaps (a correction, a freeze, a grab) moves a metre in a frame,
+        // 60 m/s, and a character standing on it takes that as platform velocity and keeps it
+        var crate = Crate(Client, "Crate", new Vector3(0, 0.5f, 0));
+        var walker = Walker(Client, 2, new Vector3(0, 1.95f, 0), Vector3.Zero);
+        walker.SafeMargin = 0.05f;
+        walker.Falls = true;
+        for (var i = 0; i < 40; i++) await NextFrame();
+        Expect.True(crate.Freeze && walker.IsOnFloor(), $"the walker stands on a copy: frozen {crate.Freeze}, at {walker.GlobalPosition}");
+
+        crate.GlobalPosition += new Vector3(0, 0.3f, 0);
+        var highest = 0f;
+        for (var i = 0; i < 60; i++)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+            highest = Math.Max(highest, walker.GlobalPosition.Y);
+        }
+        Expect.True(highest < 3, $"the walker was launched to {highest}, velocity {walker.Velocity}");
     }
 }

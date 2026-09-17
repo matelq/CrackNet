@@ -55,8 +55,8 @@ it calls `Touch` on contact and `ReturnToHost` once a body has settled.
 - `Transferable` is part of the host's reliable authority record, including its own sequence, so runtime changes and
   the current value both reach every peer and late joiner.
 
-**Remote objects.** An object whose authority is another peer is kinematic locally and is driven from a playback
-buffer. It does not push back until authority transfers to the peer touching it; no second physics runs on top of
+**Remote objects.** An object whose authority is another peer is frozen locally (static, so a snap gives a character standing on
+it no platform velocity) and is driven from a playback buffer. It does not push back until authority transfers to the peer touching it; no second physics runs on top of
 received state.
 
 **Playback.** One playback clock per remote peer, samples per object, so everything one peer sends (a stack of crates,
@@ -268,6 +268,9 @@ other peer shows late overlaps what is around it.
   depenetration), not a presentation one; a presentation blend comes after, if a visible snap remains.
 - Already in: a character does not take what it stands on; a group touched by any character does not go back to the
   host; Rapier's `normalized_max_corrective_velocity` is 2 in the playground project.
+- **Copies are frozen static, not kinematic.** Rapier gives a kinematic body the velocity of its last move; a copy
+  that snapped by 0.3 m launched a character standing on it 13 m up, and in a playtest 140 m. Riding a moving copy
+  therefore no longer carries a player along until the base-relative position above is in.
 
 ## Tests the model needs
 
@@ -291,7 +294,7 @@ other peer shows late overlaps what is around it.
 
 - [x] Players: always their own peer's, played back elsewhere, no collision between players
 - [x] Push another player: an event to their peer, applied as knockback
-- [x] Crates: kinematic where not simulated, `Touch` spreads authority with host arbitration, back to the host at rest
+- [x] Crates: frozen where not simulated, `Touch` spreads authority with host arbitration, back to the host at rest
 - [x] Grab, carry, throw (ownership)
 - [x] Slow projectiles: spawned and wholly arbitrated by the shooter; first hit knocks back and despawns on playback
 - [x] Late join (MultiplayerSpawner plus the host's authority table)

@@ -64,7 +64,10 @@ internal abstract class PhysicsHandling
         public Rigid3D(NetworkObject obj, RigidBody3D body) : base(obj)
         {
             _body = body;
-            body.FreezeMode = RigidBody3D.FreezeModeEnum.Kinematic;
+            // Frozen static, not kinematic: Rapier gives a kinematic body the velocity of its last move, so a copy that
+            // snaps (a playback correction, a freeze, a grab) moves a metre in a frame at 60 m/s, and a character
+            // standing on it keeps that as platform velocity and flies 100 m up. A static body carries no velocity
+            body.FreezeMode = RigidBody3D.FreezeModeEnum.Static;
             body.ContactMonitor = true;
             body.MaxContactsReported = Math.Max(body.MaxContactsReported, 4);
             body.BodyEntered += other =>
@@ -86,9 +89,8 @@ internal abstract class PhysicsHandling
         }
 
         /// <summary>
-        /// A body simulated here and a copy of one simulated elsewhere do not collide. The copy is kinematic and a
-        /// network delay behind: it pushed bodies here with infinite mass, which neither mass nor the solver's
-        /// corrective velocity limits, and shot them off. Only the peer simulating a body resolves its hits; this one
+        /// A body simulated here and a copy of one simulated elsewhere do not collide. The copy is frozen and a
+        /// network delay behind: moved into bodies here, it pushed them with infinite mass and shot them off. Only the peer simulating a body resolves its hits; this one
         /// takes a copy before running into it (<see cref="TouchAhead"/>), and from then on both are simulated here.
         /// Characters still collide with copies, so a player can stand on one.
         /// </summary>
@@ -229,7 +231,7 @@ internal abstract class PhysicsHandling
         public Rigid2D(NetworkObject obj, RigidBody2D body) : base(obj)
         {
             _body = body;
-            body.FreezeMode = RigidBody2D.FreezeModeEnum.Kinematic;
+            body.FreezeMode = RigidBody2D.FreezeModeEnum.Static;   // as in 3D: no velocity for a character to inherit
             body.ContactMonitor = true;
             body.MaxContactsReported = Math.Max(body.MaxContactsReported, 4);
             body.BodyEntered += other =>
