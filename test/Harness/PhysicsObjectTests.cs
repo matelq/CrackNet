@@ -279,4 +279,30 @@ public partial class PhysicsObjectTests : HarnessSuite
         }
         Expect.False(returned, "the still crate went back while the one touching it was moving");
     }
+
+    [Test]
+    public async Task StandingOnACrateDoesNotBounceIt()
+    {
+        // Standing on a crate used to take it: at rest it went back to the host and the next floor contact took it
+        // again, every unfreeze let Rapier push the crate out of the character, and the crate threw the character up
+        Network.LatencyMs = 150;
+        var crates = new[] { Crate(Host, "Crate", new Vector3(0, 0.5f, 0)), Crate(Client, "Crate", new Vector3(0, 0.5f, 0)) };
+        Walker(Host, 2, new Vector3(0, 2, 0), Vector3.Zero, pushStrength: 0.6f);
+        var walker = Walker(Client, 2, new Vector3(0, 2, 0), Vector3.Zero, pushStrength: 0.6f);
+        var changes = 0;
+        crates[1].Net().AuthorityChanged += () => changes++;
+
+        var crateHighest = 0f;
+        var walkerHighest = 0f;
+        for (var frame = 0; frame < 300; frame++)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+            if (frame < 30) continue;   // landing on it
+            crateHighest = Math.Max(crateHighest, Math.Max(crates[0].GlobalPosition.Y, crates[1].GlobalPosition.Y));
+            walkerHighest = Math.Max(walkerHighest, walker.GlobalPosition.Y);
+        }
+        Expect.True(crateHighest < 0.6f && walkerHighest < 2.1f,
+            $"the crate bounced up to {crateHighest}, the character to {walkerHighest}; authority changed {changes} times");
+        Expect.True(changes <= 1, $"authority over the crate under a standing character changed {changes} times");
+    }
 }
