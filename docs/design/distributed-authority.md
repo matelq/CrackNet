@@ -274,6 +274,12 @@ Two decisions here are made but not built, and both matter enough to keep in sig
     a crate rolling away. The library takes as the base whatever the engine already reports as that character's floor,
     so opting out of riding also opts out of the base, with no extra API. Riding stays the default: co-op wants lifts
     and crates to carry.
+  - Per platform, by layer: lifts on one collision layer and crates on another, and a character's
+    `platform_floor_layers` says which of them carry it. Per character too, since the mask is its own.
+  - Per situation, by changing that mask at run time (not while carrying something, say). The engine reports the floor
+    only after `MoveAndSlide`, so a choice made from what the character stands on applies from the next frame.
+  - Godot has no exception for a single body among others on the same layer: "this crate carries me, that identical one
+    does not" needs separate layers or a mask changed per situation.
 - **Handover smoothing.** A launch is physics (infinite-mass pushes, kinematic velocity, depenetration) and is fixed as
   physics; what a handover can still leave is a visible snap of a metre or so, the playback delay's worth of position.
   Photon Fusion corrects that in presentation only, over about 0.15 s, and Fiedler blends extrapolation error the same
