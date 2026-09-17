@@ -142,7 +142,7 @@ public partial class Playground : Node3D
     /// Puts every crate back where the scene had it, on the host: it takes each one first, so whoever was simulating
     /// a crate sees it move through the usual state stream rather than by a second authority writing over it.
     /// </summary>
-    private void ResetCrates()
+    public void ResetCrates()
     {
         foreach (var (crate, start) in _crateStarts)
         {

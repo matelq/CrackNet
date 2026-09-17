@@ -19,6 +19,10 @@ namespace Netfox.Examples.Playground;
 /// drawn where its simulating peer never had it is the failure this exists for. Both check that the crate went back
 /// to the host once it settled. Each process prints a PLAYGROUND SMOKE line and exits 0 on success.
 /// </para>
+/// <para>
+/// It lives in <c>test/</c>, not next to the sample: the playground is there to be read as a game. The playground adds
+/// it when started with <c>--smoke</c>, and it drives the guest's player through <c>PlaygroundPlayer.Bot</c>.
+/// </para>
 /// </summary>
 public partial class PlaygroundSmoke : Node
 {
@@ -53,6 +57,11 @@ public partial class PlaygroundSmoke : Node
     private const int MaxStackHangingFrames = 6;
     private bool _shotTookCrate;
     private bool _returnedWhileGuestConnected;
+
+    /// <summary>The host presses Reset crates once it is done checking, and every crate has to land back in place.</summary>
+    private double _sinceReset = -1;
+    private bool _cratesReset;
+    private readonly Dictionary<StringName, Vector3> _crateHome = new();
 
     /// <summary>The arena is 40 by 40: a crate farther than this from its start has been blown out of the world.</summary>
     private const double MaxCrateTravel = 45;
@@ -239,6 +248,8 @@ public partial class PlaygroundSmoke : Node
             foreach (var player in _playground.Players.GetChildren().OfType<PlaygroundPlayer>())
                 GD.Print($"  {player.Name} at {player.GlobalPosition}");
         }
+        if (_crateHome.Count == 0) foreach (var crate in crates) _crateHome[crate.Name] = crate.GlobalPosition;
+        if (_sinceReset >= 0) _sinceReset += delta;
         _allWithHostFor = crates.All(crate => crate.Authority.Peer == 1) ? _allWithHostFor + delta : 0;
         // Seen while everyone is still here: evaluated at the end, a peer that already left would read as never seen
         _sawHost |= _playground.Players.GetNodeOrNull<PlaygroundPlayer>("Player1") is { Visible: true };
@@ -252,7 +263,18 @@ public partial class PlaygroundSmoke : Node
     private bool Settled()
     {
         var restingWithHost = _allWithHostFor >= SettledSeconds;
-        if (_isHost) return _clientPeer != 0 && _returnedWhileGuestConnected && TraceComplete();
+        if (_isHost)
+        {
+            if (!(_clientPeer != 0 && _returnedWhileGuestConnected && TraceComplete())) return false;
+            if (!_cratesReset)
+            {
+                _cratesReset = true;
+                _sinceReset = 0;
+                _playground.ResetCrates();   // the button a player presses, checked here rather than only by hand
+                return false;
+            }
+            return _sinceReset > 1;
+        }
         if (_isObserver) return _sawDriver && _sawGuestCrate && _received.Count > 20 && restingWithHost;
         return _aimAt >= 0 && _botClock > _aimAt + 2 && _playground.Shots.GetChildCount() == 0 && restingWithHost;
     }
@@ -278,9 +300,12 @@ public partial class PlaygroundSmoke : Node
         {
             var sent = ReadTrace();
             var (maxError, compared) = Compare(sent);
+            var homeAgain = _playground.GetNode("Crates").GetChildren().OfType<PlaygroundCrate>()
+                .Count(crate => _crateHome.TryGetValue(crate.Name, out var home) && crate.GlobalPosition.DistanceTo(home) < 0.1f);
             ok = _clientPeer != 0 && _crateMaxTravel is > 1.5 and < MaxCrateTravel && compared > 20 && maxError < MaxDisplayError
-                 && _returnedWhileGuestConnected;
-            detail = $"clientTookIt={_clientPeer != 0} travel={_crateMaxTravel:F2} compared={compared} maxError={maxError:F3} returnedAtRest={_returnedWhileGuestConnected}";
+                 && _returnedWhileGuestConnected && homeAgain == _crateHome.Count;
+            detail = $"clientTookIt={_clientPeer != 0} travel={_crateMaxTravel:F2} compared={compared} maxError={maxError:F3} " +
+                     $"returnedAtRest={_returnedWhileGuestConnected} cratesHomeAfterReset={homeAgain}/{_crateHome.Count}";
         }
         else if (!_isObserver)
         {
