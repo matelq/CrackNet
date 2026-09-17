@@ -27,7 +27,11 @@ dotnet build Netfox.csproj                                                # addo
 <godot> --headless --path . res://examples/playground/playground.tscn -- --smoke --host --seconds=36 --port=20000
 <godot> --headless --path . res://examples/playground/playground.tscn -- --smoke --join --smoke-client=a --seconds=22 --port=20000
 <godot> --headless --path . res://examples/playground/playground.tscn -- --smoke --join --smoke-client=b --seconds=18 --port=20000   # same --profile=clear|casual|realistic|bad|hostile on all
+<godot> --headless --path . res://test/TestRunner.tscn -- --test=PhysicsObjectTests          # one suite, or --test=Suite.Case
 ```
+
+`--seconds` is an upper bound for the smoke: each role finishes once what it checks has settled (about 25, 17 and 7
+seconds), and runs on ports 300 apart can go in parallel. Rare races need a series, not one run.
 
 Scenes are `.tscn` files and are the source of truth. To generate one in code, rebuild the tree and `ResourceSaver.Save`
 it. Two traps: a node only lands in a packed scene when its `Owner` is the scene root, and Godot binds one Node-derived

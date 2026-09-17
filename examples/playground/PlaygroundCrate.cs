@@ -34,5 +34,12 @@ public partial class PlaygroundCrate : RigidBody3D
 
     public override void _ExitTree() => Playground.SlotsChanged -= Refresh;
 
-    private void Refresh() => _material.AlbedoColor = Playground.ColorOf(Object.Authority.Peer).Lerp(Colors.SaddleBrown, 0.35f);
+    private void Refresh()
+    {
+        _material.AlbedoColor = Playground.ColorOf(Object.Authority.Peer).Lerp(Colors.SaddleBrown, 0.35f);
+        // A held crate is moved by hand, a teleport every frame: colliding, it would land inside the crates around it
+        // and the physics engine would blow them out of the world. It passes through things while held, on every peer
+        CollisionLayer = Object.Holder != 0 ? 0u : 1u;
+        CollisionMask = Object.Holder != 0 ? 0u : 1u;
+    }
 }

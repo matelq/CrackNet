@@ -6,6 +6,8 @@ namespace Netfox.Examples.Playground;
 
 /// <summary>
 /// Drives the playground headless and checks it. Run a host, client A, then client B; the host must outlive both:
+/// --seconds is an upper bound: each role finishes as soon as what it checks has settled, and fails if that never
+/// happens in time. Runs on different ports (300 apart) can go in parallel.
 ///   godot --headless --path . res://examples/playground/playground.tscn -- --smoke --host --seconds=36 --port=20000
 ///   godot --headless --path . res://examples/playground/playground.tscn -- --smoke --join --smoke-client=a --seconds=22 --port=20000
 ///   godot --headless --path . res://examples/playground/playground.tscn -- --smoke --join --smoke-client=b --seconds=18 --port=20000
@@ -20,7 +22,17 @@ namespace Netfox.Examples.Playground;
 /// </summary>
 public partial class PlaygroundSmoke : Node
 {
-    private const string TracePath = "user://playground-smoke-client.csv";
+    /// <summary>Per port, so smoke runs in parallel do not read each other's trace.</summary>
+    private string TracePath => $"user://playground-smoke-client-{_port}.csv";
+    private int _port = Playground.Port;
+    private const string TraceEnd = "END";
+
+    /// <summary>How long every crate has to stay with the host before a role counts the world as settled.</summary>
+    private const double SettledSeconds = 1.0;
+    private double _allWithHostFor;
+    private bool _sawHost;
+    private bool _sawDriver;
+    private readonly HashSet<string> _fallen = new();
     private const string CrateName = "Crate0";
     private const double MaxDisplayError = 0.25;
 
@@ -57,7 +69,10 @@ public partial class PlaygroundSmoke : Node
         _isHost = args.Contains("--host");
         _isObserver = args.Contains("--smoke-client=b");
         foreach (var arg in args)
+        {
             if (arg.StartsWith("--seconds=")) _seconds = double.Parse(arg["--seconds=".Length..], CultureInfo.InvariantCulture);
+            if (arg.StartsWith("--port=")) _port = int.Parse(arg["--port=".Length..], CultureInfo.InvariantCulture);
+        }
 
         _playground = GetParent<Playground>();
         _crate = _playground.GetNode<PlaygroundCrate>($"Crates/{CrateName}");
@@ -90,6 +105,15 @@ public partial class PlaygroundSmoke : Node
             // A crate still under this peer's authority is taken without any change to see, and one behind another is
             // never reached: pick a host crate at chest height with nothing else on the line
             var crates = _playground.GetNode("Crates").GetChildren().OfType<PlaygroundCrate>().ToList();
+            foreach (var fell in crates.Where(crate => crate.GlobalPosition.Y < -0.5f && !_fallen.Contains(crate.Name)))
+            {
+                _fallen.Add(fell.Name);
+                GD.Print($"CRATE FELL {fell.Name} at {fell.GlobalPosition} v {fell.LinearVelocity} authority {fell.Object.Authority.Peer} holder {fell.Object.Holder} frozen {fell.Freeze} bot {_botClock:F2}");
+                foreach (var other in crates)
+                    GD.Print($"  {other.Name} at {other.GlobalPosition} authority {other.Object.Authority.Peer} frozen {other.Freeze}");
+                foreach (var player in _playground.Players.GetChildren().OfType<PlaygroundPlayer>())
+                    GD.Print($"  {player.Name} at {player.GlobalPosition}");
+            }
             _target = crates
                 // Out of reach too: a crate the bot bumps while turning to aim is taken by the bump, not by the shot
                 .Where(crate => crate.Object.Authority.Peer == 1 && crate.GlobalPosition.Y < 1.2f
@@ -104,6 +128,31 @@ public partial class PlaygroundSmoke : Node
                     _shotTookCrate |= crate.Object.Authority.IsLocal && crate.Object.SpreadCause.Contains("/Shots/");
         }
         return (FlatTo(_target, me) * 0.05f, false, false, false);
+    }
+
+    private double _aimAt = -1;
+
+    /// <summary>
+    /// Aims and shoots once the thrown crate has come to rest and gone back to the host: still rolling, it can roll
+    /// into the line of fire after the target was picked and take the shot.
+    /// </summary>
+    private (Vector3, bool, bool, bool) Shooting(PlaygroundPlayer me, double t)
+    {
+        if (_aimAt < 0)
+        {
+            if (_crate.Object.Authority.Peer != 1) return default;
+            _aimAt = t;
+        }
+        // Step back from the row of crates first: aiming from among them, the bot bumped the thrown crate into the
+        // line of fire and the shot hit that one instead
+        return (t - _aimAt) switch
+        {
+            < 1.2 => (Vector3.Back, false, false, false),
+            < 1.5 => default,
+            < 1.6 => Aim(me),
+            < 1.7 => (Vector3.Zero, false, false, true),
+            _ => default,
+        };
     }
 
     /// <summary>Whether <paramref name="obstacle"/> sits within reach of the flat line from a shooter to a target.</summary>
@@ -141,9 +190,7 @@ public partial class PlaygroundSmoke : Node
             < 7.2 => (Vector3.Right, true, false, false),
             // After the throw has settled: face another crate and shoot it
             < 13 => default,
-            < 13.1 => Aim(me),
-            < 13.2 => (Vector3.Zero, false, false, true),
-            _ => default,
+            _ => Shooting(me, t),
         };
     }
 
@@ -182,7 +229,42 @@ public partial class PlaygroundSmoke : Node
         if (_isObserver && _crate.Object.Authority.Peer is not 1 && !_crate.Object.Authority.IsLocal && _crate.Visible)
             _sawGuestCrate = true;
 
-        if (_elapsed >= _seconds) Finish();
+        var crates = _playground.GetNode("Crates").GetChildren().OfType<PlaygroundCrate>().ToList();
+        foreach (var fell in crates.Where(crate => crate.GlobalPosition.Y < -0.5f && !_fallen.Contains(crate.Name)))
+        {
+            _fallen.Add(fell.Name);
+            GD.Print($"CRATE FELL {fell.Name} at {fell.GlobalPosition} v {fell.LinearVelocity} authority {fell.Object.Authority.Peer} holder {fell.Object.Holder} frozen {fell.Freeze} bot {_botClock:F2}");
+            foreach (var other in crates)
+                GD.Print($"  {other.Name} at {other.GlobalPosition} authority {other.Object.Authority.Peer} frozen {other.Freeze}");
+            foreach (var player in _playground.Players.GetChildren().OfType<PlaygroundPlayer>())
+                GD.Print($"  {player.Name} at {player.GlobalPosition}");
+        }
+        _allWithHostFor = crates.All(crate => crate.Object.Authority.Peer == 1) ? _allWithHostFor + delta : 0;
+        // Seen while everyone is still here: evaluated at the end, a peer that already left would read as never seen
+        _sawHost |= _playground.Players.GetNodeOrNull<PlaygroundPlayer>("Player1") is { Visible: true };
+        _sawDriver |= _playground.Players.GetChildren().OfType<PlaygroundPlayer>()
+            .Any(player => player.Peer != 1 && player.Peer != Multiplayer.GetUniqueId() && player.Visible);
+
+        if (_elapsed >= _seconds || Settled()) Finish();
+    }
+
+    /// <summary>Whether everything this role checks has happened and the world has come to rest since.</summary>
+    private bool Settled()
+    {
+        var restingWithHost = _allWithHostFor >= SettledSeconds;
+        if (_isHost) return _clientPeer != 0 && _returnedWhileGuestConnected && TraceComplete();
+        if (_isObserver) return _sawDriver && _sawGuestCrate && _received.Count > 20 && restingWithHost;
+        return _aimAt >= 0 && _botClock > _aimAt + 2 && _playground.Shots.GetChildCount() == 0 && restingWithHost;
+    }
+
+    private bool TraceComplete()
+    {
+        if (!FileAccess.FileExists(TracePath)) return false;
+        using var file = FileAccess.Open(TracePath, FileAccess.ModeFlags.Read);
+        var last = "";
+        while (!file.EofReached())
+            if (file.GetLine() is { Length: > 0 } line) last = line;
+        return last == TraceEnd;
     }
 
     private void Finish()
@@ -203,21 +285,26 @@ public partial class PlaygroundSmoke : Node
         else if (!_isObserver)
         {
             WriteTrace();
-            var sawHost = _playground.Players.GetNodeOrNull<PlaygroundPlayer>("Player1") is { Visible: true };
+            var sawHost = _sawHost;
             ok = sawHost && _sent.Count > 20 && _crateMaxTravel is > 1.5 and < MaxCrateTravel && backToHost && _shotTookCrate
                  && _stackHangingFrames <= MaxStackHangingFrames;
             detail = $"sawHost={sawHost} sent={_sent.Count} travel={_crateMaxTravel:F2} backToHost={backToHost} shotHitCrate={_shotTookCrate} stackHangingFrames={_stackHangingFrames}";
         }
         else
         {
-            var sawDriver = _playground.Players.GetChildren().OfType<PlaygroundPlayer>()
-                .Any(player => player.Peer != 1 && player.Peer != Multiplayer.GetUniqueId() && player.Visible);
+            var sawDriver = _sawDriver;
             ok = sawDriver && _sawGuestCrate && _received.Count > 20 && _crateMaxTravel is > 1.5 and < MaxCrateTravel && backToHost;
             detail = $"sawDriver={sawDriver} sawGuestCrate={_sawGuestCrate} received={_received.Count} travel={_crateMaxTravel:F2} backToHost={backToHost}";
         }
 
+        // Any crate, not only the one the bot throws: a held crate teleported into a stack blew the stack out of the world
+        ok &= _fallen.Count == 0;
+        detail += $" fellOut={_fallen.Count}";
         var role = _isHost ? "host" : _isObserver ? "client-b" : "client-a";
-        GD.Print($"PLAYGROUND SMOKE role={role} ok={ok} {detail}");
+        var notWithHost = string.Join(",", _playground.GetNode("Crates").GetChildren().OfType<PlaygroundCrate>()
+            .Where(crate => crate.Object.Authority.Peer != 1)
+            .Select(crate => $"{crate.Name}@{crate.Object.Authority.Peer}(at {crate.GlobalPosition} v {crate.LinearVelocity.Length():F3} sleeping {crate.Sleeping} rest {crate.Object.RestFrames} holder {crate.Object.Holder} frozen {crate.Freeze})"));
+        GD.Print($"PLAYGROUND SMOKE role={role} ok={ok} {detail} seconds={_elapsed:F1} notWithHost={notWithHost} shots={_playground.Shots.GetChildCount()} bot={_botClock:F1}");
         GetTree().Quit(ok ? 0 : 1);
     }
 
@@ -258,9 +345,11 @@ public partial class PlaygroundSmoke : Node
         using var file = FileAccess.Open(TracePath, FileAccess.ModeFlags.Write);
         foreach (var (tick, p) in _sent)
             file.StoreLine(string.Create(CultureInfo.InvariantCulture, $"{tick},{p.X},{p.Y},{p.Z}"));
+        // The host starts reading as soon as the file exists: this line says the client finished writing it
+        file.StoreLine(TraceEnd);
     }
 
-    private static List<(int Tick, Vector3 Position)> ReadTrace()
+    private List<(int Tick, Vector3 Position)> ReadTrace()
     {
         var result = new List<(int, Vector3)>();
         if (!FileAccess.FileExists(TracePath)) return result;
