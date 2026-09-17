@@ -7,7 +7,8 @@ The network model of the `distributed-authority` branch, and why. This branch le
 
 Co-op "friend-slop": 4-8 friends, up to ~200 dynamic physics bodies, close contact between players (shared objects,
 pushing each other, joint QTEs), physics and projectiles, fast and slow. Listen-server host over Steam. No cheating
-concern: clients are trusted.
+concern: clients are trusted. **3D only** (decided): 2D roots are refused rather than kept as an untested copy of every
+physics rule.
 
 Tick 30 Hz, state snapshots 15-20 Hz. The host leaving ends the session; a late joiner gets a full snapshot of the world
 and its owners. No host migration.
@@ -141,9 +142,9 @@ Goal: a crate needs no code and a player needs only its own movement. Paid for i
   error on the node in the editor, and at run time the game logs it and quits before connecting.
 - **What is sent, as a contract** shown read-only in the inspector ("Synced: transform, linear_velocity, ...") and
   as one table in the guide:
-  - the root's full global transform, always, for any 2D or 3D root (no position-and-yaw variants for now:
+  - the root's full global transform, always, for any 3D root (no position-and-yaw variants for now:
     a character is thrown and tumbles too);
-  - linear and angular velocity when the root is a `RigidBody2D/3D`, velocity for a `CharacterBody2D/3D`;
+  - linear and angular velocity when the root is a `RigidBody3D`, velocity for a `CharacterBody3D`;
   - every `[Synced]` property of the root and its descendants, down to a nested `NetworkObject`;
   - nothing else: child transforms, animation, wheels, particles only when marked `[Synced]`;
   - changed state at the next send, unchanged once a second; applied on non-authority peers every frame, blended,
@@ -154,7 +155,7 @@ Goal: a crate needs no code and a player needs only its own movement. Paid for i
   - `Shared`: taken by touch or grab and passes on contact (a crate, a ball);
   - `World`: authority stays put and does not pass (a lift, a door, the match score) - not necessarily the host's;
   - `Custom`: the flags by hand. No preset for "shared but does not pass on contact".
-  - `Auto` resolves `CharacterBody2D/3D` and plain `Node2D/3D` to `Personal`; `RigidBody2D/3D` and `VehicleBody3D`
+  - `Auto` resolves `CharacterBody3D` and plain `Node3D` to `Personal`; `RigidBody3D` and `VehicleBody3D`
     to `Shared`; `AnimatableBody`, `StaticBody`, `Area` and non-spatial `Node`/`Control` to `World`. A grenade (a
     rigid body that stays its thrower's) is the common case that picks `Personal` by hand.
 - **Built-in behaviour for physics roots:** freeze where not authoritative (with the Rapier re-set), contact
@@ -322,7 +323,7 @@ other peer shows late overlaps what is around it.
   carried player, which follows the carrier's displayed transform; a throw is a knock that also detaches, so
   authority over a player never moves. Needs playtesting before it becomes API; may stay game code.
 - Typed events (`Send<T>` / `On<T>`) for several kinds of event per object without unpacking a `Variant`.
-- Smaller transforms per root type (position and yaw for an upright character, 2D rotation only). Everything sends the
+- Smaller transforms per root type (position and yaw for an upright character). Everything sends the
   full transform until measurements ask.
 - Objects larger than a state packet. Today such an object warns and goes out oversized, fragmented by the transport.
   Supporting it properly means splitting a sample across packets or sending it through a reliable large-block channel
@@ -342,7 +343,7 @@ other peer shows late overlaps what is around it.
   of step with each other outside interactions, which authority transfer already puts on one clock.
 - Ghost pairs cost O(n) per authority change: every change of a shared 3D body visits every other shared body to set
   or clear its collision exception. Fine for dozens of crates; a spatial index (or per-island bookkeeping) when a game
-  has hundreds. 2D bodies have no ghosts yet.
+  has hundreds.
 - Seeding the jitter estimate before a match from the clock-sync pings, for a lobby that exchanges no object state.
 
 ## Sources

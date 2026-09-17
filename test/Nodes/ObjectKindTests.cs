@@ -15,13 +15,10 @@ public partial class ObjectKindTests : TestSuite
     public void AutoResolvesFromTheRootsType()
     {
         Expect.Equal(NetworkObject.ObjectKind.Personal, NetworkObject.KindFor(new CharacterBody3D()));
-        Expect.Equal(NetworkObject.ObjectKind.Personal, NetworkObject.KindFor(new CharacterBody2D()));
         Expect.Equal(NetworkObject.ObjectKind.Personal, NetworkObject.KindFor(new Node3D()));
         Expect.Equal(NetworkObject.ObjectKind.Shared, NetworkObject.KindFor(new RigidBody3D()));
         Expect.Equal(NetworkObject.ObjectKind.Shared, NetworkObject.KindFor(new VehicleBody3D()));
-        Expect.Equal(NetworkObject.ObjectKind.Shared, NetworkObject.KindFor(new RigidBody2D()));
         Expect.Equal(NetworkObject.ObjectKind.World, NetworkObject.KindFor(new AnimatableBody3D()));
-        Expect.Equal(NetworkObject.ObjectKind.World, NetworkObject.KindFor(new StaticBody2D()));
         Expect.Equal(NetworkObject.ObjectKind.World, NetworkObject.KindFor(new Area3D()));
         Expect.Equal(NetworkObject.ObjectKind.World, NetworkObject.KindFor(new Node()));
     }
@@ -82,5 +79,12 @@ public partial class ObjectKindTests : TestSuite
         Expect.Equal(0, obj._GetConfigurationWarnings().Length);
         Expect.Null(NetworkObject.UnsupportedReason(new RigidBody3D()));
         soft.Free();
+
+        // Only 3D is supported: a 2D root would get none of the physics handling and a transform nobody applies
+        foreach (var root in new Node2D[] { new RigidBody2D(), new CharacterBody2D(), new Node2D() })
+        {
+            Expect.NotNull(NetworkObject.UnsupportedReason(root), root.GetClass());
+            root.Free();
+        }
     }
 }

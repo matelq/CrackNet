@@ -10,8 +10,8 @@ everywhere else. The reasoning behind every rule here is in the [design document
 
 | Kind | Rule | Auto for | Examples |
 |---|---|---|---|
-| `Personal` | stays with one peer, passes authority on contact | `CharacterBody2D/3D`, plain `Node2D/3D` | a player, a projectile |
-| `Shared` | taken by touch or grab, passes authority on contact | `RigidBody2D/3D`, `VehicleBody3D` | a crate, a ball |
+| `Personal` | stays with one peer, passes authority on contact | `CharacterBody3D`, plain `Node3D` | a player, a projectile |
+| `Shared` | taken by touch or grab, passes authority on contact | `RigidBody3D`, `VehicleBody3D` | a crate, a ball |
 | `World` | stays put, does not pass authority on contact | `StaticBody`, `AnimatableBody`, `Area`, `Node`, `Control` | a lift, a door, the score |
 | `Custom` | `Transferable` and `SpreadsAuthority` by hand, no physics handling | never | anything unusual |
 
@@ -95,7 +95,7 @@ displayed positions, so the ray hits what the shooter sees.
 
 `SyncedSummary` in the inspector lists it, in order:
 
-- the root's full transform, for any 2D or 3D root;
+- the root's full transform, for a 3D root (2D is not supported);
 - velocity for a character body, linear and angular velocity for a rigid body;
 - every `[Synced]` property of the root and its descendants, down to a nested `NetworkObject`.
 

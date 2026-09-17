@@ -66,7 +66,6 @@ internal sealed class Spawns
         switch (root)
         {
             case Node3D node when transform.VariantType == Variant.Type.Transform3D: node.GlobalTransform = transform.AsTransform3D(); break;
-            case Node2D node when transform.VariantType == Variant.Type.Transform2D: node.GlobalTransform = transform.AsTransform2D(); break;
         }
         _spawned[root] = (scenePath, args);
         return root;
@@ -83,7 +82,6 @@ internal sealed class Spawns
         Variant transform = root switch
         {
             Node3D node => node.GlobalTransform,
-            Node2D node => node.GlobalTransform,
             _ => default,
         };
         CompactValues.Encode(transform, writer);

@@ -226,9 +226,7 @@ public partial class NetworkObject : Node
         switch (Root)
         {
             case RigidBody3D body: body.LinearVelocity = velocity; break;
-            case RigidBody2D body: body.LinearVelocity = new Vector2(velocity.X, velocity.Y); break;
             case CharacterBody3D body: body.Velocity = velocity; break;
-            case CharacterBody2D body: body.Velocity = new Vector2(velocity.X, velocity.Y); break;
         }
         return true;
     }
@@ -276,7 +274,7 @@ public partial class NetworkObject : Node
 
     /// <summary>
     /// Pushes this object with nothing doing the pushing - an explosion, a trap: its authority applies
-    /// <paramref name="impulse"/> to a rigid body (X and Y for 2D) or raises <see cref="Pushed"/>. Delivered like
+    /// <paramref name="impulse"/> to a rigid body or raises <see cref="Pushed"/>. Delivered like
     /// <see cref="Send"/>.
     /// </summary>
     public void Push(Vector3 impulse) => Deliver(LocalPeer, EventKind.Push, impulse, hops: 0);
@@ -319,7 +317,6 @@ public partial class NetworkObject : Node
         switch (Root)
         {
             case RigidBody3D body: body.ApplyCentralImpulse(impulse); break;
-            case RigidBody2D body: body.ApplyCentralImpulse(new Vector2(impulse.X, impulse.Y)); break;
             default:
                 _knockback += impulse;
                 Pushed?.Invoke(impulse);
@@ -443,10 +440,10 @@ public partial class NetworkObject : Node
     /// <summary>What <see cref="ObjectKind.Auto"/> resolves to for a root of this type.</summary>
     public static ObjectKind KindFor(Node? root) => root switch
     {
-        CharacterBody3D or CharacterBody2D => ObjectKind.Personal,
-        RigidBody3D or RigidBody2D => ObjectKind.Shared,
-        PhysicsBody3D or PhysicsBody2D or Area3D or Area2D => ObjectKind.World,
-        Node3D or Node2D => ObjectKind.Personal,
+        CharacterBody3D => ObjectKind.Personal,
+        RigidBody3D => ObjectKind.Shared,
+        PhysicsBody3D or Area3D => ObjectKind.World,
+        Node3D => ObjectKind.Personal,
         _ => ObjectKind.World,
     };
 
@@ -454,16 +451,17 @@ public partial class NetworkObject : Node
     public static string? UnsupportedReason(Node? root) => root switch
     {
         SoftBody3D => "SoftBody3D is not supported: its vertices are not replicated",
-        PhysicalBone3D or PhysicalBone2D => "a ragdoll bone is not supported: replicate the character that owns it",
+        PhysicalBone3D => "a ragdoll bone is not supported: replicate the character that owns it",
+        Node2D => "2D is not supported: netfox-net replicates 3D scenes only",
         _ => null,
     };
 
     /// <summary>What is sent for a root of this type before its <c>[Synced]</c> properties.</summary>
     internal static string[] AutoProperties(Node? root) => root switch
     {
-        RigidBody3D or RigidBody2D => ["global_transform", "linear_velocity", "angular_velocity"],
-        CharacterBody3D or CharacterBody2D => ["global_transform", "velocity"],
-        Node3D or Node2D => ["global_transform"],
+        RigidBody3D => ["global_transform", "linear_velocity", "angular_velocity"],
+        CharacterBody3D => ["global_transform", "velocity"],
+        Node3D => ["global_transform"],
         _ => [],
     };
 
@@ -540,11 +538,7 @@ public partial class NetworkObject : Node
     internal void SetShown(bool shown)
     {
         Shown = shown;
-        switch (Root)
-        {
-            case Node3D node: node.Visible = shown; break;
-            case CanvasItem item: item.Visible = shown; break;
-        }
+        if (Root is Node3D node) node.Visible = shown;
     }
 
     public override void _ExitTree()

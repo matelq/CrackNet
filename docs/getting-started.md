@@ -123,10 +123,11 @@ Shown read-only on every `NetworkObject` in the inspector:
 
 | Root | Sent |
 |---|---|
-| `RigidBody2D/3D` | transform, linear and angular velocity, then `[Synced]` |
-| `CharacterBody2D/3D` | transform, velocity, then `[Synced]` |
-| other `Node2D/3D` | transform, then `[Synced]` |
+| `RigidBody3D` | transform, linear and angular velocity, then `[Synced]` |
+| `CharacterBody3D` | transform, velocity, then `[Synced]` |
+| other `Node3D` | transform, then `[Synced]` |
 | `Node`, `Control` | `[Synced]` only |
+| any `Node2D` | not supported: netfox-net is 3D only |
 
 Nothing else: child transforms, animation and particles only when marked `[Synced]`. Changed state goes out at the
 next send (15 times a second), unchanged state once a second. `SoftBody3D` and ragdoll bones are not supported: the

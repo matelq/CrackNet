@@ -130,6 +130,7 @@ One replicated object. While its root is this peer's multiplayer authority it se
 | property | `PendingRequest` | The id of this guest's latest authority request the host has not answered yet, or 0. |
 | property | `PushStrength` | How hard a character body pushes the rigid bodies it slides into, along the contact normal; 0 is off. The library takes the body and pushes it on this peer's simulation. |
 | property | `ResolvedKind` | `Kind` with `Auto` resolved from the root's type. |
+| property | `RestFrames` | Physics frames a simulated body has been at rest, counted by its physics handling. |
 | property | `Root` | The node that is the object: authority, identity and the synced subtree. The parent by default. |
 | property | `SpreadsAuthority` | Whether this object passes its authority on with `NetworkObject`. Set by `Kind`. |
 | property | `SyncedSummary` | What this object sends, in the order it is sent. Read-only; shown in the inspector. |
@@ -142,7 +143,7 @@ One replicated object. While its root is this peer's multiplayer authority it se
 | method | `IsNewer(System.Int32,System.Int32)` | True when ( `ownershipSequence`, `authoritySequence`) is newer than what this object has. |
 | method | `KindFor(Godot.Node)` | What `Auto` resolves to for a root of this type. |
 | method | `Of(Godot.Node)` | The object whose root is `root`, or null when it is not a registered object. |
-| method | `Push(Godot.Vector3)` | Pushes this object with nothing doing the pushing - an explosion, a trap: its authority applies `impulse` to a rigid body (X and Y for 2D) or raises `Pushed`. Delivered like `Variant`. |
+| method | `Push(Godot.Vector3)` | Pushes this object with nothing doing the pushing - an explosion, a trap: its authority applies `impulse` to a rigid body or raises `Pushed`. Delivered like `Variant`. |
 | method | `Push(Netfox.NetworkObject,Godot.Vector3)` | This object struck `target`: takes the target when it can (`NetworkObject`), so a crate flies on this peer's simulation at once, then pushes it. A player, which cannot be taken, is pushed on its own peer. If the host gives the target to someone else, the winner's simulation stands and this push is lost with the claim. |
 | method | `Release` | Lets go of a held object. This peer keeps simulating it until someone else touches it. |
 | method | `Send(Godot.Variant)` | Delivers `payload` to whoever is this object's authority, reliably and exactly once, even if authority moves while it is on its way. On the authority itself it is raised at once. |

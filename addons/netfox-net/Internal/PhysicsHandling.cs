@@ -18,9 +18,7 @@ internal abstract class PhysicsHandling
     public static PhysicsHandling? For(NetworkObject obj) => obj.Root switch
     {
         RigidBody3D body => new Rigid3D(obj, body),
-        RigidBody2D body => new Rigid2D(obj, body),
         CharacterBody3D body => new Character3D(obj, body),
-        CharacterBody2D body => new Character2D(obj, body),
         _ => null,
     };
 
@@ -223,64 +221,6 @@ internal abstract class PhysicsHandling
         }
     }
 
-    private sealed class Rigid2D : PhysicsHandling
-    {
-        private readonly RigidBody2D _body;
-        private int _restFrames;
-
-        public Rigid2D(NetworkObject obj, RigidBody2D body) : base(obj)
-        {
-            _body = body;
-            body.FreezeMode = RigidBody2D.FreezeModeEnum.Static;   // as in 3D: no velocity for a character to inherit
-            body.ContactMonitor = true;
-            body.MaxContactsReported = Math.Max(body.MaxContactsReported, 4);
-            body.BodyEntered += other =>
-            {
-                if (Object.Authority.IsLocal && _body.LinearVelocity.Length() > TouchSpeed) TouchCollider(other);
-            };
-        }
-
-        public override void AuthorityChanged()
-        {
-            var frozen = !Object.Authority.IsLocal || Object.Holder != 0;
-            if (_body.Freeze != frozen)
-            {
-                var transform = _body.GlobalTransform;
-                _body.Freeze = frozen;
-                _body.GlobalTransform = transform;
-                PhysicsServer2D.BodySetState(_body.GetRid(), PhysicsServer2D.BodyState.Transform, transform);
-            }
-            if (!Object.Authority.IsLocal || IsHost || !_body.IsInsideTree()) return;
-
-            var space = _body.GetWorld2D().DirectSpaceState;
-            foreach (var shape in _body.GetChildren().OfType<CollisionShape2D>())
-            {
-                if (shape.Shape is null || shape.Disabled) continue;
-                var query = new PhysicsShapeQueryParameters2D
-                {
-                    Shape = shape.Shape,
-                    Transform = shape.GlobalTransform,
-                    Margin = 0.5f,
-                    CollisionMask = _body.CollisionMask,
-                    Exclude = [_body.GetRid()],
-                };
-                foreach (var hit in space.IntersectShape(query, 16))
-                    TouchCollider(hit["collider"].AsGodotObject());
-            }
-        }
-
-        public override void PhysicsProcess()
-        {
-            if (Object.ResolvedKind != NetworkObject.ObjectKind.Shared || !Object.Authority.IsLocal || Object.Holder != 0 || IsHost)
-            {
-                _restFrames = 0;
-                return;
-            }
-            _restFrames = _body.Sleeping || _body.LinearVelocity.Length() < RestSpeed ? _restFrames + 1 : 0;
-            if (_restFrames >= RestFramesBeforeReturning && Object.Authority.ReturnToHost()) _restFrames = 0;
-        }
-    }
-
     /// <summary>A character body passes authority to what it slid into this frame; its own movement is the game's.</summary>
     private sealed class Character3D(NetworkObject obj, CharacterBody3D body) : PhysicsHandling(obj)
     {
@@ -296,23 +236,6 @@ internal abstract class PhysicsHandling
                 if (collision.GetNormal().AngleTo(body.UpDirection) <= body.FloorMaxAngle) continue;
                 // Godot's character bodies do not push rigid bodies: push the ones taken here, along the contact
                 if (Object.PushStrength > 0 && node is RigidBody3D) Object.Push(other, -collision.GetNormal() * Object.PushStrength);
-                else Object.Touch(other);
-            }
-        }
-    }
-
-    private sealed class Character2D(NetworkObject obj, CharacterBody2D body) : PhysicsHandling(obj)
-    {
-        public override void PhysicsProcess()
-        {
-            if (!Object.Authority.IsLocal) return;
-            for (var i = 0; i < body.GetSlideCollisionCount(); i++)
-            {
-                var collision = body.GetSlideCollision(i);
-                if (collision.GetCollider() is not Node node || NetworkObject.Of(node) is not { } other) continue;
-                var normal = collision.GetNormal();
-                if (normal.AngleTo(body.UpDirection) <= body.FloorMaxAngle) continue;   // what it stands on, as in 3D
-                if (Object.PushStrength > 0 && node is RigidBody2D) Object.Push(other, new Vector3(-normal.X, -normal.Y, 0) * Object.PushStrength);
                 else Object.Touch(other);
             }
         }

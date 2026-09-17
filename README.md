@@ -5,6 +5,9 @@ Co-op netcode for Godot 4.7 .NET: distributed authority with state synchronizati
 "friend-slop" games - a handful of friends, shared physics objects, pushing each other, projectiles, joint QTEs - where
 nobody cheats and everybody touches everything.
 
+**3D only.** A `NetworkObject` under a 2D node (`Node2D`, `RigidBody2D`, `CharacterBody2D`) is an error. Non-spatial
+roots (`Node`, `Control`) still replicate their `[Synced]` properties.
+
 Started as a C# port of [netfox](https://github.com/foxssake/netfox). This branch has left rollback behind; the
 `reworked` and `master` branches keep the port.
 

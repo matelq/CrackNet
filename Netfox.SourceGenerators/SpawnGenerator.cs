@@ -206,7 +206,7 @@ public sealed class SpawnGenerator : IIncrementalGenerator
     private static string Render(INamedTypeSymbol type, string? explicitPath, ITypeSymbol? args, IParameterSymbol? parameter)
     {
         var name = type.Name;
-        var spatial = Inherits(type, "Godot.Node3D") ? "3D" : Inherits(type, "Godot.Node2D") ? "2D" : null;
+        var spatial = Inherits(type, "Godot.Node3D") ? "3D" : null;   // 3D only: see NetworkObject.UnsupportedReason
         var path = explicitPath is null ? "null" : "\"" + explicitPath.Replace("\"", "\\\"") + "\"";
         var argType = args?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         var optional = parameter is { HasExplicitDefaultValue: true } ? " = " + DefaultLiteral(parameter) : "";
