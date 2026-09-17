@@ -20,7 +20,6 @@ public partial class PlaygroundShot : Node3D, ISpawnedWith<Vector3>
         return Math.Abs(offset.X) <= halfExtent && Math.Abs(offset.Y) <= halfExtent && Math.Abs(offset.Z) <= halfExtent;
     }
 
-    public NetworkObject Object { get; private set; } = null!;
     /// <summary>Spawn data; only the shooter's peer moves the shot.</summary>
     public Vector3 Velocity { get; private set; }
 
@@ -35,13 +34,12 @@ public partial class PlaygroundShot : Node3D, ISpawnedWith<Vector3>
     {
         var color = Playground.ColorOf(GetMultiplayerAuthority());
         GetNode<MeshInstance3D>("Body").MaterialOverride = new StandardMaterial3D { AlbedoColor = color, EmissionEnabled = true, Emission = color };
-        Object = GetNode<NetworkObject>("NetworkObject");
     }
 
     public override void _PhysicsProcess(double delta)
     {
         if (_consumed) return;
-        if (!Object.Authority.IsLocal) return;
+        if (!this.Authority.IsLocal) return;
 
         GlobalPosition += Velocity * (float)delta;
         _age += delta;
@@ -53,7 +51,7 @@ public partial class PlaygroundShot : Node3D, ISpawnedWith<Vector3>
             .OrderBy(crate => crate.GlobalPosition.DistanceTo(GlobalPosition))
             .FirstOrDefault();
         var playerHit = GetParent().GetParent().GetNode<Node3D>("Players").GetChildren().OfType<PlaygroundPlayer>()
-            .Where(player => player.Peer != Object.Authority.Peer && player.Visible)
+            .Where(player => player.Peer != this.Authority.Peer && player.Visible)
             .Where(player => player.GlobalPosition.DistanceTo(GlobalPosition) <= HitRadius)
             .OrderBy(player => player.GlobalPosition.DistanceTo(GlobalPosition))
             .FirstOrDefault();
@@ -84,6 +82,6 @@ public partial class PlaygroundShot : Node3D, ISpawnedWith<Vector3>
     private void Consume()
     {
         _consumed = true;
-        if (Object.Authority.IsLocal) Object.Despawn();
+        if (this.Authority.IsLocal) this.Despawn();
     }
 }

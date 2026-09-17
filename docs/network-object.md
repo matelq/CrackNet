@@ -48,12 +48,14 @@ If two peers can both decide the same hit or grab, the mechanic is not finished.
 
 ## Pushes and events
 
-Every call below also works on the game's own node (`crate.Push(...)`); `node.Net()` returns its `NetworkObject`.
+Every call below also works on the game's own node: `crate.Push(...)`, `crate.TryClaim()`, `this.Authority.IsLocal`,
+`this.TakeKnockback(delta)`, `crate.Holder`. `node.Net()` returns the `NetworkObject` itself, for the rarer
+`AuthorityChanged`, `Send` and `Diagnostics`.
 
 ```csharp
 this.Push(target, impulse);                              // my object struck yours: takes a crate, pushes a player
 target.Push(impulse);                                    // nothing doing the pushing: an explosion, a trap
-Velocity += this.Net().TakeKnockback(delta);             // a character applies the pushes it received
+Velocity += this.TakeKnockback(delta);             // a character applies the pushes it received
 ```
 
 A push reaches whoever simulates the object: a rigid body takes the impulse itself; anything else adds it to

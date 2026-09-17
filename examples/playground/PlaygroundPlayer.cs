@@ -11,7 +11,6 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
 {
     private const float Speed = 6, JumpSpeed = 5, Gravity = 14, PushStrength = 4, ThrowSpeed = 9, ShotSpeed = 18;
 
-    public NetworkObject Object { get; private set; } = null!;
     public int Peer { get; private set; }
     public int Slot { get; private set; }
 
@@ -33,8 +32,6 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
     {
         Peer = GetMultiplayerAuthority();
         Name = $"Player{Peer}";
-        Object = GetNode<NetworkObject>("NetworkObject");   // it pushes and takes the crates this body walks into
-
         // The scene's capsule is white: this player's slot colour, and a material of its own to hold it
         var color = Playground.SlotColors[Slot % Playground.SlotColors.Length];
         GetNode<MeshInstance3D>("Body").MaterialOverride = new StandardMaterial3D { AlbedoColor = color };
@@ -44,12 +41,12 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
 
     public override void _Ready()
     {
-        if (Object.Authority.IsLocal) AddToGroup("local_player");
+        if (this.Authority.IsLocal) AddToGroup("local_player");
     }
 
     public override void _PhysicsProcess(double delta)
     {
-        if (!Object.Authority.IsLocal) return;
+        if (!this.Authority.IsLocal) return;
         var dt = (float)delta;
 
         var bot = Bot?.Invoke(this);
@@ -58,7 +55,7 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
             (Input.IsPhysicalKeyPressed(Key.S) ? 1 : 0) - (Input.IsPhysicalKeyPressed(Key.W) ? 1 : 0)).Normalized();
         if (bot is null && !GetWindow().HasFocus()) input = Vector3.Zero;
 
-        var velocity = new Vector3(input.X * Speed, Velocity.Y, input.Z * Speed) + Object.TakeKnockback(delta);
+        var velocity = new Vector3(input.X * Speed, Velocity.Y, input.Z * Speed) + this.TakeKnockback(delta);
         velocity.Y = IsOnFloor() && GetWindow().HasFocus() && Input.IsPhysicalKeyPressed(Key.Space) ? JumpSpeed : velocity.Y - Gravity * dt;
         if (input != Vector3.Zero) Rotation = new Vector3(0, Mathf.Atan2(-input.X, -input.Z), 0);
 
@@ -125,6 +122,6 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
     public override void _ExitTree()
     {
         Playground.SetSlot(Peer, null);
-        if (_held is { } held && Object.Authority.IsLocal) held.Object.Release();
+        if (_held is { } held && this.Authority.IsLocal) held.Release();
     }
 }

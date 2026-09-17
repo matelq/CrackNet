@@ -146,8 +146,8 @@ public partial class Playground : Node3D
     {
         foreach (var (crate, start) in _crateStarts)
         {
-            crate.Object.Release();
-            crate.Object.Authority.Take();
+            crate.Release();
+            crate.Authority.Take();
             crate.GlobalTransform = start;
             crate.LinearVelocity = Vector3.Zero;
             crate.AngularVelocity = Vector3.Zero;

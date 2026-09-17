@@ -10,18 +10,16 @@ namespace Netfox.Examples.Playground;
 /// </summary>
 public partial class PlaygroundCrate : RigidBody3D
 {
-    public NetworkObject Object { get; private set; } = null!;
     private StandardMaterial3D _material = null!;
 
     public override void _Ready()
     {
-        Object = GetNode<NetworkObject>("NetworkObject");
         var mesh = GetNode<MeshInstance3D>("MeshInstance3D");
         // Its own copy: the scene's material is shared by every crate, and each shows its own peer's colour
         _material = (StandardMaterial3D)mesh.MaterialOverride.Duplicate();
         mesh.MaterialOverride = _material;
 
-        Object.AuthorityChanged += Refresh;
+        this.Net().AuthorityChanged += Refresh;
         Playground.SlotsChanged += Refresh;
         Refresh();
     }
@@ -30,11 +28,11 @@ public partial class PlaygroundCrate : RigidBody3D
 
     private void Refresh()
     {
-        _material.AlbedoColor = Playground.ColorOf(Object.Authority.Peer).Lerp(Colors.SaddleBrown, 0.35f);
+        _material.AlbedoColor = Playground.ColorOf(this.Authority.Peer).Lerp(Colors.SaddleBrown, 0.35f);
         // A held crate is moved by hand, a teleport every frame: colliding, it would land inside the crates around it
         // and the physics engine would blow them out of the world. It passes through things while held, on every peer
-        CollisionLayer = Object.Holder != 0 ? 0u : 1u;
-        CollisionMask = Object.Holder != 0 ? 0u : 1u;
+        CollisionLayer = this.Holder != 0 ? 0u : 1u;
+        CollisionMask = this.Holder != 0 ? 0u : 1u;
         if (IsInsideTree()) PlaytestLog.Authority(this);
     }
 }

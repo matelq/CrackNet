@@ -108,7 +108,7 @@ Tracks network identities: nodes are referenced by scene path, replaced with com
 
 ### NetworkNodeExtensions
 
-The everyday calls, on the game's own nodes: `crate.Push(impulse)` rather than `GetNode<NetworkObject>("NetworkObject").Push(impulse)`. Each resolves the node's `NetworkObject`.
+The everyday calls, on the game's own nodes: `crate.Push(impulse)` and `this.Authority.IsLocal` rather than `GetNode<NetworkObject>("NetworkObject")`. Each resolves the node's `NetworkObject`, so game code names that class only for the rare things: `Net().AuthorityChanged`, `Net().Send`, `Net().Diagnostics`.
 
 | | Member | Summary |
 |---|---|---|

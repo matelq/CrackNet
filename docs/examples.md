@@ -30,7 +30,7 @@ public partial class Player : CharacterBody3D
 
     public override void _PhysicsProcess(double delta)
     {
-        if (!this.Net().Authority.IsLocal) return;   // other peers only play this player back
+        if (!this.Authority.IsLocal) return;   // other peers only play this player back
 
         var input = Input.GetVector("left", "right", "forward", "back");
         Velocity = new Vector3(input.X * 6, Velocity.Y - 14 * (float)delta, input.Y * 6);
@@ -138,7 +138,7 @@ private void Shove(Player other) => this.Push(other, -GlobalBasis.Z * 4);
 <!-- check: body Player -->
 ```csharp
 // The pushed player, in _PhysicsProcess before MoveAndSlide
-Velocity += this.Net().TakeKnockback(delta);
+Velocity += this.TakeKnockback(delta);
 ```
 
 What you get: exactly one application of each push, on the peer that simulates the pushed player, wherever the push
@@ -166,19 +166,19 @@ public partial class Shot : Node3D, ISpawnedWith<Vector3>
 
     public override void _PhysicsProcess(double delta)
     {
-        if (!this.Net().Authority.IsLocal) return;   // the shooter moves it and decides every hit
+        if (!this.Authority.IsLocal) return;   // the shooter moves it and decides every hit
         GlobalPosition += _velocity * (float)delta;
         _age += delta;
 
         foreach (var player in GetTree().GetNodesInGroup("players").OfType<Player>())
         {
-            if (player.Net().Authority.Peer == this.Net().Authority.Peer) continue;   // not the shooter
+            if (player.Authority.Peer == this.Authority.Peer) continue;   // not the shooter
             if (player.GlobalPosition.DistanceTo(GlobalPosition) > 0.7f) continue;
             this.Push(player, _velocity.Normalized() * 6);
-            this.Net().Despawn();                     // in the same decision: no second hit, no passing through
+            this.Despawn();                     // in the same decision: no second hit, no passing through
             return;
         }
-        if (_age > 2.5) this.Net().Despawn();
+        if (_age > 2.5) this.Despawn();
     }
 }
 ```
