@@ -47,6 +47,17 @@ internal static class HarnessWorld
         return walker;
     }
 
+    /// <summary>The playground's kind of platform: an animatable body the host moves in its physics step, played back elsewhere.</summary>
+    public static Lift Lift(CrackNetStack stack, string name, Vector3 position, Vector3 size, Vector3 velocity)
+    {
+        var lift = new Lift { Name = name, Position = position, Velocity = velocity };
+        lift.SetMultiplayerAuthority(1);
+        lift.AddChild(Shapes.Collision(new BoxShape3D { Size = size }));
+        lift.AddChild(new NetworkObject { Name = "NetworkObject" });
+        World(stack).AddChild(lift);
+        return lift;
+    }
+
     /// <summary>A long floating slab the host drives at a set velocity: a lift or a moving crate, for riders to stand on.</summary>
     public static RigidBody3D Platform(CrackNetStack stack, string name, Vector3 position, Vector3 size)
     {

@@ -553,4 +553,152 @@ public partial class CarryingTests : HarnessSuite
         Expect.True(compared > 15, "too few frames compared: " + report);
         Expect.True(worst < 0.05f, "the host draws the rider elsewhere on the platform than its peer has it: " + report);
     }
+
+    /// <summary>
+    /// The playground's lift: an animatable body the host raises, peer 2's player standing on it, the host and a third
+    /// peer watching. Per drawn frame on the observers, how far the rider is above the platform against how far its
+    /// own peer had it, at the displayed tick; played back from world positions it sinks into the rising platform by
+    /// the playback delay's worth.
+    /// </summary>
+    [Test]
+    public async Task ARiderOnARisingLiftIsDrawnOnItOnEveryOtherPeer()
+    {
+        Network.LatencyMs = 100;
+        var stacks = new[] { Host, Client, await ThirdPeer() };
+        var lifts = stacks.Select(stack => HarnessWorld.Lift(stack, "Lift", new Vector3(0, 0.25f, 0), new Vector3(3, 0.5f, 3), Vector3.Zero)).ToArray();
+        var riders = stacks.Select(stack => HarnessWorld.Walker(stack, 2, new Vector3(0, 1.4f, 0), Vector3.Zero)).ToArray();
+        foreach (var rider in riders)
+        {
+            rider.Falls = true;
+            rider.SafeMargin = 0.05f;
+        }
+        for (var i = 0; i < 30; i++) await NextFrame();
+        Expect.True(riders[1].IsOnFloor() && riders[1].GlobalPosition.Y > 1.3f, $"the rider is not standing on the lift: {riders[1].GlobalPosition}");
+
+        var sent = new SortedList<int, Vector3>();
+        riders[1].Net().Diagnostics.SampleSent += tick => sent[tick] = riders[1].GlobalPosition - lifts[1].GlobalPosition;
+        var shown = new[] { new List<(double Tick, Vector3 Offset)>(), new List<(double Tick, Vector3 Offset)>() };
+        var drawn = new DrawnFrame();
+        AddChild(drawn);
+        drawn.Drawn += () =>
+        {
+            foreach (var (peer, i) in new[] { (0, 0), (2, 1) })
+                if (riders[peer].Net().Diagnostics.DisplayTick is { } tick)
+                    shown[i].Add((tick, riders[peer].GlobalPosition - lifts[peer].GlobalPosition));
+        };
+        lifts[0].Velocity = new Vector3(0, 1, 0);
+        for (var seconds = 0.0; seconds < 2.5; seconds += GetProcessDeltaTime()) await NextFrame();
+        drawn.QueueFree();
+
+        var interval = Client.Context.NetworkObjectServer.StateIntervalTicks;
+        var worst = new float[2];
+        var compared = new int[2];
+        for (var i = 0; i < 2; i++)
+        {
+            var ticks = sent.Keys.ToList();
+            foreach (var (tick, offset) in shown[i])
+            {
+                var next = ticks.FindIndex(at => at >= tick);
+                if (next <= 0 || ticks[next] - ticks[next - 1] > interval * 2) continue;
+                var expected = sent.Values[next - 1].Lerp(sent.Values[next], (float)((tick - ticks[next - 1]) / (ticks[next] - ticks[next - 1])));
+                worst[i] = Mathf.Max(worst[i], expected.DistanceTo(offset));
+                compared[i]++;
+            }
+        }
+        var report = $"host: worst {worst[0]:F3} m over {compared[0]} frames; third peer: worst {worst[1]:F3} m over {compared[1]} frames; "
+                     + $"the lift rose {lifts[0].GlobalPosition.Y - 0.25f:F2} m, the rider is {riders[1].GlobalPosition.Y - lifts[1].GlobalPosition.Y:F2} m above its own copy";
+        GD.Print("RIDER ON A LIFT " + report);
+        Expect.True(lifts[0].GlobalPosition.Y > 1.5f, "the lift did not rise: " + report);
+        Expect.True(compared.All(count => count > 15), "too few frames compared: " + report);
+        Expect.True(worst.All(distance => distance < 0.05f), "an observer draws the rider elsewhere on the lift than its peer has it: " + report);
+    }
+
+    /// <summary>
+    /// A crate of the host's resting on the host's rising lift: both come from the host on one clock, so a guest draws
+    /// the crate on the lift, per frame, as steadily as the host has it.
+    /// </summary>
+    [Test]
+    public async Task ACrateOnTheHostsLiftStaysOnItOnAGuest()
+    {
+        Network.LatencyMs = 100;
+        var lifts = new[] { HarnessWorld.Lift(Host, "Lift", new Vector3(0, 0.25f, 0), new Vector3(3, 0.5f, 3), Vector3.Zero), HarnessWorld.Lift(Client, "Lift", new Vector3(0, 0.25f, 0), new Vector3(3, 0.5f, 3), Vector3.Zero) };
+        var crates = new[] { HarnessWorld.Crate(Host, "Crate", new Vector3(0, 1.0f, 0)), HarnessWorld.Crate(Client, "Crate", new Vector3(0, 1.0f, 0)) };
+        for (var i = 0; i < 30; i++) await NextFrame();
+        var restingOn = crates[0].GlobalPosition.Y - lifts[0].GlobalPosition.Y;
+        Expect.True(restingOn is > 0.7f and < 0.8f, $"the crate does not rest on the lift: {restingOn:F2} m above it");
+
+        var worst = new[] { 0f, 0f };
+        var drawn = new DrawnFrame();
+        AddChild(drawn);
+        drawn.Drawn += () =>
+        {
+            for (var i = 0; i < 2; i++)
+                worst[i] = Mathf.Max(worst[i], Mathf.Abs(crates[i].GlobalPosition.Y - lifts[i].GlobalPosition.Y - restingOn));
+        };
+        lifts[0].Velocity = new Vector3(0, 1, 0);
+        for (var seconds = 0.0; seconds < 2.5; seconds += GetProcessDeltaTime()) await NextFrame();
+        drawn.QueueFree();
+
+        var report = $"the crate strays {worst[0]:F3} m from its seat on the host, {worst[1]:F3} m on the guest; the lift rose {lifts[0].GlobalPosition.Y - 0.25f:F2} m";
+        GD.Print("CRATE ON A LIFT " + report);
+        Expect.True(lifts[0].GlobalPosition.Y > 1.5f, "the lift did not rise: " + report);
+        Expect.True(worst[1] < 0.05f, "the guest draws the crate sinking into or floating off the lift: " + report);
+    }
+
+    /// <summary>
+    /// A crate a guest throws onto the host's moving platform rides it, so it never sleeps and its speed never drops:
+    /// it still goes back to the host once it rests on the platform, judged against what it rests on.
+    /// </summary>
+    [Test]
+    public async Task ACrateRidingAPlatformGoesBackToTheHostOnceItRestsOnIt()
+    {
+        var lifts = new[] { HarnessWorld.Lift(Host, "Slider", new Vector3(0, 0.25f, 0), new Vector3(30, 0.5f, 3), new Vector3(1, 0, 0)), HarnessWorld.Lift(Client, "Slider", new Vector3(0, 0.25f, 0), new Vector3(30, 0.5f, 3), new Vector3(1, 0, 0)) };
+        var crates = new[] { HarnessWorld.Crate(Host, "Crate", new Vector3(0, 1.0f, 0)), HarnessWorld.Crate(Client, "Crate", new Vector3(0, 1.0f, 0)) };
+        for (var i = 0; i < 20; i++) await NextFrame();
+
+        Expect.True(crates[1].TryClaim());
+        Expect.True(crates[1].ReleaseClaim(new Vector3(0, 0.5f, 0)));   // a nudge: it lands back on the platform, simulated by the guest
+        Expect.True(await WaitUntil(() => crates[0].Authority.Peer == 2, 3), "the host never saw the guest take the crate");
+        var backAt = -1.0;
+        var elapsed = 0.0;
+        for (; elapsed < 6 && backAt < 0; elapsed += GetProcessDeltaTime())
+        {
+            await NextFrame();
+            if (crates[1].Authority.Peer == 1 && crates[0].Authority.Peer == 1) backAt = elapsed;
+        }
+        var report = $"back to the host after {backAt:F1} s; crate at {crates[1].GlobalPosition} with velocity {crates[1].LinearVelocity}, platform at {lifts[1].GlobalPosition}";
+        GD.Print("CRATE RIDING A PLATFORM " + report);
+        Expect.True(crates[1].GlobalPosition.Y > 0.6f, "the crate fell off the platform, so this measures nothing: " + report);
+        Expect.True(backAt >= 0, "the crate riding the platform never went back to the host: " + report);
+    }
+
+    /// <summary>
+    /// The playground's flake: a crate resting on the crate a player holds rested for the return window and went back
+    /// to the host by itself, since a held crate has no collisions and no query from the group saw it. Lifted away a
+    /// moment later, the held crate left it hanging in the air on the holder's screen until the host's word that it
+    /// fell. It stays with the holder while it rests on the held crate, and falls at once when that is lifted.
+    /// </summary>
+    [Test]
+    public async Task ACrateOnAHeldCrateStaysWithTheHolderAndFallsWhenItIsLifted()
+    {
+        var stacks = new[] { Host, Client };
+        var bottom = stacks.Select(stack => HarnessWorld.Crate(stack, "Bottom", new Vector3(0, 0.5f, 3))).ToArray();
+        var top = stacks.Select(stack => HarnessWorld.Crate(stack, "Top", new Vector3(0, 1.5f, 3))).ToArray();
+        var carriers = stacks.Select(stack => HarnessWorld.Walker(stack, 2, new Vector3(0, 1, 0), Vector3.Zero)).ToArray();
+        var hands = carriers.Select(carrier => StillHand(carrier, new Vector3(0, -0.5f, 3))).ToArray();   // the walker stands at y = 1
+        for (var i = 0; i < 20; i++) await NextFrame();
+
+        // Attached in place: the hand is exactly where the crate stands, so the top crate keeps resting on it
+        Expect.True(carriers[1].TryAttach(bottom[1], hands[1]));
+        Expect.True(await WaitUntil(() => top[1].Authority.IsLocal, 3), "taking the bottom crate did not take the one on it");
+        var changes = new List<int>();
+        top[1].Net().AuthorityChanged += () => changes.Add(top[1].Authority.Peer);
+        for (var seconds = 0.0; seconds < 2; seconds += GetProcessDeltaTime()) await NextFrame();
+        Expect.True(changes.Count == 0 && top[1].Authority.IsLocal,
+            $"the crate on the held crate went back to the host while it was held: authority now {top[1].Authority.Peer}, changes {string.Join(", ", changes)}");
+
+        // Lifted away: the top crate falls here at once, it does not hang waiting for the host
+        hands[1].Position = new Vector3(0, 1.5f, 1);
+        Expect.True(await WaitUntil(() => top[1].GlobalPosition.Y < 0.7f, 2), $"the crate did not fall when its support was lifted away: at {top[1].GlobalPosition}, authority {top[1].Authority.Peer}");
+    }
 }

@@ -390,6 +390,12 @@ public partial class NetworkObject : Node
 
     internal NetworkObject? Carrier => _carrier;
 
+    /// <summary>
+    /// The attachment this peer asked for on a player it does not simulate, while the claim stands: shown here at
+    /// once, optimistically, rather than a round trip and a playback delay later when the player's own stream says so.
+    /// </summary>
+    internal Attachment? ClaimedHere => !IsAuthority && !Transferable && ClaimedBy == LocalPeer ? ClaimAttachment : null;
+
     private readonly List<NetworkObject> _attached = new();
     private NetworkObject? _carrier;
     private Node3D? _anchor;

@@ -145,10 +145,41 @@ internal abstract class PhysicsHandling
                 Logger.Debug("{0} touches {1}: {2}", _body.Name, other.Root!.Name, Object.Spread(other));
         }
 
+        /// <summary>
+        /// At rest against what it touches: on the floor slower than <see cref="RestSpeed"/>, on a moving platform
+        /// slower than that relative to the platform, with a margin that grows with the platform's speed. A copy of a
+        /// platform is moved by playback in render frames, so the velocity the engine reports for it, and the
+        /// bouncing of a body riding it, are noisy in proportion to its speed; a crate riding a lift on a guest is
+        /// better off back with the host, on the real lift, than judged never to rest.
+        /// </summary>
+        private bool RestsOnWhatItTouches()
+        {
+            if (_body.LinearVelocity.Length() < RestSpeed) return true;
+            foreach (var other in _body.GetCollidingBodies())
+            {
+                if (other is not PhysicsBody3D under) continue;
+                var underVelocity = PhysicsServer3D.BodyGetState(under.GetRid(), PhysicsServer3D.BodyState.LinearVelocity).AsVector3();
+                if (underVelocity.Length() < RestSpeed) continue;
+                if ((_body.LinearVelocity - underVelocity).Length() < RestSpeed + 0.3f * underVelocity.Length()) return true;
+            }
+            return false;
+        }
+
+        /// <summary>Whether <paramref name="member"/> touches a rigid body this peer holds (attached, collisions off).</summary>
+        private static bool RestsOnAHeldItem(NetworkObject member)
+        {
+            foreach (var held in Shared)
+            {
+                if (held.Object.AttachedTo is null || !held.Object.Authority.IsLocal || ReferenceEquals(held.Object, member)) continue;
+                if (TouchingOf(held._body, mask: uint.MaxValue).Any(other => ReferenceEquals(other, member))) return true;
+            }
+            return false;
+        }
+
         /// <summary>The objects whose bodies touch this one: resting contacts too, which a frozen body reports none of.</summary>
         private IEnumerable<NetworkObject> Touching() => TouchingOf(_body);
 
-        private static IEnumerable<NetworkObject> TouchingOf(RigidBody3D body, Vector3 offset = default)
+        private static IEnumerable<NetworkObject> TouchingOf(RigidBody3D body, Vector3 offset = default, uint? mask = null)
         {
             if (!body.IsInsideTree()) yield break;
             // Not disposed, unlike the query below: a Godot object has one C# handle, shared with any game code that
@@ -164,7 +195,7 @@ internal abstract class PhysicsHandling
                     Shape = shape.Shape,
                     Transform = shape.GlobalTransform.Translated(offset),
                     Margin = 0.05f,
-                    CollisionMask = body.CollisionMask,
+                    CollisionMask = mask ?? body.CollisionMask,
                     Exclude = [body.GetRid()],
                 };
                 foreach (var hit in space.IntersectShape(query, 16))
@@ -203,16 +234,20 @@ internal abstract class PhysicsHandling
                 return;
             }
             TouchAhead();
-            Object.RestFrames = _body.Sleeping || _body.LinearVelocity.Length() < RestSpeed ? Object.RestFrames + 1 : 0;
+            Object.RestFrames = _body.Sleeping || RestsOnWhatItTouches() ? Object.RestFrames + 1 : 0;
             if (Object.RestFrames < RestFramesBeforeReturning) return;
 
             // Every body of the group has to have rested as long; a held one never counts
             var group = RestingGroup();
             if (group.Any(member => member.RestFrames < RestFramesBeforeReturning)) return;
             // Not from under a player, local or replayed: handed over, each peer would have the other body a network
-            // delay behind, the two would overlap and the physics engine would throw the player up
+            // delay behind, the two would overlap and the physics engine would throw the player up. Nor from on top
+            // of a held item: handed over, it would hang in the air here until the host's word that it fell once the
+            // item is lifted away. A held item's collisions are off, so no query from the group finds it; the query
+            // goes from the item instead, over every layer
             if (group.Any(member => member.Root is RigidBody3D body
-                    && TouchingOf(body).Any(other => other.ResolvedKind == NetworkObject.ObjectKind.Personal)))
+                    && TouchingOf(body).Any(other => other.ResolvedKind == NetworkObject.ObjectKind.Personal))
+                || group.Any(RestsOnAHeldItem))
             {
                 foreach (var member in group) member.RestFrames = 0;
                 return;
@@ -232,6 +267,7 @@ internal abstract class PhysicsHandling
         {
             if (!Object.Authority.IsLocal) return;
             NetworkObject? floor = null;
+            var floorSeen = false;
             for (var i = 0; i < body.GetSlideCollisionCount(); i++)
             {
                 var collision = body.GetSlideCollision(i);   // Godot reuses these: the handle may be the game's too
@@ -243,6 +279,7 @@ internal abstract class PhysicsHandling
                 // platform_floor_layers, as it does for the platform's velocity
                 if (collision.GetNormal().AngleTo(body.UpDirection) <= body.FloorMaxAngle)
                 {
+                    floorSeen = true;
                     if (other.Root is CollisionObject3D under && (under.CollisionLayer & body.PlatformFloorLayers) != 0) floor = other;
                     continue;
                 }
@@ -250,7 +287,23 @@ internal abstract class PhysicsHandling
                 if (Object.ImpulseStrength > 0 && node is RigidBody3D) Object.Impulse(other, -collision.GetNormal() * Object.ImpulseStrength);
                 else Object.Spread(other);
             }
-            Object.Base = body.IsOnFloor() ? floor : null;
+            // Carried up by a rising platform, or snapped to the floor, the engine reports on-floor without a slide
+            // collision at all: the base then stays what it was. A floor of another kind (the ground) ends it
+            if (!body.IsOnFloor()) Object.Base = null;
+            else if (floorSeen || Object.Base is null) Object.Base = floor ?? (FloorOfAnotherKind(body) ? null : Object.Base);
+        }
+
+        /// <summary>Whether a floor contact this frame was with something that is not a replicated object.</summary>
+        private static bool FloorOfAnotherKind(CharacterBody3D body)
+        {
+            for (var i = 0; i < body.GetSlideCollisionCount(); i++)
+            {
+                var collision = body.GetSlideCollision(i);
+                if (collision.GetNormal().AngleTo(body.UpDirection) <= body.FloorMaxAngle
+                    && (collision.GetCollider() is not Node node || NetworkObject.Of(node) is null))
+                    return true;
+            }
+            return false;
         }
     }
 }

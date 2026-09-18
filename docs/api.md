@@ -151,6 +151,7 @@ One replicated object. While its root is this peer's multiplayer authority it se
 | property | `Base` | The object whose body the engine reports as this character's floor, set by its physics handling every physics frame on the authority: its position goes out relative to that body, and every peer puts it on its own copy. |
 | property | `ClaimAttachment` | The attachment that rides on this object's claim record: where the claimant wants it hung. A carried player's own peer hangs the player from it when the host's record arrives; for a crate the claimant hangs it itself. |
 | property | `ClaimedBy` | The peer holding the object, or 0 when nobody does. |
+| property | `ClaimedHere` | The attachment this peer asked for on a player it does not simulate, while the claim stands: shown here at once, optimistically, rather than a round trip and a playback delay later when the player's own stream says so. |
 | property | `Context` | The stack this object belongs to; resolved when it enters the tree. |
 | property | `Diagnostics` | Sequences, display tick and sample events: for checks and diagnostics, not for game logic. |
 | property | `EarlySamples` | State from a peer that is not the authority here yet, kept for when the host's word arrives. |

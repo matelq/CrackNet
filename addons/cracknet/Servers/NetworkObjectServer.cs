@@ -708,10 +708,14 @@ public partial class NetworkObjectServer : Node
         // From the first despawn sample on. It is sent repeatedly, so playback spends the grace period between two
         // despawn samples, and waiting for the last one left the object hanging where it ended
         var reachedDespawn = from.Despawned || to.Despawned && fraction >= 1;
-        // Hung or free as of the sample playback is coming from: the switch happens when playback passes the sample
-        // that made it, at the carrier's display tick, not when the host's record of the claim arrived. Across the
-        // switch the transform holds: a world position and an anchor offset have no line between them
-        var attachment = from.Attachment;
+        // Hung or free as of the sample playback is coming from, and as of the one it reached once the fraction is 1:
+        // the clock holds exactly on the newest sample of a resting object, so that pair is a steady state, not a
+        // moment. The switch happens when playback reaches the sample that made it, at the carrier's display tick, not
+        // when the host's record of the claim arrived. Across the switch the transform holds: a world position and an
+        // anchor offset have no line between them
+        var atEnd = fraction >= 1;
+        var sampled = atEnd ? to.Attachment : from.Attachment;
+        var attachment = sampled ?? obj.ClaimedHere;
         var switching = from.Attachment != to.Attachment;
         for (var i = 0; i < obj.Properties.Count; i++)
         {
@@ -723,8 +727,10 @@ public partial class NetworkObjectServer : Node
 
             var value = interpolate && !to.Snap && !(switching && isTransform) && !ReferenceEquals(interpolator, Interpolators.DefaultInterpolator)
                 ? interpolator.Apply(a, b, fraction)
-                : fraction >= 1 && !(switching && isTransform) ? b : a;
-            if (isTransform && attachment is not null) obj.ShowAttached(attachment, value.AsTransform3D());
+                : atEnd ? b : a;
+            // A player this peer asked to carry is put in the hand before its own stream says so: its samples still
+            // carry a world position, which is not an offset
+            if (isTransform && attachment is not null) obj.ShowAttached(attachment, sampled is null ? Transform3D.Identity : value.AsTransform3D());
             else node.SetValue(property, value);
         }
         if (attachment is null) obj.ShowFree();
