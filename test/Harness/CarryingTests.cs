@@ -25,8 +25,11 @@ public partial class CarryingTests : HarnessSuite
         return third;
     }
 
-    /// <summary>Placed on the anchor after the animation, an item is exactly there; anything else is a lag.</summary>
-    private const float CarryTolerance = 0.02f;
+    /// <summary>
+    /// Placed on the anchor after the animation, an item is exactly there (0.000 m); anything else is a lag. On 4.7.2
+    /// an item placed in the last process callback of the frame, not deferred, reads a BoneAttachment3D 0.017 m off.
+    /// </summary>
+    private const float CarryTolerance = 0.005f;
 
     /// <summary>
     /// Peer 2 walks with a crate in a hand that its animation bobs; the host and a third peer watch. Measured per
@@ -266,5 +269,111 @@ public partial class CarryingTests : HarnessSuite
         for (var i = 0; i < 20; i++) await NextFrame();
         drawn.QueueFree();
         Expect.True(worst < CarryTolerance, $"the late joiner draws the crate {worst:F3} m from the hand");
+    }
+
+    /// <summary>
+    /// On an observer the thrower's first free sample is not where the observer's own hand is: its hand animation
+    /// runs on its own clock, so its hand is elsewhere in the swing. Here the observer's hand sits 0.6 m from the
+    /// thrower's. The body jumps that gap at the detach tick; what is drawn (Visual) catches up instead, as on a
+    /// handover, and the thrower's impulse right after Detach flies on the thrower's own simulation at once.
+    /// </summary>
+    [Test]
+    public async Task ADetachedItemIsDrawnWithoutAJump()
+    {
+        var crates = new[]
+        {
+            HarnessWorld.Crate(Host, "Crate", new Vector3(0, 0.5f, 3), smoothed: true),
+            HarnessWorld.Crate(Client, "Crate", new Vector3(0, 0.5f, 3), smoothed: true),
+        };
+        // Long enough for a fade that spans several 30-110 ms harness frames; the default is for a playtest to judge
+        foreach (var crate in crates) crate.Net().SmoothingTime = 1;
+        var carriers = new[] { HarnessWorld.Walker(Host, 2, new Vector3(0, 1, 0), Vector3.Zero), HarnessWorld.Walker(Client, 2, new Vector3(0, 1, 0), Vector3.Zero) };
+        var hands = carriers.Select(carrier =>
+        {
+            var hand = new Marker3D { Name = "Hand", Position = new Vector3(0, 0.8f, -1) };
+            carrier.AddChild(hand);
+            return hand;
+        }).ToArray();
+        hands[0].Position += new Vector3(0, 0.6f, 0);
+        var visual = crates[0].GetNode<Node3D>("Visual");
+        for (var i = 0; i < 10; i++) await NextFrame();
+
+        Expect.True(carriers[1].TryAttach(crates[1], hands[1]));
+        Expect.True(await WaitUntil(() => crates[0].AttachedTo is not null, 3), "the host never showed it attached");
+        for (var i = 0; i < 10; i++) await NextFrame();
+
+        var frames = new List<(Vector3 Body, Vector3 Drawn, Vector3 Velocity, double Delta, bool Attached)>();
+        var drawn = new DrawnFrame();
+        AddChild(drawn);
+        drawn.Drawn += () => frames.Add((crates[0].GlobalPosition, visual.GlobalPosition, crates[0].LinearVelocity, GetProcessDeltaTime(), crates[0].AttachedTo is not null));
+
+        Expect.True(carriers[1].Detach(crates[1]));
+        crates[1].Impulse(new Vector3(0, 2, -6) * crates[1].Mass);
+        for (var i = 0; i < 3; i++) await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+        Expect.True(crates[1].LinearVelocity.Z < -4, $"the impulse right after Detach was lost on the thrower: {crates[1].LinearVelocity}");
+        for (var seconds = 0.0; seconds < 2.5; seconds += GetProcessDeltaTime()) await NextFrame();
+        drawn.QueueFree();
+
+        // The motion the body's own speed does not explain, per frame, for the body and for what is drawn
+        var detached = frames.FindIndex(frame => !frame.Attached);
+        Expect.True(detached > 0, "the host never showed the throw");
+        float bodyJump = 0, drawnJump = 0;
+        for (var i = detached; i < frames.Count; i++)
+        {
+            var expected = Mathf.Max(frames[i].Velocity.Length(), frames[i - 1].Velocity.Length()) * (float)frames[i].Delta;
+            bodyJump = Mathf.Max(bodyJump, frames[i].Body.DistanceTo(frames[i - 1].Body) - expected);
+            drawnJump = Mathf.Max(drawnJump, frames[i].Drawn.DistanceTo(frames[i - 1].Drawn) - expected);
+        }
+        var settled = frames[^1].Drawn.DistanceTo(frames[^1].Body);
+        var report = $"body jumped {bodyJump:F2} m, drawn {drawnJump:F2} m, drawn {settled:F3} m from the body 2.5 s later";
+        GD.Print("DETACH JUMPS " + report);
+        Expect.True(bodyJump > 0.4f, "the body did not jump the gap, so this measures nothing: " + report);
+        Expect.True(drawnJump < 0.25f, "the thrown crate jumps on the observer's screen: " + report);
+        Expect.True(settled < 0.05f, "the drawn crate never caught up with the body: " + report);
+    }
+
+    /// <summary>
+    /// The hand is a marker under a BoneAttachment3D on an animated bone. The skeleton moves the attachment in a
+    /// deferred notification after every node's process, so an item placed in an ordinary process callback would
+    /// read the bone a frame late. Measured at the end of every frame on the carrier's peer and on the host, with the
+    /// item added to the tree before the carrier.
+    /// </summary>
+    [Test]
+    public async Task AnItemOnABoneAttachmentDoesNotLagTheHand()
+    {
+        var stacks = new[] { Host, Client };
+        var crates = stacks.Select(stack => HarnessWorld.Crate(stack, "Crate", new Vector3(0, 0.5f, 3))).ToArray();
+        var carriers = stacks.Select(stack => HarnessWorld.Walker(stack, 2, new Vector3(0, 1, 0), new Vector3(2, 0, 0))).ToArray();
+        var hands = carriers.Select(HarnessWorld.BoneHand).ToArray();
+        for (var i = 0; i < 20; i++) await NextFrame();
+
+        Expect.True(carriers[1].TryAttach(crates[1], hands[1]));
+        Expect.True(await WaitUntil(() => crates[0].AttachedTo is not null, 3), "the host never showed it attached");
+        for (var i = 0; i < 10; i++) await NextFrame();
+
+        var worst = new float[stacks.Length];
+        var handLow = new float[stacks.Length];
+        var handHigh = new float[stacks.Length];
+        Array.Fill(handLow, float.MaxValue);
+        Array.Fill(handHigh, float.MinValue);
+        var drawn = new DrawnFrame();
+        AddChild(drawn);
+        drawn.Drawn += () =>
+        {
+            for (var i = 0; i < stacks.Length; i++)
+            {
+                worst[i] = Mathf.Max(worst[i], crates[i].GlobalPosition.DistanceTo(hands[i].GlobalPosition));
+                handLow[i] = Mathf.Min(handLow[i], hands[i].GlobalPosition.Y);
+                handHigh[i] = Mathf.Max(handHigh[i], hands[i].GlobalPosition.Y);
+            }
+        };
+        for (var seconds = 0.0; seconds < 2; seconds += GetProcessDeltaTime()) await NextFrame();
+        drawn.QueueFree();
+
+        var report = string.Join("; ", stacks.Select((stack, i) => $"{stack.Name}: crate off the bone by {worst[i]:F3} m, bone swung {handHigh[i] - handLow[i]:F2} m"));
+        GD.Print("BONE HAND " + report);
+        for (var i = 0; i < stacks.Length; i++)
+            Expect.True(handHigh[i] - handLow[i] > 0.4f, $"{stacks[i].Name}'s bone did not swing: " + report);
+        Expect.True(worst.All(distance => distance < CarryTolerance), "the crate lags the bone: " + report);
     }
 }

@@ -72,4 +72,38 @@ internal static class HarnessWorld
         player.Play("bob");
         return hand;
     }
+
+    /// <summary>
+    /// A one-bone skeleton under <paramref name="carrier"/> whose bone an AnimationPlayer swings 0.6 m up and down twice a
+    /// second, and a hand marker under a <see cref="BoneAttachment3D"/> on that bone: the skeleton applies its poses and
+    /// moves the attachment in a deferred notification, after every node's process, which is where an item placed in
+    /// an ordinary <c>_Process</c> would read the bone a frame late.
+    /// </summary>
+    public static Marker3D BoneHand(Node3D carrier)
+    {
+        var skeleton = new Skeleton3D { Name = "Skeleton" };
+        skeleton.AddBone("hand");
+        var rest = new Transform3D(Basis.Identity, new Vector3(0, 0.8f, -1));
+        skeleton.SetBoneRest(0, rest);
+        skeleton.SetBonePosePosition(0, rest.Origin);
+        carrier.AddChild(skeleton);
+        var attachment = new BoneAttachment3D { Name = "HandBone", BoneName = "hand" };
+        skeleton.AddChild(attachment);
+        var hand = new Marker3D { Name = "Hand" };
+        attachment.AddChild(hand);
+
+        var animation = new Animation { Length = 0.5f, LoopMode = Animation.LoopModeEnum.Linear };
+        var track = animation.AddTrack(Animation.TrackType.Position3D);
+        animation.TrackSetPath(track, new NodePath("Skeleton:hand"));
+        animation.PositionTrackInsertKey(track, 0, rest.Origin);
+        animation.PositionTrackInsertKey(track, 0.25, rest.Origin + Vector3.Up * 0.6f);
+        animation.PositionTrackInsertKey(track, 0.5, rest.Origin);
+        var library = new AnimationLibrary();
+        library.AddAnimation("swing", animation);
+        var player = new AnimationPlayer { Name = "Animation" };
+        player.AddAnimationLibrary("", library);
+        carrier.AddChild(player);
+        player.Play("swing");
+        return hand;
+    }
 }

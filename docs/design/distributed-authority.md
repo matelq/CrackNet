@@ -301,6 +301,13 @@ parent sync.
   every peer, restored on detach; the case that shows it is walking into an awake pile with the crate held out
   (`AHeldItemPassesThroughWhatItIsCarriedIntoAndCollidesAgainWhenLetGo`: top crate shoved 0.87 m without it, 0.00 with).
   A crate can carry a crate; a cycle is refused; a player is refused until the next step.
+- **Frame order, verified on 4.7.2** (`AnItemOnABoneAttachmentDoesNotLagTheHand`, `ADetachedItemIsDrawnWithoutAJump`):
+  a `Marker3D` moved by an `AnimationPlayer` is final by the time the highest-priority process runs, and an item
+  placed there is exact; a `Marker3D` under a `BoneAttachment3D` is 0.017 m off at that point and exact only when the
+  placement is deferred behind the skeleton's own deferred update. Detach on an observer whose hand is 0.6 m from the
+  thrower's: the body jumps 0.59 m, the drawn crate 0.01 m and is within 1 mm of the body 2.5 s later; without the
+  smoothing window it jumps the whole 0.56 m. The impulse applied in the same frame as `Detach` is not lost on the
+  thrower: 3 physics steps later the crate flies at the thrown speed.
 - **Tests first:** per frame on a remote peer during a carried walk with animation, item-to-anchor distance near zero,
   failing on today's carry before the change; attach and detach at the carrier's display tick; no jump during the
   detach blend; a third peer's carried player on its displayed carrier; a late joiner sees the item in the hand.
