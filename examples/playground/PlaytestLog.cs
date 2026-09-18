@@ -58,7 +58,7 @@ public static class PlaytestLog
 
     private static string State(PlaygroundCrate crate)
         => $"{crate.Name} at {crate.GlobalPosition:F2} v {crate.LinearVelocity:F1} authority {crate.Authority.Peer} " +
-           $"holder {crate.Holder} frozen {crate.Freeze} layer {crate.CollisionLayer}";
+           $"holder {crate.ClaimedBy} frozen {crate.Freeze} layer {crate.CollisionLayer}";
 
     public static void Action(PlaygroundPlayer player, string what) => Write(player, $"ACTION {player.Name} {what} at {player.GlobalPosition:F2}");
 
@@ -76,7 +76,7 @@ public static class PlaytestLog
 
         if (frame % 6 == 0)
         {
-            var moving = crates.Where(crate => crate.LinearVelocity.Length() > MovingSpeed && crate.Visible)
+            var moving = crates.Where(crate => crate.LinearVelocity.Length() > MovingSpeed && crate.PlaybackState == PlaybackState.Playing)
                 .Select(crate => $"{crate.Name}@{crate.Authority.Peer} {crate.GlobalPosition:F1} {crate.LinearVelocity.Length():F1}");
             var line = string.Join("; ", moving);
             if (line.Length > 0) Write(playground, $"MOVE {line}");

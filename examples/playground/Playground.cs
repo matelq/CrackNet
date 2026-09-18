@@ -146,12 +146,12 @@ public partial class Playground : Node3D
     {
         foreach (var (crate, start) in _crateStarts)
         {
-            crate.Release();
+            crate.ReleaseClaim();
             crate.Authority.Take();
             // A reset is a jump, not a flight. A crate resting here when it happens is snapped anyway, because its
             // first sample after a silence resumes playback rather than continuing from a stale one; a crate that was
             // moving is not, and would be drawn gliding back across the arena
-            crate.Net().Teleport();
+            crate.Snap();
             crate.GlobalTransform = start;
             crate.LinearVelocity = Vector3.Zero;
             crate.AngularVelocity = Vector3.Zero;

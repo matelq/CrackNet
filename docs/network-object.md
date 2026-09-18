@@ -22,7 +22,8 @@ Pick a kind by hand only when the type says the wrong thing: a grenade is a rigi
 | Member | Meaning |
 |---|---|
 | `Authority.Peer`, `Authority.IsLocal` | The peer that simulates the object and sends its state (Godot's multiplayer authority of the root), and whether it is this one. |
-| `Holder` | The peer holding the object, or 0. A held object cannot be taken by anyone else. |
+| `ClaimedBy` | The peer holding the object, or 0. A held object cannot be taken by anyone else. |
+| `PlaybackState` | `Pending` until playback here reaches the first sample, `Playing`, then `Ending` after a despawn. What a projectile checks before it hits someone, instead of `Visible`. |
 | `AuthorityChanged` | Raised on every peer after authority or holder changed; for watching someone else's object. |
 
 Every change is optimistic: it applies on the requesting peer at once and goes to the host, which accepts it or
@@ -35,9 +36,9 @@ the host at rest, a character body touches what it slides into. Games call:
 | Call | When |
 |---|---|
 | `TryClaim()` | The object becomes this peer's: authority and ownership, nobody else can take it. The body is frozen while claimed; move it by hand. |
-| `Throw(velocity)` | Lets go with a velocity: the throw flies on this peer's simulation. |
-| `Release()` | Lets go without one. |
-| `Touch(other)` | Contact the physics engine does not report: a projectile that moves itself, a melee swing. |
+| `ReleaseClaim(velocity)` | Lets go with a velocity: the throw flies on this peer's simulation. |
+| `ReleaseClaim()` | Lets go without one. |
+| `Spread(other)` | Contact the physics engine does not report: a projectile that moves itself, a melee swing. |
 | `Authority.Take()`, `Authority.ReturnToHost()` | What physics bodies do themselves, by hand: for `Custom` objects. |
 
 Conflicts are settled by the host. A grab beats a touch, and of two touches the first one to arrive wins.
@@ -48,8 +49,8 @@ If two peers can both decide the same hit or grab, the mechanic is not finished.
 
 ## Pushes and events
 
-Every call below also works on the game's own node: `crate.Push(...)`, `crate.TryClaim()`, `this.Authority.IsLocal`,
-`this.TakeKnockback(delta)`, `crate.Holder`. `node.Net()` returns the `NetworkObject` itself, for the rarer
+Every call below also works on the game's own node: `crate.Impulse(...)`, `crate.TryClaim()`, `this.Authority.IsLocal`,
+`this.TakeImpulses(delta)`, `crate.ClaimedBy`. `node.Net()` returns the `NetworkObject` itself, for the rarer
 `Send` and `Diagnostics`.
 
 Every one of them needs a `NetworkObject` on the node it reaches, and the build says so when it is missing: `NFX006`
@@ -69,16 +70,16 @@ public partial class Crate : RigidBody3D, IAuthorityChanged
 ```
 
 ```csharp
-this.Push(target, impulse);                              // my object struck yours: takes a crate, pushes a player
-target.Push(impulse);                                    // nothing doing the pushing: an explosion, a trap
-Velocity += this.TakeKnockback(delta);             // a character applies the pushes it received
+this.Impulse(target, impulse);                              // my object struck yours: takes a crate, pushes a player
+target.Impulse(impulse);                                    // nothing doing the pushing: an explosion, a trap
+Velocity += this.TakeImpulses(delta);             // a character applies the pushes it received
 ```
 
 A push reaches whoever simulates the object: a rigid body takes the impulse itself; anything else adds it to
-`TakeKnockback` and raises `Pushed`. `Push(target, impulse)` first takes the target when it can, so a crate flies on
+`TakeImpulses` and raises `Impulsed`. `Impulse(target, impulse)` first takes the target when it can, so a crate flies on
 the striker's simulation at once; if the host gives the crate to someone else instead, that push is lost with the
 claim. Players do not collide with each other, since each would push a copy of the other in the past: a push is how
-they shove. **Push Strength** on a character's `NetworkObject` pushes the rigid bodies it walks into.
+they shove. **Impulse Strength** on a character's `NetworkObject` pushes the rigid bodies it walks into.
 
 ```csharp
 target.Object.Send("opened");                            // from anyone
@@ -94,7 +95,7 @@ a claim the host has not confirmed yet: then it waits for the host's answer, and
 A projectile belongs to its shooter: spawn it with its generated `Spawn`, and its plain `Node3D` root makes it
 `Personal`. The shooter's peer moves it and decides every hit against the targets it displays: it pushes the target
 and calls `Despawn()` in the same frame, so a projectile cannot pass through its first target or hit twice. To push a
-crate with one, `this.Push(crate, impulse)` takes it and pushes it. `PlaygroundShot` is the worked example.
+crate with one, `this.Impulse(crate, impulse)` takes it and pushes it. `PlaygroundShot` is the worked example.
 
 Hitscan needs nothing extra: the shooter runs an ordinary ray query. Bodies other peers simulate sit frozen at their
 displayed positions, so the ray hits what the shooter sees.
@@ -107,7 +108,7 @@ displayed positions, so the ray hits what the shooter sees.
 - `Despawn()` ends the object's timeline. The authority hides it and stops processing at once. Other peers keep
   showing it until their playback reaches the final sample, then hide it; the root is freed everywhere after a grace
   period. Do not `QueueFree` a replicated object yourself.
-- `Teleport()` makes the next sample apply without blending: a respawn, not a flight across the map.
+- `Snap()` makes the next sample apply without blending: a respawn, not a flight across the map.
 
 ## What is sent
 

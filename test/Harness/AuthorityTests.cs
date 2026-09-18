@@ -25,10 +25,10 @@ public partial class AuthorityTests : HarnessSuite
         ];
 
     private static bool Agree(HarnessBody[] bodies, int authority, int owner)
-        => bodies.All(body => body.Object.Authority.Peer == authority && body.Object.Holder == owner);
+        => bodies.All(body => body.Object.Authority.Peer == authority && body.Object.ClaimedBy == owner);
 
     private static string Describe(HarnessBody[] bodies)
-        => string.Join(", ", bodies.Select(body => $"{body.Multiplayer.GetUniqueId()}: auth {body.Object.Authority.Peer} owner {body.Object.Holder}"));
+        => string.Join(", ", bodies.Select(body => $"{body.Multiplayer.GetUniqueId()}: auth {body.Object.Authority.Peer} owner {body.Object.ClaimedBy}"));
 
     [Test]
     public async Task TwoPeersGrabAtOnceAndExactlyOneEndsUpHoldingIt()
@@ -79,7 +79,7 @@ public partial class AuthorityTests : HarnessSuite
 
         // The client throws one crate into another: it takes the first, then the one it hits
         Expect.True(thrown[1].Object.TryClaim());
-        thrown[1].Object.Release();
+        thrown[1].Object.ReleaseClaim();
         Expect.True(hit[1].Object.Authority.Take());
 
         Expect.True(await WaitUntil(() => Agree(thrown, 2, 0) && Agree(hit, 2, 0), 3), Describe(thrown) + " / " + Describe(hit));
@@ -173,9 +173,9 @@ public partial class AuthorityTests : HarnessSuite
         foreach (var body in first) body.Object.SpreadsAuthority = true;
         await NextFrame();
 
-        Expect.True(source[1].Object.Touch(first[1].Object));
+        Expect.True(source[1].Object.Spread(first[1].Object));
         Expect.True(await WaitUntil(() => Agree(first, 2, 0), 3), Describe(first));
-        Expect.False(first[1].Object.Touch(second[1].Object));
+        Expect.False(first[1].Object.Spread(second[1].Object));
         for (var i = 0; i < 20; i++) await NextFrame();
         Expect.True(Agree(second, 1, 0), Describe(second));
     }
@@ -190,8 +190,8 @@ public partial class AuthorityTests : HarnessSuite
         foreach (var body in left.Concat(right)) body.Object.SpreadsAuthority = true;
         await NextFrame();
 
-        Expect.True(left[1].Object.Touch(right[1].Object));
-        Expect.True(right[2].Object.Touch(left[2].Object));
+        Expect.True(left[1].Object.Spread(right[1].Object));
+        Expect.True(right[2].Object.Spread(left[2].Object));
 
         Expect.True(await WaitUntil(() => Agree(left, 2, 0) && Agree(right, 2, 0), 5),
             Describe(left) + " / " + Describe(right));

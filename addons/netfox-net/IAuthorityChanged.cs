@@ -5,7 +5,7 @@ namespace Netfox;
 /// <summary>
 /// Implemented by a replicated node that wants to know when it changed hands: who simulates it, or who holds it. The
 /// library calls <see cref="OnAuthorityChanged"/> on every peer, right after it has applied the change, so
-/// <c>this.Authority</c> and <c>this.Holder</c> already read the new values.
+/// <c>this.Authority</c> and <c>this.ClaimedBy</c> already read the new values.
 /// <para>
 /// Preferred over subscribing to <see cref="NetworkObject.AuthorityChanged"/> from the node itself: nothing to
 /// unsubscribe in <c>_ExitTree</c>. The event stays for watching someone else's object.

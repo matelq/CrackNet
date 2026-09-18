@@ -126,14 +126,14 @@ public partial class NetworkObjectTests : HarnessSuite
     }
 
     [Test]
-    public async Task TeleportDoesNotFlyThroughTheMap()
+    public async Task ASnapDoesNotFlyThroughTheMap()
     {
         var onHost = HarnessBody.Place(Host, "Player", 1, Speed);
         var onClient = HarnessBody.Place(Client, "Player", 1, Speed);
         Expect.True(await WaitUntil(() => onClient.Location.X > 0.3f, 5), $"client {onClient.Location}");
 
         onHost.Location = new Vector3(1000, 0, 0);
-        onHost.Object.Teleport();
+        onHost.Object.Snap();
 
         var inBetween = 0;
         var landed = false;

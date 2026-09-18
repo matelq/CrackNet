@@ -169,7 +169,7 @@ public partial class NetworkObjectServer : Node
 
         foreach (var obj in _objects)
         {
-            if (obj.Authority.Peer != peer && obj.Holder != peer) continue;
+            if (obj.Authority.Peer != peer && obj.ClaimedBy != peer) continue;
             // Players leave with their peer; the game frees them. What is left behind goes back to the host.
             if (!obj.Transferable) continue;
             obj.Apply(NetworkObject.HostPeer, 0, obj.AuthoritySequence + 1, obj.OwnershipSequence + 1,
@@ -250,7 +250,7 @@ public partial class NetworkObjectServer : Node
             NetRef.Encode(Core.Data.NetworkIdentityReference.OfFullName(identifier.FullName), writer);
             VarUint.Encode(target == answering || answering == 0 ? requestId : 0, writer);
             VarUint.Encode(obj.Authority.Peer, writer);
-            VarUint.Encode(obj.Holder, writer);
+            VarUint.Encode(obj.ClaimedBy, writer);
             VarUint.Encode(obj.AuthoritySequence, writer);
             VarUint.Encode(obj.OwnershipSequence, writer);
             writer.PutU8(obj.Transferable ? (byte)1 : (byte)0);
@@ -324,14 +324,14 @@ public partial class NetworkObjectServer : Node
 
         var authorityAllowed = obj.Transferable
                                && obj.IsNewer(authoritySequence, ownershipSequence)
-                               && (obj.Holder == 0 || obj.Holder == sender)
+                               && (obj.ClaimedBy == 0 || obj.ClaimedBy == sender)
                                && (authority == sender || (authority == NetworkObject.HostPeer && obj.Authority.Peer == sender))
                                && (owner == 0 || owner == sender)
                                && causeAllowed;
         var configurationAllowed = transferableSequence > obj.TransferableSequence
                                    && sender == obj.Authority.Peer
                                    && authority == obj.Authority.Peer
-                                   && owner == obj.Holder
+                                   && owner == obj.ClaimedBy
                                    && authoritySequence == obj.AuthoritySequence
                                    && ownershipSequence == obj.OwnershipSequence;
 
@@ -344,7 +344,7 @@ public partial class NetworkObjectServer : Node
                 ApplyRecord(obj, record);
             }
             else
-                obj.Apply(obj.Authority.Peer, obj.Holder, obj.AuthoritySequence, obj.OwnershipSequence,
+                obj.Apply(obj.Authority.Peer, obj.ClaimedBy, obj.AuthoritySequence, obj.OwnershipSequence,
                     transferable, transferableSequence, obj.SpreadCause, obj.SpreadDepth, obj.SpreadLimit);
             SendAuthority(obj, 0, requestId, answering: sender);
         }
@@ -352,7 +352,7 @@ public partial class NetworkObjectServer : Node
         {
             Logger.Debug("Rejected authority change on {0} from #{1}: transferable {2}, newer {3}, free {4}, cause {5} ({6}: authority {7}, depth {8}/{9})",
                 identifier.FullName, sender, obj.Transferable, obj.IsNewer(authoritySequence, ownershipSequence),
-                obj.Holder == 0 || obj.Holder == sender, causeAllowed, spreadCause,
+                obj.ClaimedBy == 0 || obj.ClaimedBy == sender, causeAllowed, spreadCause,
                 cause?.Authority.Peer, spreadDepth, cause is null ? -1 : cause.SpreadDepth + 1);
             SendAuthority(obj, sender, requestId, answering: sender);
         }
@@ -419,7 +419,7 @@ public partial class NetworkObjectServer : Node
             // Flags: 1 teleport, 2 resumed after a rest, 4 final despawn sample.
             var resumed = obj.LastSentBody is not null && stateTick - obj.LastSentTick > StateIntervalTicks;
             var writer = new ByteWriter();
-            writer.PutU8((byte)((obj.TeleportPending ? 1 : 0) | (resumed ? 2 : 0) | (obj.DespawnRequested ? 4 : 0)));
+            writer.PutU8((byte)((obj.SnapPending ? 1 : 0) | (resumed ? 2 : 0) | (obj.DespawnRequested ? 4 : 0)));
             foreach (var (node, property, _) in obj.Properties)
                 CompactValues.Encode(node.GetValue(property), writer);
             var body = writer.ToArray();
@@ -438,7 +438,7 @@ public partial class NetworkObjectServer : Node
 
             obj.LastSentBody = body;
             obj.LastSentTick = stateTick;
-            obj.TeleportPending = false;
+            obj.SnapPending = false;
             sending.Add((obj, identifier, body));
             obj.Diagnostics.RaiseSampleSent(stateTick);
         }
@@ -600,7 +600,7 @@ public partial class NetworkObjectServer : Node
             var b = to.Values[i];
             var interpolator = Interpolators.FindInterpolatorFor(a);
 
-            var value = interpolate && !to.Teleport && !ReferenceEquals(interpolator, Interpolators.DefaultInterpolator)
+            var value = interpolate && !to.Snap && !ReferenceEquals(interpolator, Interpolators.DefaultInterpolator)
                 ? interpolator.Apply(a, b, fraction)
                 : fraction >= 1 ? b : a;
             node.SetValue(property, value);

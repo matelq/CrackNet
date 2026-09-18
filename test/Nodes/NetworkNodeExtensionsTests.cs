@@ -41,10 +41,10 @@ public partial class NetworkNodeExtensionsTests : TestSuite
         await Mount(player);
 
         // Offline this peer is the authority, so pushes land here at once
-        player.Push(new Vector3(2, 0, 0));
-        player.Push(new Vector3(1, 0, 0));
-        Expect.Equal(new Vector3(3, 0, 0), player.Net().TakeKnockback(0.1, decay: 20));
-        Expect.Equal(new Vector3(1, 0, 0), player.Net().TakeKnockback(0.1, decay: 20));
-        Expect.Equal(Vector3.Zero, player.Net().TakeKnockback(0.1, decay: 20));
+        player.Impulse(new Vector3(2, 0, 0));
+        player.Impulse(new Vector3(1, 0, 0));
+        Expect.Equal(new Vector3(3, 0, 0), player.Net().TakeImpulses(0.1, decay: 20));
+        Expect.Equal(new Vector3(1, 0, 0), player.Net().TakeImpulses(0.1, decay: 20));
+        Expect.Equal(Vector3.Zero, player.Net().TakeImpulses(0.1, decay: 20));
     }
 }

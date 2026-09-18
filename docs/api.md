@@ -19,7 +19,7 @@ Synced values on the wire: a type byte, then the value at float precision. `GD.V
 
 ### IAuthorityChanged
 
-Implemented by a replicated node that wants to know when it changed hands: who simulates it, or who holds it. The library calls `OnAuthorityChanged` on every peer, right after it has applied the change, so `this.Authority` and `this.Holder` already read the new values. Preferred over subscribing to `AuthorityChanged` from the node itself: nothing to unsubscribe in `_ExitTree`. The event stays for watching someone else's object. `public partial class Crate : RigidBody3D, IAuthorityChanged { public void OnAuthorityChanged() => _material.AlbedoColor = ColorOf(this.Authority.Peer); }`
+Implemented by a replicated node that wants to know when it changed hands: who simulates it, or who holds it. The library calls `OnAuthorityChanged` on every peer, right after it has applied the change, so `this.Authority` and `this.ClaimedBy` already read the new values. Preferred over subscribing to `AuthorityChanged` from the node itself: nothing to unsubscribe in `_ExitTree`. The event stays for watching someone else's object. `public partial class Crate : RigidBody3D, IAuthorityChanged { public void OnAuthorityChanged() => _material.AlbedoColor = ColorOf(this.Authority.Peer); }`
 
 | | Member | Summary |
 |---|---|---|
@@ -116,7 +116,7 @@ Tracks network identities: nodes are referenced by scene path, replaced with com
 
 ### NetworkNodeExtensions
 
-The everyday calls, on the game's own nodes: `crate.Push(impulse)` and `this.Authority.IsLocal` rather than `GetNode<NetworkObject>("NetworkObject")`. Each resolves the node's `NetworkObject`, so game code names that class only for the rare things: `Net().AuthorityChanged`, `Net().Send`, `Net().Diagnostics`.
+The everyday calls, on the game's own nodes: `crate.Impulse(impulse)` and `this.Authority.IsLocal` rather than `GetNode<NetworkObject>("NetworkObject")`. Each resolves the node's `NetworkObject`, so game code names that class only for the rare things: `Net().AuthorityChanged`, `Net().Send`, `Net().Diagnostics`.
 
 | | Member | Summary |
 |---|---|---|
@@ -129,14 +129,15 @@ One replicated object. While its root is this peer's multiplayer authority it se
 | | Member | Summary |
 |---|---|---|
 | property | `Authority` | Who simulates the object and sends its state, and taking or returning that by hand. |
+| property | `ClaimedBy` | The peer holding the object, or 0 when nobody does. |
 | property | `Context` | The stack this object belongs to; resolved when it enters the tree. |
 | property | `Diagnostics` | Sequences, display tick and sample events: for checks and diagnostics, not for game logic. |
-| property | `Holder` | The peer holding the object, or 0 when nobody does. |
+| property | `ImpulseStrength` | How hard a character body pushes the rigid bodies it slides into, along the contact normal; 0 is off. The library takes the body and pushes it on this peer's simulation. |
 | property | `Kind` | How authority over this object moves. Read when the object enters the tree. |
 | property | `LastSentBody` | What this peer last sent for the object, and when: an unchanged object is not sent again for a while. |
 | property | `MaxSpreadDepth` | Maximum contacts from the source of a spread chain, or -1 for unlimited. |
 | property | `PendingRequest` | The id of this guest's latest authority request the host has not answered yet, or 0. |
-| property | `PushStrength` | How hard a character body pushes the rigid bodies it slides into, along the contact normal; 0 is off. The library takes the body and pushes it on this peer's simulation. |
+| property | `PlaybackState` | Where this object is in its own timeline on this peer: `Pending` until playback reaches its first sample, `Ending` once it despawned. The authority is always past pending. Read this instead of `Visible` to tell whether a projectile can hit yet. |
 | property | `ResolvedKind` | `Kind` with `Auto` resolved from the root's type. |
 | property | `RestFrames` | Physics frames a simulated body has been at rest, counted by its physics handling. |
 | property | `Root` | The node that is the object: authority, identity and the synced subtree. The parent by default. |
@@ -148,21 +149,21 @@ One replicated object. While its root is this peer's multiplayer authority it se
 | method | `Deliver(System.Int32,Netfox.NetworkObject.EventKind,Godot.Variant,System.Int32)` | Raises an event here if this peer is the authority, and passes it on otherwise. While this peer's own request is unanswered its authority may be about to be taken back, so the event waits for the host's answer. |
 | method | `DescribeSynced` | The inspector's list. In the editor a script without `[Tool]` is a placeholder, so its `[Synced]` properties are read from the compiled type the script path points at. |
 | method | `Despawn` | Ends this authoritative object's timeline. It is hidden and stops processing here immediately; remote peers hide it when their playback reaches the flagged final sample, and the root is freed after the playback grace period so a `MultiplayerSpawner` cannot remove it from observers early. |
+| method | `Impulse(Godot.Vector3)` | Pushes this object with nothing doing the pushing - an explosion, a trap: its authority applies `impulse` to a rigid body or raises `Impulsed`. Delivered like `Variant`. |
+| method | `Impulse(Netfox.NetworkObject,Godot.Vector3)` | This object struck `target`: takes the target when it can (`NetworkObject`), so a crate flies on this peer's simulation at once, then pushes it. A player, which cannot be taken, is pushed on its own peer. If the host gives the target to someone else, the winner's simulation stands and this push is lost with the claim. |
 | method | `IsNewer(System.Int32,System.Int32)` | True when ( `ownershipSequence`, `authoritySequence`) is newer than what this object has. |
 | method | `KindFor(Godot.Node)` | What `Auto` resolves to for a root of this type. |
 | method | `Of(Godot.Node)` | The object whose root is `root`, or null when it is not a registered object. |
-| method | `Push(Godot.Vector3)` | Pushes this object with nothing doing the pushing - an explosion, a trap: its authority applies `impulse` to a rigid body or raises `Pushed`. Delivered like `Variant`. |
-| method | `Push(Netfox.NetworkObject,Godot.Vector3)` | This object struck `target`: takes the target when it can (`NetworkObject`), so a crate flies on this peer's simulation at once, then pushes it. A player, which cannot be taken, is pushed on its own peer. If the host gives the target to someone else, the winner's simulation stands and this push is lost with the claim. |
-| method | `Release` | Lets go of a held object. This peer keeps simulating it until someone else touches it. |
+| method | `ReleaseClaim` | Lets go of a held object. This peer keeps simulating it until someone else touches it. |
+| method | `ReleaseClaim(Godot.Vector3)` | Lets go of a held object with `velocity`: the throw flies on this peer's simulation. |
 | method | `Send(Godot.Variant)` | Delivers `payload` to whoever is this object's authority, reliably and exactly once, even if authority moves while it is on its way. On the authority itself it is raised at once. |
-| method | `TakeKnockback(System.Double,System.Single)` | The pushes received and not yet used up, decaying by `decay` per second: add it to a character's velocity each physics frame, before moving. |
-| method | `Teleport` | The next state this peer sends applies without interpolation on the others: a respawn, not a flight. |
-| method | `Throw(Godot.Vector3)` | Lets go of a held object with `velocity`: the throw flies on this peer's simulation. |
-| method | `Touch(Netfox.NetworkObject)` | Passes this object's authority to `other` after contact. Physics bodies call it themselves; call it for contact the physics engine does not report. The source's depth limit follows the whole chain; the host verifies this object as the cause and arbitrates opposing requests. |
+| method | `Snap` | The next state this peer sends applies without interpolation on the others: a respawn, not a flight. |
+| method | `Spread(Netfox.NetworkObject)` | Passes this object's authority to `other` after contact. Physics bodies call it themselves; call it for contact the physics engine does not report. The source's depth limit follows the whole chain; the host verifies this object as the cause and arbitrates opposing requests. |
+| method | `TakeImpulses(System.Double,System.Single)` | The pushes received and not yet used up, decaying by `decay` per second: add it to a character's velocity each physics frame, before moving. |
 | method | `TryClaim` | Makes the object this peer's: authority and ownership, so nobody else can take it until it is released. A physics body is frozen while claimed; the game moves it. False when someone else holds it. |
 | method | `UnsupportedReason(Godot.Node)` | Why a root of this type cannot be replicated, or null when it can. |
 | event | `AuthorityChanged` | Raised after the authority or the holder changed, on every peer. |
-| event | `Pushed` | Raised on the authority of a root that is not a rigid body, exactly once per push: the impulse. It is also added to `Single`, so handle one or the other. A rigid body takes the impulse itself. |
+| event | `Impulsed` | Raised on the authority of a root that is not a rigid body, exactly once per push: the impulse. It is also added to `Single`, so handle one or the other. A rigid body takes the impulse itself. |
 | event | `Received` | Raised on the authority, exactly once per `Variant` call anywhere: the peer that sent it and what it sent. |
 
 ### NetworkObjectServer
@@ -230,6 +231,16 @@ Continuously synchronizes the reference clock to the host. Transport and timing 
 | method | `Start` | Start the sync loop. Starting multiple times has no effect. |
 | event | `OnInitialSync` | Emitted once the initial timestamp is received and the sync loop starts. |
 | event | `OnPanic` | Emitted when clocks are so far apart that the clock gets hard-reset. Carries the offset. |
+
+### PlaybackState
+
+Where a replicated object is in its timeline on this peer. See `PlaybackState`.
+
+| | Member | Summary |
+|---|---|---|
+| field | `Ending` | Despawned: hidden, and freed once the other peers have played it to the end. |
+| field | `Pending` | Known here, but playback has not reached its first sample: not shown yet. |
+| field | `Playing` | Simulated here, or played back from its samples. |
 
 ### PlaybackStatus
 

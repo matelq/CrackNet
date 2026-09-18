@@ -7,7 +7,7 @@ using Microsoft.CodeAnalysis.Operations;
 namespace Netfox.SourceGenerators;
 
 /// <summary>
-/// The everyday calls (<c>this.Authority</c>, <c>crate.TryClaim()</c>, <c>this.TakeKnockback(delta)</c>) need a
+/// The everyday calls (<c>this.Authority</c>, <c>crate.TryClaim()</c>, <c>this.TakeImpulses(delta)</c>) need a
 /// <see cref="NetworkObject"/> on the node they reach. This analyzer says so at build time instead of letting the
 /// call throw at run time: the class they are used on must have a scene, and that scene's root must carry a
 /// NetworkObject as a direct child.

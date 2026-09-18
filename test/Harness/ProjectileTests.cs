@@ -31,6 +31,7 @@ public partial class ProjectileTests : HarnessSuite
         var firedAt = Client.Context.NetworkTime.Tick;
         var fired = Fire();
         Expect.True(fired.Visible, "the shooter sees its own projectile at once");
+        Expect.Equal(PlaybackState.Playing, fired.Object.PlaybackState);
 
         HarnessBody? onHost = null;
         var hiddenFrames = 0;
@@ -41,10 +42,12 @@ public partial class ProjectileTests : HarnessSuite
             if (onHost is null) continue;
             if (!onHost.Visible)
             {
+                Expect.Equal(PlaybackState.Pending, onHost.Object.PlaybackState);
                 hiddenFrames++;
                 continue;
             }
 
+            Expect.Equal(PlaybackState.Playing, onHost.Object.PlaybackState);
             var shown = Host.Context.NetworkObjectServer.Diagnostics.GetDisplayTick(Shooter) ?? -1;
             Expect.True(shown >= firedAt, $"shown at display tick {shown}, fired at {firedAt}");
             // At the muzzle, not already down range: the first frame shows the first sample
@@ -93,6 +96,7 @@ public partial class ProjectileTests : HarnessSuite
         var despawnTick = (now + 1) % NetworkObjectServer.StateIntervalTicks == 0 ? now + 1 : now + 2;
         Expect.True(fired.Object.Despawn());
         Expect.False(fired.Visible, "authority should hide a despawned projectile immediately");
+        Expect.Equal(PlaybackState.Ending, fired.Object.PlaybackState);
 
         for (var frame = 0; frame < 180; frame++)
         {
@@ -106,6 +110,7 @@ public partial class ProjectileTests : HarnessSuite
                 continue;
             }
 
+            if (onHost is { Visible: false }) Expect.Equal(PlaybackState.Ending, onHost.Object.PlaybackState);
             if (onHost is null or { Visible: false }) return;
             // The final sample is repeated for a while; hiding only on the last repeat left the shot hanging in the
             // air for the whole grace period

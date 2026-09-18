@@ -40,12 +40,12 @@ the host's word. State packets carry no sequences: a receiver keeps state only f
 authority, and drops the samples it had when the authority changes, since they run on the previous peer's clock.
 The current authority is Godot's `multiplayer authority` (`IsMultiplayerAuthority()` stays true); the sequences and
 the ownership flag live on top of it. What counts as contact and rest is the game's, but the policy is the library's:
-it calls `Touch` on contact and `ReturnToHost` once a body has settled.
+it calls `Spread` on contact and `ReturnToHost` once a body has settled.
 
 - A player's own character is always authoritative on its peer. Input applies at once, with no reconciliation and no
   resimulation. Its authority never transfers.
 - Grabbing a free object takes ownership optimistically; nobody else can take it until it is released.
-- An authoritative object with `SpreadsAuthority` calls `Touch(other)`; its cause travels with the request, and the
+- An authoritative object with `SpreadsAuthority` calls `Spread(other)`; its cause travels with the request, and the
   touched object follows its authority. `MaxSpreadDepth` limits the whole chain from its source (unlimited by default),
   rather than restarting at each crate.
 - The host arbitrates conflicts (two grabs at once): the higher sequence wins, and an ownership change beats an
@@ -131,8 +131,8 @@ measurements ask for them. State packets are filled up to 1200 bytes, under the 
 One `NetworkObject` node per object: it holds the sequences and contact-spreading policy, sends state while
 authoritative, and plays back and interpolates otherwise. Properties in its subtree are marked `[Synced]`;
 `Interpolate` is true by default and set to false where a continuous value should step. Discrete types (bool, int,
-enum, strings, references) always step. `Teleport()` makes the next snapshot apply without interpolation;
-`Despawn()` ends the object's playback timeline. Games report contacts through `Touch`, not by reimplementing policy.
+enum, strings, references) always step. `Snap()` makes the next snapshot apply without interpolation;
+`Despawn()` ends the object's playback timeline. Games report contacts through `Spread`, not by reimplementing policy.
 
 ### Simplification (implemented on `simplified-api`)
 
@@ -159,7 +159,7 @@ Goal: a crate needs no code and a player needs only its own movement. Paid for i
     to `Shared`; `AnimatableBody`, `StaticBody`, `Area` and non-spatial `Node`/`Control` to `World`. A grenade (a
     rigid body that stays its thrower's) is the common case that picks `Personal` by hand.
 - **Built-in behaviour for physics roots:** freeze where not authoritative (with the Rapier re-set), contact
-  monitoring and `Touch` on contact for rigid bodies, `Touch` on slide collisions for character bodies, return to the
+  monitoring and `Spread` on contact for rigid bodies, `Spread` on slide collisions for character bodies, return to the
   host at rest.
 - **`Knock(Vector3)`** built in: an impulse on a rigid body's authority, a `Knocked` event on a character's. The
   general event stays.
@@ -169,7 +169,7 @@ Goal: a crate needs no code and a player needs only its own movement. Paid for i
   new object needs is `[Synced]`, and the object stays hidden until its first sample brings it.
 - **Authority** in one place: `Authority.Peer`, `Authority.IsLocal`, and `Authority.Take()` / `Authority.ReturnToHost()`
   for what physics bodies do themselves, by hand, for `Custom` objects.
-- **Grab:** `TryGrab()`, `Release()`, plus `Throw(Vector3 velocity)` so a throw's velocity is set by the library.
+- **Grab:** `TryGrab()`, `ReleaseClaim()`, plus `ReleaseClaim(Vector3 velocity)` so a throw's velocity is set by the library.
 - **Events:** `Send(Variant)` / `Received(int from, Variant)` instead of `SendToAuthority` / `EventReceived`.
 - **Diagnostics** out of the main API: sequences, `DisplayTick`, `SampleSent/Received` move to `Object.Diagnostics`,
   a peer's playback status to `NetworkObjectServer.Diagnostics`.
@@ -187,7 +187,7 @@ Goal: a crate needs no code and a player needs only its own movement. Paid for i
 Judged by `docs/examples.md`; the owner found sections 3 (players and objects) and 5 (shooting) hard to read.
 Proposals came from independent Claude and Codex reviews.
 
-### Naming, decided (not implemented)
+### Naming, decided
 
 Words the game writes every day sit on its own nodes, so each has to say "this is the networked part" without a prefix
 or a nested accessor (both were considered and rejected: `node.Net.Authority` only moves the noise). Where a term of
@@ -211,7 +211,7 @@ shows; and autoconnect elects the role without building a peer, so a game can ha
 closing the one autoconnect just made (`HostPeerFactory` / `JoinPeerFactory` go away with it).
 
 - **`this.` stays.** Extension members only apply to an explicit receiver, so a node's own calls read
-  `this.Authority.IsLocal`, `this.TakeKnockback(delta)`; on another node there is no `this` (`crate.TryClaim()`).
+  `this.Authority.IsLocal`, `this.TakeImpulses(delta)`; on another node there is no `this` (`crate.TryClaim()`).
   Considered and deliberately not done: a generator writing those members into each game class (they are already
   `partial` for `[Synced]`), which would allow a bare `Authority.IsLocal`. It buys five characters for a rule about
   which classes get the members and one more layer of generated code to explain. A base class such as
@@ -221,16 +221,16 @@ closing the one autoconnect just made (`HostPeerFactory` / `JoinPeerFactory` go 
   subscribing to its own would have to unsubscribe in `_ExitTree`.
 - **`node.Net()`** extension instead of `GetNode<NetworkObject>("NetworkObject")` and `NetworkObject.Of(node)!`.
   Everyday calls become extensions on the game's own nodes, so game code rarely names `NetworkObject`.
-- **`Push`** replaces `Knock`: `crate.Push(impulse)` delivers a push to whoever simulates the target (an explosion, a
-  trap); `this.Push(crate, impulse)` is "my object struck yours": it takes the target by `Touch` when it can, then
+- **`Impulse`** replaces `Knock`: `crate.Impulse(impulse)` delivers a push to whoever simulates the target (an explosion, a
+  trap); `this.Impulse(crate, impulse)` is "my object struck yours": it takes the target by `Spread` when it can, then
   delivers the push, so a crate and a player are struck the same way. No `Try`: the push is always delivered. The
-  event is `Pushed`.
-- **`PushStrength`** on a character body's `NetworkObject`: the library pushes the rigid bodies the character slides
+  event is `Impulsed`.
+- **`ImpulseStrength`** on a character body's `NetworkObject`: the library pushes the rigid bodies the character slides
   into, along the contact normal. 0 is off, and a game that pushes along its input keeps its own loop.
-- **`TakeKnockback(delta)`**: the object accumulates pushes for a non-rigid root; `Velocity += TakeKnockback(delta)`
-  replaces a field, a subscription and a decay line. `Pushed` stays for a custom curve.
-- **Owning and carrying:** `TryClaim()` (mine, nobody else may take it, frozen, the game moves it), `Release()`,
-  `Throw(velocity)`, and `TryCarry(item, anchor)` where the item follows an anchor node of the carrier (a marker, a
+- **`TakeImpulses(delta)`**: the object accumulates pushes for a non-rigid root; `Velocity += TakeImpulses(delta)`
+  replaces a field, a subscription and a decay line. `Impulsed` stays for a custom curve.
+- **Owning and carrying:** `TryClaim()` (mine, nobody else may take it, frozen, the game moves it), `ReleaseClaim()`,
+  `ReleaseClaim(velocity)`, and `TryCarry(item, anchor)` where the item follows an anchor node of the carrier (a marker, a
   bone attachment), with `CarriedItems` on the carrier. Carrying belongs in the library, not in extras: only the
   library can place a carried item on each peer's own copy of the anchor instead of playing back its samples.
   See Carrying below.
@@ -262,7 +262,7 @@ parent sync.
   The library sends its path relative to the carrier and resolves it on each peer; an anchor outside the carrier is an
   error.
 - **Attach and detach switch at the carrier's playback time,** inside the sample stream. Keying presentation off
-  `Holder`, which applies when the host's record arrives, would put the item in the hand one playback delay before the
+  `ClaimedBy`, which applies when the host's record arrives, would put the item in the hand one playback delay before the
   hand gets there.
 - **Detach blends** the gap between the observer's anchor and the thrower's first free sample over about 0.1-0.2 s, in
   presentation only.
@@ -343,8 +343,8 @@ Two decisions here are made but not built, and both matter enough to keep in sig
 `examples/playground` is where the model gets played, and in time it has to exercise every point above. Iteration 2:
 
 - [x] Players: always their own peer's, played back elsewhere, no collision between players
-- [x] Push another player: an event to their peer, applied as knockback
-- [x] Crates: frozen where not simulated, `Touch` spreads authority with host arbitration, back to the host at rest
+- [x] Impulse another player: an event to their peer, applied as knockback
+- [x] Crates: frozen where not simulated, `Spread` spreads authority with host arbitration, back to the host at rest
 - [x] Grab, carry, throw (ownership)
 - [x] Slow projectiles: spawned and wholly arbitrated by the shooter; first hit knocks back and despawns on playback
 - [x] Late join (MultiplayerSpawner plus the host's authority table)

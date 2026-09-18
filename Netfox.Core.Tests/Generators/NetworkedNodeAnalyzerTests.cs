@@ -33,7 +33,7 @@ public class NetworkedNodeAnalyzerTests
                 {
                     public ObjectAuthority Authority => new();
                     public bool TryClaim() => true;
-                    public void Push(Godot.Vector3 impulse) { }
+                    public void Impulse(Godot.Vector3 impulse) { }
                 }
                 public static NetworkObject Net(this Godot.Node node) => new();
             }
@@ -174,7 +174,7 @@ public class NetworkedNodeAnalyzerTests
             namespace Game;
             public partial class Thing : Godot.RigidBody3D
             {
-                public void Blast(Godot.PhysicsBody3D hit) => hit.Push(default);
+                public void Blast(Godot.PhysicsBody3D hit) => hit.Impulse(default);
             }
             """;
         Assert.Empty(Run(source, ("game/Thing.tscn", SceneWith("res://game/Thing.cs", networkObject: true))));

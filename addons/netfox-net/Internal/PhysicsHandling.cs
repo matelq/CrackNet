@@ -31,7 +31,7 @@ internal abstract class PhysicsHandling
     /// <summary>Passes authority to whatever object <paramref name="collider"/> is the root of.</summary>
     protected void TouchCollider(GodotObject? collider)
     {
-        if (collider is Node node && NetworkObject.Of(node) is { } other) Object.Touch(other);
+        if (collider is Node node && NetworkObject.Of(node) is { } other) Object.Spread(other);
     }
 
     /// <summary>A body moving slower than this does not pass authority to what it bumps: a settling stack stays put.</summary>
@@ -124,13 +124,13 @@ internal abstract class PhysicsHandling
             var ahead = _body.LinearVelocity * (float)(2 * _body.GetPhysicsProcessDeltaTime());
             foreach (var other in TouchingOf(_body, ahead))
                 if (!other.Authority.IsLocal && other.ResolvedKind == NetworkObject.ObjectKind.Shared && other.Root is RigidBody3D)
-                    Object.Touch(other);
+                    Object.Spread(other);
         }
 
         public override void AuthorityChanged()
         {
             UpdateGhosts();
-            SetFrozen(_body, !Object.Authority.IsLocal || Object.Holder != 0);
+            SetFrozen(_body, !Object.Authority.IsLocal || Object.ClaimedBy != 0);
             // Whoever takes a body takes what rests on and against it: a frozen body reports no resting contacts, and
             // left alone a stack would hang in the air here until the host's word that it fell
             if (Object.Authority.IsLocal && !IsHost) TouchOverlapping();
@@ -142,7 +142,7 @@ internal abstract class PhysicsHandling
             Logger.Debug("{0} taken at {1}: overlap query found {2}", _body.Name, _body.GlobalPosition,
                 touching.Count == 0 ? "nothing" : string.Join(", ", touching.Select(other => other.Root!.Name)));
             foreach (var other in touching)
-                Logger.Debug("{0} touches {1}: {2}", _body.Name, other.Root!.Name, Object.Touch(other));
+                Logger.Debug("{0} touches {1}: {2}", _body.Name, other.Root!.Name, Object.Spread(other));
         }
 
         /// <summary>The objects whose bodies touch this one: resting contacts too, which a frozen body reports none of.</summary>
@@ -192,10 +192,10 @@ internal abstract class PhysicsHandling
 
         public override void PhysicsProcess()
         {
-            if (Object.ResolvedKind != NetworkObject.ObjectKind.Shared || !Object.Authority.IsLocal || Object.Holder != 0 || IsHost)
+            if (Object.ResolvedKind != NetworkObject.ObjectKind.Shared || !Object.Authority.IsLocal || Object.ClaimedBy != 0 || IsHost)
             {
                 Object.RestFrames = 0;
-                if (Object.Authority.IsLocal && Object.Holder == 0) TouchAhead();
+                if (Object.Authority.IsLocal && Object.ClaimedBy == 0) TouchAhead();
                 return;
             }
             TouchAhead();
@@ -235,8 +235,8 @@ internal abstract class PhysicsHandling
                 // by the next frame's floor contact, over and over
                 if (collision.GetNormal().AngleTo(body.UpDirection) <= body.FloorMaxAngle) continue;
                 // Godot's character bodies do not push rigid bodies: push the ones taken here, along the contact
-                if (Object.PushStrength > 0 && node is RigidBody3D) Object.Push(other, -collision.GetNormal() * Object.PushStrength);
-                else Object.Touch(other);
+                if (Object.ImpulseStrength > 0 && node is RigidBody3D) Object.Impulse(other, -collision.GetNormal() * Object.ImpulseStrength);
+                else Object.Spread(other);
             }
         }
     }

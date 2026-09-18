@@ -91,7 +91,7 @@ host.
 
 ## 3. Players and objects
 
-Walking into a crate takes it. To push it as well, set **Push Strength** on the player's `NetworkObject` in the
+Walking into a crate takes it. To push it as well, set **Impulse Strength** on the player's `NetworkObject` in the
 inspector (0.6 is a gentle shove): the library pushes the rigid bodies the character slides into, on this peer's
 simulation. No code.
 
@@ -105,7 +105,7 @@ private void GrabOrThrow(RigidBody3D nearest)
 {
     if (_held is { } held)
     {
-        held.Throw(-GlobalBasis.Z * 9 + Vector3.Up * 2);
+        held.ReleaseClaim(-GlobalBasis.Z * 9 + Vector3.Up * 2);
         _held = null;
     }
     else if (nearest.TryClaim())
@@ -132,13 +132,13 @@ from the past. A push is delivered to the pushed player's own peer, which adds i
 <!-- check: members Player -->
 ```csharp
 // The pusher, on its own peer
-private void Shove(Player other) => this.Push(other, -GlobalBasis.Z * 4);
+private void Shove(Player other) => this.Impulse(other, -GlobalBasis.Z * 4);
 ```
 
 <!-- check: body Player -->
 ```csharp
 // The pushed player, in _PhysicsProcess before MoveAndSlide
-Velocity += this.TakeKnockback(delta);
+Velocity += this.TakeImpulses(delta);
 ```
 
 What you get: exactly one application of each push, on the peer that simulates the pushed player, wherever the push
@@ -174,7 +174,7 @@ public partial class Shot : Node3D, ISpawnedWith<Vector3>
         {
             if (player.Authority.Peer == this.Authority.Peer) continue;   // not the shooter
             if (player.GlobalPosition.DistanceTo(GlobalPosition) > 0.7f) continue;
-            this.Push(player, _velocity.Normalized() * 6);
+            this.Impulse(player, _velocity.Normalized() * 6);
             this.Despawn();                     // in the same decision: no second hit, no passing through
             return;
         }
@@ -197,5 +197,5 @@ The velocity is required: `OnSpawned(Vector3 velocity)` has no default, so `Shot
 What you get: the shot appears at once for the shooter and from the muzzle for everyone else; the shooter's screen
 decides what it hit; other peers see it vanish when their playback reaches the hit.
 
-`this.Push(target, impulse)` is the same for a crate: it takes the crate for the shooter and it flies at once. For
+`this.Impulse(target, impulse)` is the same for a crate: it takes the crate for the shooter and it flies at once. For
 hitscan, the shooter runs an ordinary ray query instead of moving a shot.

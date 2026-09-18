@@ -17,7 +17,7 @@ public partial class LateJoinTests : HarnessSuite
 
         Expect.True(crate.Object.TryClaim());
         var bullet = HarnessBody.Spawn(Transform3D.Identity, Speed, parent: Client).Name.ToString();
-        Expect.True(await WaitUntil(() => Host.GetNodeOrNull(bullet) is not null && ((HarnessBody)Host.GetNode("Crate")).Object.Holder == 2, 5),
+        Expect.True(await WaitUntil(() => Host.GetNodeOrNull(bullet) is not null && ((HarnessBody)Host.GetNode("Crate")).Object.ClaimedBy == 2, 5),
             "host never saw the grab and the shot");
 
         var late = AddPeer(4);
@@ -26,12 +26,12 @@ public partial class LateJoinTests : HarnessSuite
         var lateCrate = HarnessBody.Place(late, "Crate", 1, Speed);
 
         var caughtUp = await WaitUntil(() =>
-            lateCrate.Object.Authority.Peer == 2 && lateCrate.Object.Holder == 2
+            lateCrate.Object.Authority.Peer == 2 && lateCrate.Object.ClaimedBy == 2
             && lateCrate.Ticks > crate.Ticks - 10 && lateCrate.Visible
             && late.GetNodeOrNull<HarnessBody>(bullet) is { Visible: true }, 5);
 
         Expect.True(caughtUp,
-            $"crate auth {lateCrate.Object.Authority.Peer} owner {lateCrate.Object.Holder} ticks {lateCrate.Ticks}/{crate.Ticks} visible {lateCrate.Visible}, " +
+            $"crate auth {lateCrate.Object.Authority.Peer} owner {lateCrate.Object.ClaimedBy} ticks {lateCrate.Ticks}/{crate.Ticks} visible {lateCrate.Visible}, " +
             $"bullet {late.GetNodeOrNull<HarnessBody>(bullet)?.Visible}");
     }
 

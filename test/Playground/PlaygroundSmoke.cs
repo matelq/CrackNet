@@ -119,7 +119,7 @@ public partial class PlaygroundSmoke : Node
             foreach (var fell in crates.Where(crate => crate.GlobalPosition.Y < -0.5f && !_fallen.Contains(crate.Name)))
             {
                 _fallen.Add(fell.Name);
-                GD.Print($"CRATE FELL {fell.Name} at {fell.GlobalPosition} v {fell.LinearVelocity} authority {fell.Authority.Peer} holder {fell.Holder} frozen {fell.Freeze} bot {_botClock:F2}");
+                GD.Print($"CRATE FELL {fell.Name} at {fell.GlobalPosition} v {fell.LinearVelocity} authority {fell.Authority.Peer} holder {fell.ClaimedBy} frozen {fell.Freeze} bot {_botClock:F2}");
                 foreach (var other in crates)
                     GD.Print($"  {other.Name} at {other.GlobalPosition} authority {other.Authority.Peer} frozen {other.Freeze}");
                 foreach (var player in _playground.Players.GetChildren().OfType<PlaygroundPlayer>())
@@ -228,7 +228,7 @@ public partial class PlaygroundSmoke : Node
         {
             if (_stackHangingFrames++ % 60 == 0)
                 GD.Print($"STACK HANGING frame {_stackHangingFrames}: Crate4 at {_onTop.GlobalPosition} authority {_onTop.Authority.Peer} " +
-                         $"holder {_onTop.Holder} frozen {_onTop.Freeze}; Crate0 at {_crate.GlobalPosition} authority {_crate.Authority.Peer} holder {_crate.Holder}");
+                         $"holder {_onTop.ClaimedBy} frozen {_onTop.Freeze}; Crate0 at {_crate.GlobalPosition} authority {_crate.Authority.Peer} holder {_crate.ClaimedBy}");
         }
 
         if (_isHost && !_crate.Authority.IsLocal)
@@ -244,7 +244,7 @@ public partial class PlaygroundSmoke : Node
         foreach (var fell in crates.Where(crate => crate.GlobalPosition.Y < -0.5f && !_fallen.Contains(crate.Name)))
         {
             _fallen.Add(fell.Name);
-            GD.Print($"CRATE FELL {fell.Name} at {fell.GlobalPosition} v {fell.LinearVelocity} authority {fell.Authority.Peer} holder {fell.Holder} frozen {fell.Freeze} bot {_botClock:F2}");
+            GD.Print($"CRATE FELL {fell.Name} at {fell.GlobalPosition} v {fell.LinearVelocity} authority {fell.Authority.Peer} holder {fell.ClaimedBy} frozen {fell.Freeze} bot {_botClock:F2}");
             foreach (var other in crates)
                 GD.Print($"  {other.Name} at {other.GlobalPosition} authority {other.Authority.Peer} frozen {other.Freeze}");
             foreach (var player in _playground.Players.GetChildren().OfType<PlaygroundPlayer>())
@@ -332,7 +332,7 @@ public partial class PlaygroundSmoke : Node
         var role = _isHost ? "host" : _isObserver ? "client-b" : "client-a";
         var notWithHost = string.Join(",", _playground.GetNode("Crates").GetChildren().OfType<PlaygroundCrate>()
             .Where(crate => crate.Authority.Peer != 1)
-            .Select(crate => $"{crate.Name}@{crate.Authority.Peer}(at {crate.GlobalPosition} v {crate.LinearVelocity.Length():F3} sleeping {crate.Sleeping} rest {crate.Net().RestFrames} holder {crate.Holder} frozen {crate.Freeze})"));
+            .Select(crate => $"{crate.Name}@{crate.Authority.Peer}(at {crate.GlobalPosition} v {crate.LinearVelocity.Length():F3} sleeping {crate.Sleeping} rest {crate.Net().RestFrames} holder {crate.ClaimedBy} frozen {crate.Freeze})"));
         GD.Print($"PLAYGROUND SMOKE role={role} ok={ok} {detail} seconds={_elapsed:F1} notWithHost={notWithHost} shots={_playground.Shots.GetChildCount()} bot={_botClock:F1}");
         GetTree().Quit(ok ? 0 : 1);
     }

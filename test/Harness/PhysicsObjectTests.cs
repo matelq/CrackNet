@@ -45,7 +45,7 @@ public partial class PhysicsObjectTests : HarnessSuite
         var walker = new Walker { Name = $"Walker{peer}", Position = position, Walk = velocity };
         walker.SetMultiplayerAuthority(peer);
         walker.AddChild(new CollisionShape3D { Shape = new CapsuleShape3D { Radius = 0.4f, Height = 1.8f } });
-        walker.AddChild(new NetworkObject { Name = "NetworkObject", PushStrength = pushStrength });
+        walker.AddChild(new NetworkObject { Name = "NetworkObject", ImpulseStrength = pushStrength });
         World(stack).AddChild(walker);
         return walker;
     }
@@ -91,17 +91,17 @@ public partial class PhysicsObjectTests : HarnessSuite
         var walkers = new[] { Walker(Host, 2, new Vector3(5, 1, 0), Vector3.Zero), Walker(Client, 2, new Vector3(5, 1, 0), Vector3.Zero) };
         var knocked = new List<(int Peer, Vector3 Impulse)>();
         foreach (var walker in walkers)
-            Net(walker).Pushed += impulse => knocked.Add((walker.Multiplayer.GetUniqueId(), impulse));
+            Net(walker).Impulsed += impulse => knocked.Add((walker.Multiplayer.GetUniqueId(), impulse));
         await NextFrame();
 
-        Net(crates[1]).Push(new Vector3(0, 0, 8));
-        Net(walkers[0]).Push(new Vector3(3, 0, 0));
+        Net(crates[1]).Impulse(new Vector3(0, 0, 8));
+        Net(walkers[0]).Impulse(new Vector3(3, 0, 0));
 
         Expect.True(await WaitUntil(() => crates[0].LinearVelocity.Z > 1 && knocked.Count > 0, 3),
             $"crate velocity {crates[0].LinearVelocity}, knocked {knocked.Count}");
         for (var i = 0; i < 10; i++) await NextFrame();
         Expect.SequenceEqual([(2, new Vector3(3, 0, 0))], knocked);
-        Expect.Equal(new Vector3(3, 0, 0), walkers[1].Net().TakeKnockback(0), "the push waits in the knockback too");
+        Expect.Equal(new Vector3(3, 0, 0), walkers[1].Net().TakeImpulses(0), "the push waits in the knockback too");
     }
 
     [Test]
@@ -112,7 +112,7 @@ public partial class PhysicsObjectTests : HarnessSuite
 
         Expect.True(Net(crates[1]).TryClaim());
         Expect.True(crates[1].Freeze, "a held crate is moved by hand");
-        Expect.True(Net(crates[1]).Throw(new Vector3(6, 3, 0)));
+        Expect.True(Net(crates[1]).ReleaseClaim(new Vector3(6, 3, 0)));
 
         Expect.False(crates[1].Freeze, "a thrown crate is simulated by the thrower");
         Expect.True(crates[1].LinearVelocity.X > 5, $"thrown at {crates[1].LinearVelocity}");
@@ -158,7 +158,7 @@ public partial class PhysicsObjectTests : HarnessSuite
         var striker = Walker(Client, 2, new Vector3(-3, 1, 0), Vector3.Zero);
         for (var i = 0; i < 5; i++) await NextFrame();
 
-        striker.Push(crates[1], new Vector3(0, 0, 8));
+        striker.Impulse(crates[1], new Vector3(0, 0, 8));
         Expect.Equal(2, crates[1].Net().Authority.Peer, "the striker took the crate");
         // Physics steps, not rendered frames: a rendered frame may run none, and a body switching from frozen static to
         // dynamic takes the impulse on its second step
@@ -174,12 +174,12 @@ public partial class PhysicsObjectTests : HarnessSuite
         var pushed = new List<(int Peer, Vector3 Impulse)>();
         var targets = new[] { Walker(Host, 1, new Vector3(3, 1, 0), Vector3.Zero), Walker(Client, 1, new Vector3(3, 1, 0), Vector3.Zero) };
         foreach (var target in targets)
-            target.Net().Pushed += impulse => pushed.Add((target.Multiplayer.GetUniqueId(), impulse));
+            target.Net().Impulsed += impulse => pushed.Add((target.Multiplayer.GetUniqueId(), impulse));
         Walker(Host, 2, new Vector3(-3, 1, 0), Vector3.Zero);
         var striker = Walker(Client, 2, new Vector3(-3, 1, 0), Vector3.Zero);
         for (var i = 0; i < 5; i++) await NextFrame();
 
-        striker.Push(targets[1], new Vector3(4, 0, 0));
+        striker.Impulse(targets[1], new Vector3(4, 0, 0));
         Expect.True(await WaitUntil(() => pushed.Count > 0, 3), "never pushed");
         for (var i = 0; i < 10; i++) await NextFrame();
         Expect.SequenceEqual([(1, new Vector3(4, 0, 0))], pushed);
@@ -187,7 +187,7 @@ public partial class PhysicsObjectTests : HarnessSuite
     }
 
     [Test]
-    public async Task PushStrengthPushesWhatTheCharacterWalksInto()
+    public async Task ImpulseStrengthPushesWhatTheCharacterWalksInto()
     {
         async Task<float> Travel(float strength, string name)
         {
@@ -207,7 +207,7 @@ public partial class PhysicsObjectTests : HarnessSuite
 
         var without = await Travel(0, "CrateA");
         var with = await Travel(2, "CrateB");
-        Expect.True(with > without + 0.5f, $"with PushStrength the crate moved to {with}, without to {without}");
+        Expect.True(with > without + 0.5f, $"with ImpulseStrength the crate moved to {with}, without to {without}");
     }
 
     [Test]
@@ -251,7 +251,7 @@ public partial class PhysicsObjectTests : HarnessSuite
         Expect.True(await WaitUntil(() => onClient[1].Authority.Peer == 2, 3), "the top crate never followed");
         // The top crate rests part of the way to going back, the bottom one has not started counting
         for (var i = 0; i < 45; i++) await NextFrame();
-        Expect.True(onClient[0].Release(), "could not release the bottom crate");
+        Expect.True(onClient[0].ReleaseClaim(), "could not release the bottom crate");
 
         var split = 0;
         for (var frame = 0; frame < 150 && onClient.Any(obj => obj.Authority.Peer == 2); frame++)
@@ -330,11 +330,11 @@ public partial class PhysicsObjectTests : HarnessSuite
         Expect.True(onClient.Authority.Take());
         Expect.True(onClient.TryClaim());
         var dropped = new List<string>();
-        onClient.AuthorityChanged += () => dropped.Add($"authority {onClient.Authority.Peer} holder {onClient.Holder}");
+        onClient.AuthorityChanged += () => dropped.Add($"authority {onClient.Authority.Peer} holder {onClient.ClaimedBy}");
 
         await WaitUntil(() => onClient.PendingRequest == 0, 3);
         for (var i = 0; i < 20; i++) await NextFrame();
-        Expect.True(onClient.Holder == 2 && dropped.Count == 0, $"the claim was undone on the claimer: {string.Join("; ", dropped)}");
+        Expect.True(onClient.ClaimedBy == 2 && dropped.Count == 0, $"the claim was undone on the claimer: {string.Join("; ", dropped)}");
     }
 
     [Test]
@@ -396,7 +396,7 @@ public partial class PhysicsObjectTests : HarnessSuite
 
         Expect.True(Net(thrown[1]).TryClaim());
         await NextFrame();
-        Expect.True(Net(thrown[1]).Throw(new Vector3(8, 0, 0)));
+        Expect.True(Net(thrown[1]).ReleaseClaim(new Vector3(8, 0, 0)));
 
         Expect.True(await WaitUntil(() => target[1].GlobalPosition.X > 3.2f, 2),
             $"the crate passed through or stopped: target at {target[1].GlobalPosition} authority {Net(target[1]).Authority.Peer}, thrown at {thrown[1].GlobalPosition}");

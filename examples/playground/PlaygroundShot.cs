@@ -51,7 +51,7 @@ public partial class PlaygroundShot : Node3D, ISpawnedWith<Vector3>
             .OrderBy(crate => crate.GlobalPosition.DistanceTo(GlobalPosition))
             .FirstOrDefault();
         var playerHit = GetParent().GetParent().GetNode<Node3D>("Players").GetChildren().OfType<PlaygroundPlayer>()
-            .Where(player => player.Peer != this.Authority.Peer && player.Visible)
+            .Where(player => player.Peer != this.Authority.Peer && player.PlaybackState == PlaybackState.Playing)
             .Where(player => player.GlobalPosition.DistanceTo(GlobalPosition) <= HitRadius)
             .OrderBy(player => player.GlobalPosition.DistanceTo(GlobalPosition))
             .FirstOrDefault();
@@ -62,14 +62,14 @@ public partial class PlaygroundShot : Node3D, ISpawnedWith<Vector3>
         {
             if (Diagnose) GD.Print($"SHOT {Name} hit {crateHit.Name} (authority {crateHit.Net().Authority.Peer}) at {GlobalPosition}");
             PlaytestLog.Note(this, $"SHOT {Name} hit {crateHit.Name} (authority {crateHit.Net().Authority.Peer}) at {GlobalPosition:F2}");
-            this.Push(crateHit, Velocity.Normalized() * CrateImpulse);
+            this.Impulse(crateHit, Velocity.Normalized() * CrateImpulse);
             Consume();
             return;
         }
         if (playerHit is not null)
         {
             if (Diagnose) GD.Print($"SHOT {Name} hit {playerHit.Name} at {GlobalPosition}");
-            this.Push(playerHit, Velocity.Normalized() * PlayerKnock);
+            this.Impulse(playerHit, Velocity.Normalized() * PlayerKnock);
             Consume();
             return;
         }

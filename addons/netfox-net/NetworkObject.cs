@@ -85,7 +85,7 @@ public partial class NetworkObject : Node
         }
     }
 
-    /// <summary>Whether this object passes its authority on with <see cref="Touch"/>. Set by <see cref="Kind"/>.</summary>
+    /// <summary>Whether this object passes its authority on with <see cref="Spread"/>. Set by <see cref="Kind"/>.</summary>
     [Export] public bool SpreadsAuthority { get; set; }
 
     /// <summary>Maximum contacts from the source of a spread chain, or -1 for unlimited.</summary>
@@ -100,7 +100,7 @@ public partial class NetworkObject : Node
     }
 
     /// <summary>The peer holding the object, or 0 when nobody does.</summary>
-    public int Holder { get; private set; }
+    public int ClaimedBy { get; private set; }
 
     internal int AuthoritySequence { get; private set; }
     internal int OwnershipSequence { get; private set; }
@@ -130,7 +130,7 @@ public partial class NetworkObject : Node
     internal bool PlaybackStarted { get; set; }
 
     internal double? DisplayTick { get; set; }
-    internal bool TeleportPending { get; set; }
+    internal bool SnapPending { get; set; }
     internal bool DespawnRequested { get; set; }
     internal bool RemoteDespawned { get; set; }
 
@@ -155,7 +155,7 @@ public partial class NetworkObject : Node
     public static NetworkObject? Of(Node root) => NetfoxContext.For(root).NetworkObjectServer?.Find(root);
 
     /// <summary>The next state this peer sends applies without interpolation on the others: a respawn, not a flight.</summary>
-    public void Teleport() => TeleportPending = true;
+    public void Snap() => SnapPending = true;
 
     /// <summary>
     /// Ends this authoritative object's timeline. It is hidden and stops processing here immediately; remote peers
@@ -181,9 +181,9 @@ public partial class NetworkObject : Node
 
     internal bool TryTakeAuthority()
     {
-        if (!Transferable || (Holder != 0 && Holder != LocalPeer)) return false;
+        if (!Transferable || (ClaimedBy != 0 && ClaimedBy != LocalPeer)) return false;
         if (IsAuthority) return true;
-        return Request(LocalPeer, Holder, AuthoritySequence + 1, OwnershipSequence, null, 0, -1);
+        return Request(LocalPeer, ClaimedBy, AuthoritySequence + 1, OwnershipSequence, null, 0, -1);
     }
 
     /// <summary>
@@ -191,16 +191,16 @@ public partial class NetworkObject : Node
     /// it for contact the physics engine does not report. The source's depth limit follows the whole chain; the host
     /// verifies this object as the cause and arbitrates opposing requests.
     /// </summary>
-    public bool Touch(NetworkObject other)
+    public bool Spread(NetworkObject other)
     {
         ArgumentNullException.ThrowIfNull(other);
         if (!IsAuthority || !SpreadsAuthority || ReferenceEquals(this, other)) return false;
         var nextDepth = SpreadDepth + 1;
         var limit = EffectiveSpreadLimit;
         if (limit >= 0 && nextDepth > limit) return false;
-        if (!other.Transferable || other.Holder is not 0 && other.Holder != LocalPeer) return false;
+        if (!other.Transferable || other.ClaimedBy is not 0 && other.ClaimedBy != LocalPeer) return false;
         if (other.IsAuthority) return true;
-        return other.Request(LocalPeer, other.Holder, other.AuthoritySequence + 1, other.OwnershipSequence,
+        return other.Request(LocalPeer, other.ClaimedBy, other.AuthoritySequence + 1, other.OwnershipSequence,
             this, nextDepth, limit);
     }
 
@@ -210,19 +210,19 @@ public partial class NetworkObject : Node
     /// </summary>
     public bool TryClaim()
     {
-        if (!Transferable || (Holder != 0 && Holder != LocalPeer)) return false;
-        if (Holder == LocalPeer) return true;
+        if (!Transferable || (ClaimedBy != 0 && ClaimedBy != LocalPeer)) return false;
+        if (ClaimedBy == LocalPeer) return true;
         return Request(LocalPeer, LocalPeer, AuthoritySequence + 1, OwnershipSequence + 1, null, 0, -1);
     }
 
     /// <summary>Lets go of a held object. This peer keeps simulating it until someone else touches it.</summary>
-    public bool Release()
-        => Holder == LocalPeer && Request(LocalPeer, 0, AuthoritySequence, OwnershipSequence + 1, null, 0, -1);
+    public bool ReleaseClaim()
+        => ClaimedBy == LocalPeer && Request(LocalPeer, 0, AuthoritySequence, OwnershipSequence + 1, null, 0, -1);
 
     /// <summary>Lets go of a held object with <paramref name="velocity"/>: the throw flies on this peer's simulation.</summary>
-    public bool Throw(Vector3 velocity)
+    public bool ReleaseClaim(Vector3 velocity)
     {
-        if (!Release()) return false;
+        if (!ReleaseClaim()) return false;
         switch (Root)
         {
             case RigidBody3D body: body.LinearVelocity = velocity; break;
@@ -232,7 +232,7 @@ public partial class NetworkObject : Node
     }
 
     internal bool ReturnToHost()
-        => IsAuthority && Holder == 0 && LocalPeer != HostPeer
+        => IsAuthority && ClaimedBy == 0 && LocalPeer != HostPeer
            && Request(HostPeer, 0, AuthoritySequence + 1, OwnershipSequence, null, 0, -1);
 
     /// <summary>
@@ -243,15 +243,15 @@ public partial class NetworkObject : Node
 
     /// <summary>
     /// Raised on the authority of a root that is not a rigid body, exactly once per push: the impulse. It is also added to
-    /// <see cref="TakeKnockback"/>, so handle one or the other. A rigid body takes the impulse itself.
+    /// <see cref="TakeImpulses"/>, so handle one or the other. A rigid body takes the impulse itself.
     /// </summary>
-    public event Action<Vector3>? Pushed;
+    public event Action<Vector3>? Impulsed;
 
     /// <summary>
     /// How hard a character body pushes the rigid bodies it slides into, along the contact normal; 0 is off. The library
     /// takes the body and pushes it on this peer's simulation.
     /// </summary>
-    [Export(PropertyHint.Range, "0,20,0.05,or_greater")] public float PushStrength { get; set; }
+    [Export(PropertyHint.Range, "0,20,0.05,or_greater")] public float ImpulseStrength { get; set; }
 
     private Vector3 _knockback;
 
@@ -259,7 +259,7 @@ public partial class NetworkObject : Node
     /// The pushes received and not yet used up, decaying by <paramref name="decay"/> per second: add it to a character's
     /// velocity each physics frame, before moving.
     /// </summary>
-    public Vector3 TakeKnockback(double delta, float decay = 20)
+    public Vector3 TakeImpulses(double delta, float decay = 20)
     {
         var knockback = _knockback;
         _knockback = _knockback.MoveToward(Vector3.Zero, decay * (float)delta);
@@ -274,25 +274,25 @@ public partial class NetworkObject : Node
 
     /// <summary>
     /// Pushes this object with nothing doing the pushing - an explosion, a trap: its authority applies
-    /// <paramref name="impulse"/> to a rigid body or raises <see cref="Pushed"/>. Delivered like
+    /// <paramref name="impulse"/> to a rigid body or raises <see cref="Impulsed"/>. Delivered like
     /// <see cref="Send"/>.
     /// </summary>
-    public void Push(Vector3 impulse) => Deliver(LocalPeer, EventKind.Push, impulse, hops: 0);
+    public void Impulse(Vector3 impulse) => Deliver(LocalPeer, EventKind.Impulse, impulse, hops: 0);
 
     /// <summary>
-    /// This object struck <paramref name="target"/>: takes the target when it can (<see cref="Touch"/>), so a crate flies
+    /// This object struck <paramref name="target"/>: takes the target when it can (<see cref="Spread"/>), so a crate flies
     /// on this peer's simulation at once, then pushes it. A player, which cannot be taken, is pushed on its own peer. If
     /// the host gives the target to someone else, the winner's simulation stands and this push is lost with the claim.
     /// </summary>
-    public void Push(NetworkObject target, Vector3 impulse)
+    public void Impulse(NetworkObject target, Vector3 impulse)
     {
         ArgumentNullException.ThrowIfNull(target);
-        Touch(target);
-        if (target.IsAuthority) target.Raise(LocalPeer, EventKind.Push, impulse);
-        else target.Push(impulse);
+        Spread(target);
+        if (target.IsAuthority) target.Raise(LocalPeer, EventKind.Impulse, impulse);
+        else target.Impulse(impulse);
     }
 
-    internal enum EventKind { User = 0, Push = 1 }
+    internal enum EventKind { User = 0, Impulse = 1 }
 
     /// <summary>
     /// Raises an event here if this peer is the authority, and passes it on otherwise. While this peer's own request
@@ -319,7 +319,7 @@ public partial class NetworkObject : Node
             case RigidBody3D body: body.ApplyCentralImpulse(impulse); break;
             default:
                 _knockback += impulse;
-                Pushed?.Invoke(impulse);
+                Impulsed?.Invoke(impulse);
                 break;
         }
     }
@@ -394,7 +394,7 @@ public partial class NetworkObject : Node
         int spreadLimit = -1,
         bool notify = true)
     {
-        var changed = authority != AuthorityPeer || owner != Holder;
+        var changed = authority != AuthorityPeer || owner != ClaimedBy;
         if (authority != AuthorityPeer)
         {
             SetAuthority(Root!, authority);
@@ -408,7 +408,7 @@ public partial class NetworkObject : Node
             LastSentBody = null;
         }
 
-        Holder = owner;
+        ClaimedBy = owner;
         AuthoritySequence = authoritySequence;
         OwnershipSequence = ownershipSequence;
         if (transferableSequence >= TransferableSequence)
@@ -535,6 +535,16 @@ public partial class NetworkObject : Node
         _body?.PhysicsProcess();
     }
 
+    /// <summary>
+    /// Where this object is in its own timeline on this peer: <see cref="Netfox.PlaybackState.Pending"/> until playback
+    /// reaches its first sample, <see cref="Netfox.PlaybackState.Ending"/> once it despawned. The authority is always past
+    /// pending. Read this instead of <c>Visible</c> to tell whether a projectile can hit yet.
+    /// </summary>
+    public PlaybackState PlaybackState
+        => DespawnRequested || RemoteDespawned ? PlaybackState.Ending
+            : IsAuthority || Shown ? PlaybackState.Playing
+            : PlaybackState.Pending;
+
     internal bool Shown { get; private set; } = true;
 
     internal void SetShown(bool shown)
@@ -623,10 +633,10 @@ public partial class NetworkObject : Node
         return false;
     }
 
-    internal sealed class Sample(Variant[] values, bool teleport, bool despawned)
+    internal sealed class Sample(Variant[] values, bool snap, bool despawned)
     {
         public Variant[] Values { get; } = values;
-        public bool Teleport { get; } = teleport;
+        public bool Snap { get; } = snap;
         public bool Despawned { get; } = despawned;
     }
 
