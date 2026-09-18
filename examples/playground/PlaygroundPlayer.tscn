@@ -1,4 +1,4 @@
-[gd_scene load_steps=17 format=3]
+[gd_scene load_steps=19 format=3]
 
 [ext_resource type="Script" path="res://examples/playground/PlaygroundPlayer.cs" id="1"]
 [ext_resource type="Script" path="res://addons/cracknet/NetworkObject.cs" id="2"]
@@ -17,6 +17,12 @@ size = Vector3(0.2, 0.2, 0.4)
 [sub_resource type="StandardMaterial3D" id="4"]
 albedo_color = Color(0, 0, 0, 1)
 
+[sub_resource type="BoxMesh" id="5"]
+size = Vector3(0.25, 0.12, 0.25)
+
+[sub_resource type="StandardMaterial3D" id="6"]
+albedo_color = Color(0.15, 0.15, 0.15, 1)
+
 [sub_resource type="Animation" id="Animation_idle"]
 length = 0.5
 loop_mode = 1
@@ -27,6 +33,20 @@ tracks/0/path = NodePath("Hand")
 tracks/0/interp = 1
 tracks/0/loop_wrap = true
 tracks/0/keys = PackedFloat32Array(0, 1, 0, 0.6, -1.1)
+tracks/1/type = "position_3d"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("Visual/Body")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = PackedFloat32Array(0, 1, 0, 0, 0)
+tracks/2/type = "position_3d"
+tracks/2/imported = false
+tracks/2/enabled = true
+tracks/2/path = NodePath("Visual/Nose")
+tracks/2/interp = 1
+tracks/2/loop_wrap = true
+tracks/2/keys = PackedFloat32Array(0, 1, 0, 0.5, -0.45)
 
 [sub_resource type="Animation" id="Animation_walk"]
 length = 0.5
@@ -38,6 +58,20 @@ tracks/0/path = NodePath("Hand")
 tracks/0/interp = 1
 tracks/0/loop_wrap = true
 tracks/0/keys = PackedFloat32Array(0, 1, 0, 0.6, -1.1, 0.25, 1, 0, 0.75, -1.1, 0.5, 1, 0, 0.6, -1.1)
+tracks/1/type = "position_3d"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("Visual/Body")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = PackedFloat32Array(0, 1, 0, 0, 0, 0.25, 1, 0, 0.1, 0, 0.5, 1, 0, 0, 0)
+tracks/2/type = "position_3d"
+tracks/2/imported = false
+tracks/2/enabled = true
+tracks/2/path = NodePath("Visual/Nose")
+tracks/2/interp = 1
+tracks/2/loop_wrap = true
+tracks/2/keys = PackedFloat32Array(0, 1, 0, 0.5, -0.45, 0.25, 1, 0, 0.6, -0.45, 0.5, 1, 0, 0.5, -0.45)
 
 [sub_resource type="Animation" id="Animation_throw"]
 length = 0.3
@@ -48,6 +82,20 @@ tracks/0/path = NodePath("Hand")
 tracks/0/interp = 1
 tracks/0/loop_wrap = true
 tracks/0/keys = PackedFloat32Array(0, 1, 0, 0.6, -1.1, 0.1, 1, 0, 0.7, -1.5, 0.3, 1, 0, 0.6, -1.1)
+tracks/1/type = "position_3d"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("Visual/Body")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = PackedFloat32Array(0, 1, 0, 0, 0, 0.1, 1, 0, 0, -0.3, 0.3, 1, 0, 0, 0)
+tracks/2/type = "position_3d"
+tracks/2/imported = false
+tracks/2/enabled = true
+tracks/2/path = NodePath("Visual/Nose")
+tracks/2/interp = 1
+tracks/2/loop_wrap = true
+tracks/2/keys = PackedFloat32Array(0, 1, 0, 0.5, -0.45, 0.1, 1, 0, 0.5, -0.75, 0.3, 1, 0, 0.5, -0.45)
 
 [sub_resource type="AnimationLibrary" id="AnimationLibrary"]
 _data = {
@@ -105,10 +153,15 @@ material_override = SubResource("4")
 [node name="Hand" type="Marker3D" parent="."]
 position = Vector3(0, 0.6, -1.1)
 
+[node name="Palm" type="MeshInstance3D" parent="Hand"]
+mesh = SubResource("5")
+material_override = SubResource("6")
+
 [node name="AnimationPlayer" type="AnimationPlayer" parent="."]
 libraries/ = SubResource("AnimationLibrary")
 
 [node name="AnimationTree" type="AnimationTree" parent="."]
+active = true
 tree_root = SubResource("BlendTree")
 anim_player = NodePath("../AnimationPlayer")
 parameters/Walk/blend_amount = 0.0
