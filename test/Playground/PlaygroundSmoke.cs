@@ -329,6 +329,10 @@ public partial class PlaygroundSmoke : Node
         // Any crate, not only the one the bot throws: a held crate teleported into a stack blew the stack out of the world
         ok &= _fallen.Count == 0;
         detail += $" fellOut={_fallen.Count}";
+        // An exception in a callback is logged and the game goes on: count them, or the smoke passes over them
+        var errors = ErrorCounter.Smoke?.Count ?? 0;
+        ok &= errors == 0;
+        detail += $" errors={errors}" + (errors > 0 ? $" (first: {ErrorCounter.Smoke!.First})" : "");
         var role = _isHost ? "host" : _isObserver ? "client-b" : "client-a";
         var notWithHost = string.Join(",", _playground.GetNode("Crates").GetChildren().OfType<PlaygroundCrate>()
             .Where(crate => crate.Authority.Peer != 1)
