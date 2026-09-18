@@ -503,10 +503,36 @@ public partial class NetworkObjectServer : Node
                 BufferPendingSample(sender, reference, tick, body);
                 continue;
             }
-            if (obj.Root!.GetMultiplayerAuthority() != sender) continue;
+            if (obj.Root!.GetMultiplayerAuthority() != sender)
+            {
+                // A new authority's state comes straight here, its authority change the long way through the host:
+                // hold it until that change arrives, or the object sits still and then jumps into the middle
+                var now = Time.GetTicksMsec();
+                obj.EarlySamples.RemoveAll(sample => now - sample.ReceivedAt > EarlySampleAgeMs);
+                obj.EarlySamples.Add((sender, tick, body, now));
+                continue;
+            }
 
             KeepSample(obj, clock, tick, body);
         }
+    }
+
+    private const ulong EarlySampleAgeMs = 1_000;
+
+    /// <summary>
+    /// <paramref name="obj"/> just changed authority here: the new authority's samples that came first are played
+    /// from the start of its flight; anyone else's are dropped, since the host did not give it to them.
+    /// </summary>
+    internal void ReplayEarlySamples(NetworkObject obj)
+    {
+        if (obj.EarlySamples.Count == 0) return;
+        var now = Time.GetTicksMsec();
+        var authority = obj.Root!.GetMultiplayerAuthority();
+        var early = obj.EarlySamples.Where(sample => sample.Sender == authority && now - sample.ReceivedAt <= EarlySampleAgeMs)
+            .OrderBy(sample => sample.Tick).ToArray();
+        obj.EarlySamples.Clear();
+        if (!_clocks.TryGetValue(authority, out var clock)) return;
+        foreach (var sample in early) KeepSample(obj, clock, sample.Tick, sample.Body);
     }
 
     private void BufferPendingSample(int sender, NetworkIdentityReference reference, int tick, byte[] body)

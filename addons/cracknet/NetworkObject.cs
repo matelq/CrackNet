@@ -131,6 +131,9 @@ public partial class NetworkObject : Node
 
     internal double? DisplayTick { get; set; }
     internal bool SnapPending { get; set; }
+
+    /// <summary>State from a peer that is not the authority here yet, kept for when the host's word arrives.</summary>
+    internal List<(int Sender, int Tick, byte[] Body, ulong ReceivedAt)> EarlySamples { get; } = new();
     internal bool DespawnRequested { get; set; }
     internal bool RemoteDespawned { get; set; }
 
@@ -421,6 +424,7 @@ public partial class NetworkObject : Node
             DisplayTick = null;
             RemoteDespawned = false;
             LastSentBody = null;
+            Context.NetworkObjectServer.ReplayEarlySamples(this);
         }
 
         ClaimedBy = owner;

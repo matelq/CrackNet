@@ -168,6 +168,37 @@ public partial class PhysicsObjectTests : HarnessSuite
             $"the host never saw it: authority {crates[0].Net().Authority.Peer}, at {crates[0].GlobalPosition}");
     }
 
+    /// <summary>
+    /// A strike's state goes straight to the other peers, its authority change the long way through the host. A
+    /// third peer that dropped the samples arriving first saw the crate sit still, then jump into the middle of its
+    /// flight. Measured on the samples kept rather than per frame: a headless frame covers anywhere from half a tick to three.
+    /// </summary>
+    [Test]
+    public async Task AnObserverShowsAStruckCrateFromTheStrike()
+    {
+        Network.LatencyMs = 100;
+        var third = AddPeer(3);
+        Expect.True(await WaitUntil(() => third.Context.NetworkTime.IsInitialSyncDone(), 5), "third peer never synced");
+        var stacks = new[] { Host, Client, third };
+        var crates = stacks.Select(stack => Crate(stack, "Crate", new Vector3(0, 0.5f, 0))).ToArray();
+        var strikers = stacks.Select(stack => Walker(stack, 2, new Vector3(-12, 1, 0), Vector3.Zero)).ToArray();
+        for (var i = 0; i < 30; i++) await NextFrame();
+
+        // What the observer kept of the striker's state, from the tick of the strike on
+        var kept = new List<int>();
+        crates[2].Net().Diagnostics.SampleReceived += tick =>
+        {
+            if (crates[2].Net().Authority.Peer == 2) kept.Add(tick);
+        };
+        var struckAt = Client.Context.NetworkTime.Tick;
+        strikers[1].Impulse(crates[1], new Vector3(10, 0, 0));
+
+        Expect.True(await WaitUntil(() => kept.Count > 10, 5), "the observer never played the striker's state");
+        // The first sample after the strike is at most one send interval away
+        Expect.True(kept.Min() <= struckAt + NetworkObjectServer.StateIntervalTicks,
+            $"the observer's first sample of the flight is for tick {kept.Min()}, struck at {struckAt}: its opening was dropped");
+    }
+
     [Test]
     public async Task TwoStrikesFromOppositeSidesAtOnceBothCount() => await StrikeFromBothSides(gapMs: 0);
 

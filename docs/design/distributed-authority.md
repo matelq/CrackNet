@@ -328,7 +328,9 @@ Two decisions here are made but not built, and both matter enough to keep in sig
 1. Two peers grab one object at once: exactly one owner, and every peer agrees who.
 2. Authority chain: a thrown crate hits a second one, which follows the thrower.
 3. Authority returns to the host after rest.
-4. State from a peer that no longer has authority is not shown, nor blended into the new authority's.
+4. State from a peer that no longer has authority is not shown, nor blended into the new authority's. State from a peer that is not the authority here *yet* is held for up to a second: its
+   samples travel straight here and its authority change through the host, so the first ones arrive early, and dropping
+   them skipped the opening of a struck crate's flight. Only the peer the host names gets them played.
 5. Playback: one peer's objects show the same tick; underrun without freezing; a late packet does not rewrite the past.
 6. A push event is applied exactly once, and an event follows an authority that moved while it was on its way, or
    that the host gave to someone else while the event was raised on a losing claim.
