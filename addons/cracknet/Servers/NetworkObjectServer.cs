@@ -39,16 +39,13 @@ public partial class NetworkObjectServer : Node
 
     /// <summary>
     /// The least number of ticks behind the newest sample remote objects are shown, before jitter adds to it: two send
-    /// intervals and a margin, so one lost packet does not empty the buffer. One interval was enough at 15 Hz only
-    /// because the margin was then a tick of 33 ms; at 30 Hz on 60 Hz ticks it left the loss test drawing twice the jumps.
+    /// intervals and a margin, so one lost packet does not empty the buffer: with one interval and a half-tick margin,
+    /// 30 Hz snapshots left the loss test drawing twice the jumps.
     /// </summary>
     public double PlaybackDelayTicks { get; set; } = StateIntervalTicks * 2 + 0.5;
 
-    /// <summary>
-    /// State goes out every this many ticks: with the tick on the physics step (the default, 60 Hz), 2 is every other
-    /// step, 30 snapshots a second.
-    /// </summary>
-    public const int StateIntervalTicks = 2;
+    /// <summary>State goes out every this many ticks: every tick at the default 30 Hz, 30 snapshots a second.</summary>
+    public const int StateIntervalTicks = 1;
 
     // Times rather than ticks: the tickrate is the physics rate by default and a project may change it
     private const double MaxPlaybackDepthSeconds = 2.0 / 3;

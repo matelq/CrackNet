@@ -26,7 +26,7 @@ public partial class CrateFreezeTests : TestSuite
     public async Task FreezingKeepsTheCrateWhereItWasSimulatedTo()
     {
         var floor = new StaticBody3D { Name = "Floor", Position = new Vector3(0, -0.5f, 0) };
-        floor.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(100, 1, 100) } });
+        floor.AddChild(Shapes.Collision(new BoxShape3D { Size = new Vector3(100, 1, 100) }));
         await Mount(floor);
 
         var crate = GD.Load<PackedScene>("res://examples/playground/PlaygroundCrate.tscn").Instantiate<PlaygroundCrate>();

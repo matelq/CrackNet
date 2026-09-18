@@ -155,7 +155,9 @@ internal abstract class PhysicsHandling
             foreach (var shape in body.GetChildren().OfType<CollisionShape3D>())
             {
                 if (shape.Shape is null || shape.Disabled) continue;
-                var query = new PhysicsShapeQueryParameters3D
+                // Disposed here, on the main thread: left to the .NET finalizer, its thread releases the query into the
+                // physics server, and Rapier panics on any thread but the main one
+                using var query = new PhysicsShapeQueryParameters3D
                 {
                     Shape = shape.Shape,
                     Transform = shape.GlobalTransform.Translated(offset),
@@ -229,7 +231,7 @@ internal abstract class PhysicsHandling
             if (!Object.Authority.IsLocal) return;
             for (var i = 0; i < body.GetSlideCollisionCount(); i++)
             {
-                var collision = body.GetSlideCollision(i);
+                using var collision = body.GetSlideCollision(i);   // disposed on the main thread, as the query above
                 if (collision.GetCollider() is not Node node || NetworkObject.Of(node) is not { } other) continue;
                 // What it stands on stays where it is: taken, a crate at rest went back to the host and was taken again
                 // by the next frame's floor contact, over and over

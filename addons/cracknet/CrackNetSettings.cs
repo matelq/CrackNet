@@ -41,7 +41,7 @@ public sealed class CrackNetSettings
     public double SyncInterval { get; set; } = 0.25;
     public int SyncSamples { get; set; } = 8;
     public int SyncAdjustSteps { get; set; } = 8;
-    public bool SyncToPhysics { get; set; } = true;
+    public bool SyncToPhysics { get; set; }
     public double MaxTimeStretch { get; set; } = 1.25;
     public TickrateMismatchAction TickrateMismatchAction { get; set; } = TickrateMismatchAction.Warn;
     public bool SuppressOfflinePeerWarning { get; set; }

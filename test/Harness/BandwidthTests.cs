@@ -35,7 +35,7 @@ public partial class BandwidthTests : HarnessSuite
                 CanSleep = false,
             };
             crate.SetMultiplayerAuthority(1);
-            crate.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = Vector3.One } });
+            crate.AddChild(Shapes.Collision(new BoxShape3D { Size = Vector3.One }));
             crate.AddChild(new NetworkObject { Name = "NetworkObject" });
             world.AddChild(crate);
             // Moving along Y, away from every other crate, so nothing collides and hands authority around

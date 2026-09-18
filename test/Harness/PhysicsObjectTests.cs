@@ -25,7 +25,7 @@ public partial class PhysicsObjectTests : HarnessSuite
         var viewport = new SubViewport { Name = "World", OwnWorld3D = true, Size = new Vector2I(2, 2) };
         stack.AddChild(viewport);
         var floor = new StaticBody3D { Name = "Floor", Position = new Vector3(0, -0.5f, 0) };
-        floor.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = new Vector3(100, 1, 100) } });
+        floor.AddChild(Shapes.Collision(new BoxShape3D { Size = new Vector3(100, 1, 100) }));
         viewport.AddChild(floor);
         return viewport;
     }
@@ -34,7 +34,7 @@ public partial class PhysicsObjectTests : HarnessSuite
     {
         var crate = new RigidBody3D { Name = name, Position = position };
         crate.SetMultiplayerAuthority(1);
-        crate.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = Vector3.One } });
+        crate.AddChild(Shapes.Collision(new BoxShape3D { Size = Vector3.One }));
         var visual = new Node3D { Name = "Visual" };
         crate.AddChild(visual);
         // Longer than the default 0.15 s: a harness frame with four stacks is 30-110 ms, and a fade that fits in one
@@ -48,7 +48,7 @@ public partial class PhysicsObjectTests : HarnessSuite
     {
         var walker = new Walker { Name = $"Walker{peer}", Position = position, Walk = velocity };
         walker.SetMultiplayerAuthority(peer);
-        walker.AddChild(new CollisionShape3D { Shape = new CapsuleShape3D { Radius = 0.4f, Height = 1.8f } });
+        walker.AddChild(Shapes.Collision(new CapsuleShape3D { Radius = 0.4f, Height = 1.8f }));
         walker.AddChild(new NetworkObject { Name = "NetworkObject", ImpulseStrength = pushStrength });
         World(stack).AddChild(walker);
         return walker;
