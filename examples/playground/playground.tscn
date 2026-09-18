@@ -1,8 +1,9 @@
-[gd_scene load_steps=14 format=3]
+[gd_scene load_steps=15 format=3]
 
 [ext_resource type="Script" path="res://examples/playground/Playground.cs" id="1"]
 [ext_resource type="Script" path="res://addons/cracknet/Extras/EnetMesh.cs" id="2"]
 [ext_resource type="PackedScene" path="res://examples/playground/PlaygroundCrate.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://examples/playground/PlaygroundPlatform.tscn" id="4"]
 
 [sub_resource type="Environment" id="1"]
 background_mode = 1
@@ -97,6 +98,15 @@ shape = SubResource("6")
 [node name="MeshInstance3D" type="MeshInstance3D" parent="WallWest"]
 mesh = SubResource("7")
 material_override = SubResource("9")
+
+[node name="Platforms" type="Node3D" parent="."]
+
+[node name="Lift" parent="Platforms" instance=ExtResource("4")]
+position = Vector3(10, 0.25, 4)
+
+[node name="Slider" parent="Platforms" instance=ExtResource("4")]
+position = Vector3(-10, 0.25, 4)
+Travel = Vector3(0, 0, -6)
 
 [node name="Crates" type="Node3D" parent="."]
 

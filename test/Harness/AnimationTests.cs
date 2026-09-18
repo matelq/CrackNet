@@ -28,13 +28,14 @@ public partial class AnimationTests : HarnessSuite
         var walkers = new[] { HarnessWorld.Walker(Host, 2, new Vector3(0, 1, 0), Vector3.Zero), HarnessWorld.Walker(Client, 2, new Vector3(0, 1, 0), Vector3.Zero) };
         // At rest on both peers first: landing, the walker slides a little, and the observer plays that back late
         var restX = float.NaN;
+        var stillFrames = 0;
         Expect.True(await WaitUntil(() =>
         {
-            var still = Mathf.Abs(walkers[1].GlobalPosition.X - restX) < 0.001f && Mathf.Abs(walkers[0].GlobalPosition.X - restX) < 0.001f;
+            var still = Mathf.Abs(walkers[1].GlobalPosition.X - restX) < 0.0001f && Mathf.Abs(walkers[0].GlobalPosition.X - restX) < 0.0001f;
+            stillFrames = still ? stillFrames + 1 : 0;
             restX = walkers[1].GlobalPosition.X;
-            return still;
-        }, 5), "the walker never came to rest on both peers");
-        for (var i = 0; i < 20; i++) await NextFrame();
+            return stillFrames >= 30;
+        }, 8), "the walker never came to rest on both peers");
 
         var frames = new List<(float X, float Blend)>();
         var drawn = new DrawnFrame();

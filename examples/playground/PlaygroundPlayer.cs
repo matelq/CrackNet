@@ -20,7 +20,7 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
     public int Peer { get; private set; }
     public int Slot { get; private set; }
 
-    private bool _grabWasDown, _pushWasDown, _shootWasDown;
+    private bool _grabWasDown, _grabPlayerWasDown, _pushWasDown, _shootWasDown;
     private Marker3D _hand = null!;
     private AnimationTree _animation = null!;
     private bool _throwsKnown;
@@ -87,6 +87,17 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
     public override void _PhysicsProcess(double delta)
     {
         if (!this.Authority.IsLocal) return;
+        // Carried by another player: the library places this body, so no movement of its own; G wriggles free
+        if (this.AttachedTo is PlaygroundPlayer carrier)
+        {
+            WalkBlend = 0;
+            if (Pressed(null, Key.G, ref _grabPlayerWasDown))
+            {
+                PlaytestLog.Action(this, $"wriggle free of {carrier.Name}");
+                carrier.Detach(this);
+            }
+            return;
+        }
         var dt = (float)delta;
 
         var bot = Bot?.Invoke(this);
@@ -104,6 +115,7 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
         WalkBlend = Mathf.Clamp(new Vector2(Velocity.X, Velocity.Z).Length() / Speed, 0, 1);
 
         if (Pressed(bot?.Grab, Key.F, ref _grabWasDown)) GrabOrThrow();
+        if (Pressed(null, Key.G, ref _grabPlayerWasDown)) PickUpOrThrowPlayer();
         if (Pressed(bot?.Push, Key.E, ref _pushWasDown)) PushPlayers();
         var shootDown = bot?.Shoot ?? (GetWindow().HasFocus() && (Input.IsMouseButtonPressed(MouseButton.Left) || Input.IsPhysicalKeyPressed(Key.Enter)));
         if (shootDown && !_shootWasDown) Shoot();
@@ -136,6 +148,29 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
         if (nearest is null) return;
         var attached = this.TryAttach(nearest, _hand);
         PlaytestLog.Action(this, $"grab {nearest.Name} {(attached ? "attached" : "refused")}");
+    }
+
+    /// <summary>
+    /// Picks up the player in front, or throws the one carried. The same call as for a crate: the player keeps its
+    /// authority, the host arbitrates who got there first, and its own peer hangs it from the record.
+    /// </summary>
+    private void PickUpOrThrowPlayer()
+    {
+        if (this.Attached.OfType<PlaygroundPlayer>().FirstOrDefault() is { } carried)
+        {
+            PlaytestLog.Action(this, $"throw {carried.Name}");
+            Throws++;
+            this.Detach(carried);
+            carried.Impulse(Forward * ThrowSpeed + Vector3.Up * 3);
+            return;
+        }
+
+        var nearest = GetParent().GetChildren().OfType<PlaygroundPlayer>()
+            .Where(other => other != this && other.GlobalPosition.DistanceTo(GlobalPosition + Forward) < 1.6f)
+            .MinBy(other => other.GlobalPosition.DistanceTo(GlobalPosition));
+        if (nearest is null) return;
+        var asked = this.TryAttach(nearest, _hand);
+        PlaytestLog.Action(this, $"pick up {nearest.Name} {(asked ? "asked" : "refused")}");
     }
 
     private void PushPlayers()
