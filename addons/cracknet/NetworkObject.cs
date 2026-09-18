@@ -524,7 +524,9 @@ public partial class NetworkObject : Node
         if (!IsAuthority) SetShown(false);
         if (ResolvedKind != ObjectKind.Custom) _body = PhysicsHandling.For(this);
         Context.NetworkObjectServer.Register(this);
-        NotifyAuthorityChanged();   // the node learns who has it before its first frame
+        // The node learns who has it before its first frame, but after its own _Ready: a child is ready first
+        if (Root!.IsNodeReady()) NotifyAuthorityChanged();
+        else Root.Connect(Node.SignalName.Ready, Callable.From(NotifyAuthorityChanged), (uint)ConnectFlags.OneShot);
     }
 
     private PhysicsHandling? _body;

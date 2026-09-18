@@ -34,6 +34,16 @@ public partial class NetworkNodeExtensionsTests : TestSuite
     }
 
     [Test]
+    public void TheFirstAuthorityNotificationComesAfterTheNodeIsReady()
+    {
+        var watcher = new AuthorityWatcher { Name = "Watcher" };
+        watcher.AddChild(new NetworkObject { Name = "NetworkObject" });
+        AddChild(watcher);
+        Expect.Equal(1, watcher.Notified);
+        Expect.Equal(0, watcher.NotifiedBeforeReady);
+    }
+
+    [Test]
     public async Task KnockbackAddsUpAndDecays()
     {
         var player = new CharacterBody3D { Name = "Player" };
