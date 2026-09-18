@@ -1,10 +1,10 @@
 // The harness builds its bodies in code, to vary mass, shapes and push strength per case rather than keep a scene for
-// each: NFX006, which asks for a scene with a NetworkObject, has nothing to check here
-#pragma warning disable NFX006
+// each: CRN006, which asks for a scene with a NetworkObject, has nothing to check here
+#pragma warning disable CRN006
 
 using Godot;
 
-namespace Netfox.Tests;
+namespace CrackNet.Tests;
 
 /// <summary>
 /// What NetworkObject does for a physics root without game code: freezing where another peer simulates it, passing
@@ -19,7 +19,7 @@ public partial class PhysicsObjectTests : HarnessSuite
         Expect.True(await WaitUntil(() => Client.Context.NetworkTime.IsInitialSyncDone(), 5), "client never synced");
     }
 
-    private static Node World(NetfoxStack stack)
+    private static Node World(CrackNetStack stack)
     {
         if (stack.GetNodeOrNull("World") is { } world) return world;
         var viewport = new SubViewport { Name = "World", OwnWorld3D = true, Size = new Vector2I(2, 2) };
@@ -30,7 +30,7 @@ public partial class PhysicsObjectTests : HarnessSuite
         return viewport;
     }
 
-    private static RigidBody3D Crate(NetfoxStack stack, string name, Vector3 position)
+    private static RigidBody3D Crate(CrackNetStack stack, string name, Vector3 position)
     {
         var crate = new RigidBody3D { Name = name, Position = position };
         crate.SetMultiplayerAuthority(1);
@@ -40,7 +40,7 @@ public partial class PhysicsObjectTests : HarnessSuite
         return crate;
     }
 
-    private static Walker Walker(NetfoxStack stack, int peer, Vector3 position, Vector3 velocity, float pushStrength = 0)
+    private static Walker Walker(CrackNetStack stack, int peer, Vector3 position, Vector3 velocity, float pushStrength = 0)
     {
         var walker = new Walker { Name = $"Walker{peer}", Position = position, Walk = velocity };
         walker.SetMultiplayerAuthority(peer);
@@ -124,7 +124,7 @@ public partial class PhysicsObjectTests : HarnessSuite
     {
         // The crates above are taken the moment the bottom one is. Their requests name the bottom crate as the cause,
         // so the host has to hear about the bottom crate first, or it refuses them and the stack hangs in the air
-        NetworkObject[] Stack(NetfoxStack stack) =>
+        NetworkObject[] Stack(CrackNetStack stack) =>
         [
             Net(Crate(stack, "Bottom", new Vector3(0, 0.5f, 0))),
             Net(Crate(stack, "Middle", new Vector3(0, 1.5f, 0))),
@@ -215,7 +215,7 @@ public partial class PhysicsObjectTests : HarnessSuite
     {
         // The top crate settles while the bottom one is held. Handed back on its own, it would be the host's, frozen
         // here, and hang in the air for a network delay the moment the bottom one is lifted away
-        NetworkObject[] Stack(NetfoxStack stack) =>
+        NetworkObject[] Stack(CrackNetStack stack) =>
         [
             Net(Crate(stack, "Bottom", new Vector3(0, 0.5f, 0))),
             Net(Crate(stack, "Top", new Vector3(0, 1.5f, 0))),
@@ -238,7 +238,7 @@ public partial class PhysicsObjectTests : HarnessSuite
         // Each crate counted its own rest. The top one settled first and went back alone, leaving a stack simulated
         // half here and half on the host: the host's crate then bumped the client's one and took it, and the stack
         // hung on the client's screen
-        NetworkObject[] Stack(NetfoxStack stack) =>
+        NetworkObject[] Stack(CrackNetStack stack) =>
         [
             Net(Crate(stack, "Bottom", new Vector3(0, 0.5f, 0))),
             Net(Crate(stack, "Top", new Vector3(0, 1.5f, 0))),
@@ -267,7 +267,7 @@ public partial class PhysicsObjectTests : HarnessSuite
     public async Task AGroupDoesNotGoBackWhileOneOfItsCratesMoves()
     {
         // Two crates side by side, both the client's: one settles, the other keeps sliding along it
-        NetworkObject[] Pair(NetfoxStack stack) =>
+        NetworkObject[] Pair(CrackNetStack stack) =>
         [
             Net(Crate(stack, "Still", new Vector3(0, 0.5f, 0))),
             Net(Crate(stack, "Sliding", new Vector3(1.02f, 0.5f, 0))),

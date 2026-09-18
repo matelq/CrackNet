@@ -80,7 +80,7 @@ install_rapier() {
   if [ "$enable_rapier" = yes ]; then
     settings=$root/project.godot
     # project.godot strips the section name from its keys: the setting "physics/3d/physics_engine" is written as
-    # "3d/physics_engine" under [physics], the same way "netfox/events/enabled" is "events/enabled" under [netfox].
+    # "3d/physics_engine" under [physics], the same way "cracknet/events/enabled" is "events/enabled" under [cracknet].
     if grep -q '^3d/physics_engine=' "$settings"; then
       sed -i.bak 's|^3d/physics_engine=.*|3d/physics_engine="Rapier3D"|' "$settings"
       rm -f "$settings.bak"

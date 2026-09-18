@@ -2,7 +2,7 @@ using System.Globalization;
 using Godot;
 using FileAccess = Godot.FileAccess;
 
-namespace Netfox.Examples.Playground;
+namespace CrackNet.Examples.Playground;
 
 /// <summary>
 /// Drives the playground headless and checks it. Run a host, client A, then client B; the host must outlive both:

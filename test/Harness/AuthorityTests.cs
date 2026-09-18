@@ -1,11 +1,11 @@
 using Godot;
 
-namespace Netfox.Tests;
+namespace CrackNet.Tests;
 
 /// <summary>Authority and ownership move between peers, and every peer ends up agreeing who has them.</summary>
 public partial class AuthorityTests : HarnessSuite
 {
-    private NetfoxStack _third = null!;
+    private CrackNetStack _third = null!;
 
     public override async Task BeforeCase()
     {

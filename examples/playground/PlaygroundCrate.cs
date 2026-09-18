@@ -1,6 +1,6 @@
 using Godot;
 
-namespace Netfox.Examples.Playground;
+namespace CrackNet.Examples.Playground;
 
 /// <summary>
 /// A crate anyone can push, grab and throw, from PlaygroundCrate.tscn: a rigid body, a box shape, a box mesh and a

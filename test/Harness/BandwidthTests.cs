@@ -1,6 +1,6 @@
 using Godot;
 
-namespace Netfox.Tests;
+namespace CrackNet.Tests;
 
 /// <summary>
 /// What a room of crates costs on the wire. Byte counts are stable between runs, unlike timings. The crates are real
@@ -19,7 +19,7 @@ public partial class BandwidthTests : HarnessSuite
     /// </summary>
     private const double BudgetBytesPerSecond = 76_000;
 
-    private static void AddCrates(NetfoxStack stack)
+    private static void AddCrates(CrackNetStack stack)
     {
         var world = new SubViewport { Name = "World", OwnWorld3D = true, Size = new Vector2I(2, 2) };
         stack.AddChild(world);

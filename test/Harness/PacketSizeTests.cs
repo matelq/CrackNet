@@ -1,6 +1,6 @@
-using Netfox.Core.Logging;
+using CrackNet.Core.Logging;
 
-namespace Netfox.Tests;
+namespace CrackNet.Tests;
 
 /// <summary>State packets stay under the size limit, and an object that cannot fit says so instead of vanishing.</summary>
 public partial class PacketSizeTests : HarnessSuite
@@ -9,15 +9,15 @@ public partial class PacketSizeTests : HarnessSuite
     public async Task AnObjectLargerThanAPacketWarnsOnce()
     {
         var printed = new List<string>();
-        var print = NetfoxLogger.Print;
-        NetfoxLogger.Print = line =>
+        var print = CrackNetLogger.Print;
+        CrackNetLogger.Print = line =>
         {
             printed.Add(line);
             print(line);
         };
         try
         {
-            var blob = new string('x', NetfoxSettings.Instance.MaxSyncPacketSize * 2);
+            var blob = new string('x', CrackNetSettings.Instance.MaxSyncPacketSize * 2);
             HarnessBlob.Spawn(Host, "Blob", 1, blob);
             var onClient = HarnessBlob.Spawn(Client, "Blob", 1, "");
             var received = 0;
@@ -29,7 +29,7 @@ public partial class PacketSizeTests : HarnessSuite
         }
         finally
         {
-            NetfoxLogger.Print = print;
+            CrackNetLogger.Print = print;
         }
     }
 }

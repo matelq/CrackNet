@@ -207,7 +207,7 @@ the trade exists it wins over a game word; where none does, the library's own mo
 | `Spawn`, `Despawn`, `ISpawnedWith<T>` | kept | Not generic English here but the trade's term, shared with Unity NGO, Fusion and Mirror; renaming them costs every reader who arrives from those. `Introduce`/`Retire` was the only workable alternative and was turned down |
 
 Two more from the same review, decided: `PlaybackStatus` carries milliseconds beside ticks, since that is what a HUD
-shows; and autoconnect elects the role without building a peer, so a game can hand netfox its own transport instead of
+shows; and autoconnect elects the role without building a peer, so a game can hand CrackNet its own transport instead of
 closing the one autoconnect just made (`HostPeerFactory` / `JoinPeerFactory` go away with it).
 
 - **`this.` stays.** Extension members only apply to an explicit receiver, so a node's own calls read

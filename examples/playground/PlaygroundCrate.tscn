@@ -1,7 +1,7 @@
 [gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://examples/playground/PlaygroundCrate.cs" id="1"]
-[ext_resource type="Script" path="res://addons/netfox-net/NetworkObject.cs" id="2"]
+[ext_resource type="Script" path="res://addons/cracknet/NetworkObject.cs" id="2"]
 
 [sub_resource type="BoxShape3D" id="1"]
 size = Vector3(1, 1, 1)

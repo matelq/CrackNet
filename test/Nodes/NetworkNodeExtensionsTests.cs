@@ -1,6 +1,6 @@
 using Godot;
 
-namespace Netfox.Tests;
+namespace CrackNet.Tests;
 
 /// <summary>The calls on a game's own nodes find the node's NetworkObject, and knockback builds up and decays.</summary>
 public partial class NetworkNodeExtensionsTests : TestSuite

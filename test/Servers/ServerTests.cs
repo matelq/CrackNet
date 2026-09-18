@@ -1,7 +1,7 @@
+using CrackNet.Core.Serialization;
 using Godot;
-using Netfox.Core.Serialization;
 
-namespace Netfox.Tests;
+namespace CrackNet.Tests;
 
 /// <summary>Test doubles matching test/netfox/servers/testing-servers.gd: a command server that records instead of sending.</summary>
 public partial class TestingCommandServer : NetworkCommandServer

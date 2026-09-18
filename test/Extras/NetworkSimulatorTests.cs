@@ -1,7 +1,7 @@
+using CrackNet.Extras;
 using Godot;
-using Netfox.Extras;
 
-namespace Netfox.Tests;
+namespace CrackNet.Tests;
 
 /// <summary>
 /// #13: the autoconnect flow has to work with peers other than ENet, so a Steam or loopback peer can use it. The cases
@@ -92,11 +92,11 @@ public partial class NetworkSimulatorTests : TestSuite
     [Test]
     public async Task TheLossSettingIsAChanceAndProfilesCountPercent()
     {
-        var backup = NetfoxSettings.Instance;
-        var settings = NetfoxSettings.Load();
+        var backup = CrackNetSettings.Instance;
+        var settings = CrackNetSettings.Load();
         settings.SimulatedProfile = "Custom";
         settings.SimulatedPacketLossChance = 0.3;
-        NetfoxSettings.Instance = settings;
+        CrackNetSettings.Instance = settings;
         try
         {
             var simulator = await Simulator("Lossy");
@@ -104,7 +104,7 @@ public partial class NetworkSimulatorTests : TestSuite
         }
         finally
         {
-            NetfoxSettings.Instance = backup;
+            CrackNetSettings.Instance = backup;
         }
     }
 
@@ -118,10 +118,10 @@ public partial class NetworkSimulatorTests : TestSuite
 
         // The wrapper is only there when there is something to simulate; the project's own setting (Clear on a
         // developer's machine) must not decide this test
-        var backup = NetfoxSettings.Instance;
-        var settings = NetfoxSettings.Load();
+        var backup = CrackNetSettings.Instance;
+        var settings = CrackNetSettings.Load();
         settings.SimulatedProfile = "Bad";
-        NetfoxSettings.Instance = settings;
+        CrackNetSettings.Instance = settings;
         try
         {
             var simulator = await Simulator("Hosting Simulator");
@@ -137,7 +137,7 @@ public partial class NetworkSimulatorTests : TestSuite
         }
         finally
         {
-            NetfoxSettings.Instance = backup;
+            CrackNetSettings.Instance = backup;
         }
     }
 
@@ -177,11 +177,11 @@ public partial class NetworkSimulatorTests : TestSuite
     [Test]
     public async Task TheProfileSettingPicksANamedProfile()
     {
-        var backup = NetfoxSettings.Instance;
-        var settings = NetfoxSettings.Load();
+        var backup = CrackNetSettings.Instance;
+        var settings = CrackNetSettings.Load();
         settings.SimulatedProfile = "Hostile";
         settings.SimulatedLatencyMs = 1;
-        NetfoxSettings.Instance = settings;
+        CrackNetSettings.Instance = settings;
         try
         {
             var simulator = await Simulator("Profiled");
@@ -189,7 +189,7 @@ public partial class NetworkSimulatorTests : TestSuite
         }
         finally
         {
-            NetfoxSettings.Instance = backup;
+            CrackNetSettings.Instance = backup;
         }
     }
 

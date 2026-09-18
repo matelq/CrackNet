@@ -1,6 +1,6 @@
 using Godot;
 
-namespace Netfox.Examples.Playground;
+namespace CrackNet.Examples.Playground;
 
 /// <summary>
 /// A slow projectile, spawned by its shooter with <c>PlaygroundShot.Spawn(at, velocity)</c> from PlaygroundShot.tscn.

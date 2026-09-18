@@ -1,6 +1,6 @@
 using Godot;
 
-namespace Netfox.Tests;
+namespace CrackNet.Tests;
 
 /// <summary>A replicated body for harness cases: while authoritative it moves along <see cref="Velocity"/> every tick.</summary>
 [Scene("res://test/Harness/harness_body.tscn")]
@@ -52,7 +52,7 @@ public partial class HarnessBody : Node3D, ISpawnedWith<Vector3>
 
     public override void _Ready()
     {
-        _time = NetfoxContext.For(this).NetworkTime;
+        _time = CrackNetContext.For(this).NetworkTime;
         _time.OnTick += Move;
     }
 

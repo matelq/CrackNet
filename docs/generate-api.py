@@ -3,7 +3,7 @@
 Not a replacement for the guides - it is the index you reach for when you know roughly what you want and not what it
 is called. Regenerate after changing public API:
 
-    dotnet build Netfox.csproj
+    dotnet build CrackNet.csproj
     python docs/generate-api.py
 """
 
@@ -16,13 +16,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 XML_PATHS = [
-    ROOT / ".godot/mono/temp/bin/Debug/Netfox.xml",
-    ROOT / ".godot/mono/temp/bin/Debug/Netfox.Core.xml",
+    ROOT / ".godot/mono/temp/bin/Debug/CrackNet.xml",
+    ROOT / ".godot/mono/temp/bin/Debug/CrackNet.Core.xml",
 ]
 OUT = ROOT / "docs/api.md"
 
 # Types nobody writing a game needs to reach for
-SKIP_NAMESPACES = ("Netfox.Tests", "Netfox.Examples", "Netfox.SourceGenerators", "Netfox.Internal", "Netfox.Editor")
+SKIP_NAMESPACES = ("CrackNet.Tests", "CrackNet.Examples", "CrackNet.SourceGenerators", "CrackNet.Internal", "CrackNet.Editor")
 SKIP_SUFFIXES = ("Tests", "Benchmarks")
 
 # Godot's own source generator emits one of these per script class; they are plumbing, not API
@@ -61,7 +61,7 @@ def text_of(node):
 
 
 def split_member(name):
-    """'M:Netfox.NetworkTime.Start' -> ('M', 'Netfox.NetworkTime', 'Start')."""
+    """'M:CrackNet.NetworkTime.Start' -> ('M', 'CrackNet.NetworkTime', 'Start')."""
     kind, _, rest = name.partition(":")
     signature = ""
     if "(" in rest:
@@ -81,7 +81,7 @@ def collect():
 
     for path in XML_PATHS:
         if not path.exists():
-            print(f"missing {path}; run dotnet build Netfox.csproj first", file=sys.stderr)
+            print(f"missing {path}; run dotnet build CrackNet.csproj first", file=sys.stderr)
             return None, None
 
         for entry in ElementTree.parse(path).getroot().findall("./members/member"):

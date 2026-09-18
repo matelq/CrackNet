@@ -1,6 +1,6 @@
 using Godot;
 
-namespace Netfox.Tests;
+namespace CrackNet.Tests;
 
 /// <summary>State of a <see cref="NetworkObject"/> goes from its authority to everyone else and plays back smoothly.</summary>
 public partial class NetworkObjectTests : HarnessSuite

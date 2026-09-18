@@ -1,6 +1,6 @@
 # NetworkTime and the tick loop
 
-`NetworkTime` is the clock everything else in netfox hangs off. It is an autoload, reached through
+`NetworkTime` is the clock everything else in CrackNet hangs off. It is an autoload, reached through
 `NetworkTime.Instance`, and it runs a fixed-rate tick loop on top of Godot's variable frame rate.
 
 Ticks are what makes peers comparable. Frames happen whenever a machine gets round to them; tick 412 means the same
@@ -47,7 +47,7 @@ Playback of remote objects runs in `_Process`, every frame, so displayed motion 
 | Member | What it is |
 |---|---|
 | `Tick` | The current tick. Samples are stamped with it. |
-| `Time` | Seconds since the clock started, as netfox sees them. |
+| `Time` | Seconds since the clock started, as CrackNet sees them. |
 | `Ticktime` | Seconds per tick, `1.0 / Tickrate`. |
 | `TickFactor` | How far into the current tick the frame is, 0 to 1. |
 | `PhysicsFactor` | Ratio between the tick delta and the delta of whatever frame you are in. |
@@ -60,7 +60,7 @@ setting adopts the host's.
 
 ## Settings
 
-Under **Project Settings > Netfox > Time**:
+Under **Project Settings > CrackNet > Time**:
 
 - **Tickrate** - ticks per second. The host's wins: a client with a different value adopts it and, depending on
   **Tickrate mismatch action**, warns or errors. 30 is a reasonable default; higher costs bandwidth and CPU in

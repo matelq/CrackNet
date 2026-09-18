@@ -1,12 +1,12 @@
+using CrackNet.Extras;
 using Godot;
-using Netfox.Extras;
 
-namespace Netfox.Tests;
+namespace CrackNet.Tests;
 
 /// <summary>
-/// Routes packets between <see cref="LoopbackMultiplayerPeer"/> instances inside one process, so any number of netfox
+/// Routes packets between <see cref="LoopbackMultiplayerPeer"/> instances inside one process, so any number of CrackNet
 /// stacks can talk to each other without a socket. Every peer is announced to every other, so this is a mesh: what
-/// makes peer 1 the server is netfox asking the peer, not the routing. Latency and packet loss are optional; loss only ever drops unreliable packets,
+/// makes peer 1 the server is CrackNet asking the peer, not the routing. Latency and packet loss are optional; loss only ever drops unreliable packets,
 /// the way a real transport retransmits reliable ones.
 /// </summary>
 public sealed class LoopbackNetwork

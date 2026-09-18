@@ -1,6 +1,6 @@
 using Godot;
 
-namespace Netfox.Tests;
+namespace CrackNet.Tests;
 
 public partial class SyncedNode : Node3D
 {

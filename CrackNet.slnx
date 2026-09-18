@@ -1,0 +1,9 @@
+<Solution>
+  
+  <Project Path="CrackNet.Core.Tests/CrackNet.Core.Tests.csproj" />
+  <Project Path="CrackNet.Core/CrackNet.Core.csproj" />
+  <Project Path="CrackNet.SourceGenerators/CrackNet.SourceGenerators.csproj" />
+  <Project Path="CrackNet.csproj">
+    <BuildType Project="Debug" />
+  </Project>
+</Solution>

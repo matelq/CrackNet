@@ -1,6 +1,6 @@
 using Godot;
 
-namespace Netfox.Tests;
+namespace CrackNet.Tests;
 
 /// <summary>
 /// Projectiles belong to their shooter, are spawned with their generated Spawn, and on other peers appear only when
@@ -10,8 +10,8 @@ public partial class ProjectileTests : HarnessSuite
 {
     private const int Shooter = 2;
     private static readonly Vector3 Speed = new(10, 0, 0);
-    private NetfoxStack _third = null!;
-    private NetfoxStack[] _stacks = null!;
+    private CrackNetStack _third = null!;
+    private CrackNetStack[] _stacks = null!;
 
     public override async Task BeforeCase()
     {

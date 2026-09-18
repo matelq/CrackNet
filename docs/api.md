@@ -3,7 +3,7 @@
 Generated from the XML doc comments by `docs/generate-api.py`. The [guides](README.md) are the place to
 start; this is the index for when you know roughly what you want and not what it is called.
 
-## Netfox
+## CrackNet
 
 ### CommandIds
 
@@ -16,6 +16,38 @@ Well-known command ids. Explicit so they do not depend on autoload order.
 ### CompactValues
 
 Synced values on the wire: a type byte, then the value at float precision. `GD.VarToBytes` costs a 4-byte header per value on top of doubles; a Vector3 goes from 20 bytes to 13. Types without a case here fall back to it.
+
+### CrackNetContext
+
+The CrackNet servers as one owned graph instead of process-wide singletons. Upstream has no equivalent: its servers are GDScript autoloads, so a process can only ever run one CrackNet stack. The autoloads still exist here and still fill `Instance`, but they register into `Default`, and a second stack can be created by adding a `CrackNetContextRoot` to the tree: everything below it resolves to that context instead, which is what an in-process two-peer test needs.
+
+| | Member | Summary |
+|---|---|---|
+| property | `Default` | The context the autoloads register into, and the one nodes outside a `CrackNetContextRoot` use. |
+| property | `IsDefault` | True for the context the autoloads live in; only its servers are published as `Instance`. |
+| method | `CreateServers(Godot.Node)` | Creates the servers this context is missing as children of `parent`, in the same order the plugin registers the autoloads in (dependencies first). Does nothing for the default context, whose servers are the autoloads themselves. |
+| method | `For(Godot.Node)` | The context `node` belongs to: the nearest `CrackNetContextRoot` above it, or `Default`. Nodes resolve this once, when they enter the tree. |
+| method | `ResetSession` | Drops everything tied to the session that just ended: recorded history, what was sent to which peer, the ids exchanged with peers, spawn ticks. Registrations survive, so a scene that stays in the tree keeps working. Called automatically when `NetworkEvents` sees the session stop. Games that disable NetworkEvents have to call it themselves; without it, the next session starts at tick zero while the histories still hold the previous session's ticks, and every write lands outside their window and is dropped. |
+| event | `SessionReset` | Raised at the end of `ResetSession`, once the servers have dropped their per-session data. Nodes that hold ticks of their own, like the synchronizers, listen to this to re-register themselves. |
+
+### CrackNetContextRoot
+
+Marks its subtree as belonging to `Context`: nodes below it use that context's servers instead of the autoloads. Creates the servers as its own children when it enters the tree.
+
+| | Member | Summary |
+|---|---|---|
+| property | `Context` | The context this subtree uses. Assign before entering the tree to share one between roots. |
+
+### CrackNetSettings
+
+Every `cracknet/*` project setting, read once into one mutable object. Upstream reads `ProjectSettings` in field initializers of each server (see `network-time.gd:370`), which ties the servers to `project.godot` and makes runtime toggles ad hoc. Servers take their values from `Instance` instead; assign a different instance before the autoloads are created to configure them.
+
+| | Member | Summary |
+|---|---|---|
+| property | `Instance` | The settings the autoloads use. Replace before they enter the tree; mutating it later only affects re-reads. |
+| property | `SimulatedProfile` | A named NetworkSimulator profile, or "Custom" for the latency, loss, jitter and burst settings. |
+| property | `SyncPanicThreshold` | Same `cracknet/time/recalibrate_threshold` key as `RecalibrateThreshold`, but with the fallback upstream uses in the time synchronizer (`network-time-synchronizer.gd:105`). The two differ only when the setting is absent. |
+| method | `Load` | Reads every setting from `ProjectSettings`, falling back to the defaults the plugin registers. |
 
 ### IAuthorityChanged
 
@@ -42,38 +74,6 @@ Registry of value interpolators by type. Discrete types (bool, integers, integer
 | property | `DefaultApply` | Fallback: snap to whichever endpoint is closer. |
 | method | `Register(System.Func{Godot.Variant,System.Boolean},System.Func{Godot.Variant,Godot.Variant,System.Double,Godot.Variant})` | Registered interpolators take precedence over earlier ones. |
 
-### NetfoxContext
-
-The netfox servers as one owned graph instead of process-wide singletons. Upstream has no equivalent: its servers are GDScript autoloads, so a process can only ever run one netfox stack. The autoloads still exist here and still fill `Instance`, but they register into `Default`, and a second stack can be created by adding a `NetfoxContextRoot` to the tree: everything below it resolves to that context instead, which is what an in-process two-peer test needs.
-
-| | Member | Summary |
-|---|---|---|
-| property | `Default` | The context the autoloads register into, and the one nodes outside a `NetfoxContextRoot` use. |
-| property | `IsDefault` | True for the context the autoloads live in; only its servers are published as `Instance`. |
-| method | `CreateServers(Godot.Node)` | Creates the servers this context is missing as children of `parent`, in the same order the plugin registers the autoloads in (dependencies first). Does nothing for the default context, whose servers are the autoloads themselves. |
-| method | `For(Godot.Node)` | The context `node` belongs to: the nearest `NetfoxContextRoot` above it, or `Default`. Nodes resolve this once, when they enter the tree. |
-| method | `ResetSession` | Drops everything tied to the session that just ended: recorded history, what was sent to which peer, the ids exchanged with peers, spawn ticks. Registrations survive, so a scene that stays in the tree keeps working. Called automatically when `NetworkEvents` sees the session stop. Games that disable NetworkEvents have to call it themselves; without it, the next session starts at tick zero while the histories still hold the previous session's ticks, and every write lands outside their window and is dropped. |
-| event | `SessionReset` | Raised at the end of `ResetSession`, once the servers have dropped their per-session data. Nodes that hold ticks of their own, like the synchronizers, listen to this to re-register themselves. |
-
-### NetfoxContextRoot
-
-Marks its subtree as belonging to `Context`: nodes below it use that context's servers instead of the autoloads. Creates the servers as its own children when it enters the tree.
-
-| | Member | Summary |
-|---|---|---|
-| property | `Context` | The context this subtree uses. Assign before entering the tree to share one between roots. |
-
-### NetfoxSettings
-
-Every `netfox/*` project setting, read once into one mutable object. Upstream reads `ProjectSettings` in field initializers of each server (see `network-time.gd:370`), which ties the servers to `project.godot` and makes runtime toggles ad hoc. Servers take their values from `Instance` instead; assign a different instance before the autoloads are created to configure them.
-
-| | Member | Summary |
-|---|---|---|
-| property | `Instance` | The settings the autoloads use. Replace before they enter the tree; mutating it later only affects re-reads. |
-| property | `SimulatedProfile` | A named NetworkSimulator profile, or "Custom" for the latency, loss, jitter and burst settings. |
-| property | `SyncPanicThreshold` | Same `netfox/time/recalibrate_threshold` key as `RecalibrateThreshold`, but with the fallback upstream uses in the time synchronizer (`network-time-synchronizer.gd:105`). The two differ only when the setting is absent. |
-| method | `Load` | Reads every setting from `ProjectSettings`, falling back to the defaults the plugin registers. |
-
 ### NetworkCommandServer
 
 Transmits commands over the network: a single id byte plus raw binary data, either over RPC (default) or as raw SceneMultiplayer packets. Port of servers/network-command-server.gd.
@@ -81,7 +81,7 @@ Transmits commands over the network: a single id byte plus raw binary data, eith
 | | Member | Summary |
 |---|---|---|
 | property | `Context` | The stack this server belongs to; resolved when it enters the tree. |
-| property | `SentCounts` | Payload bytes and packets sent per command id since the last `ResetSentCounts`. Transport framing is not included, so this says what netfox asked for rather than what went on the wire. It exists because a total cannot answer the question that matters when something grows: which command grew. |
+| property | `SentCounts` | Payload bytes and packets sent per command id since the last `ResetSentCounts`. Transport framing is not included, so this says what CrackNet asked for rather than what went on the wire. It exists because a total cannot answer the question that matters when something grows: which command grew. |
 | field | `PacketPrefix` | Prefix of raw command packets: NUL, n, f. |
 | method | `IsCommandPacket(System.ReadOnlySpan{System.Byte})` | True if `packet` is a command packet. Always true when commands go over RPC. |
 | method | `RegisterCommand(System.Action{System.Int32,System.Byte[]},Godot.MultiplayerPeer.TransferModeEnum,System.Int32)` | Register a command at the next available id. |
@@ -94,7 +94,7 @@ Convenience multiplayer lifecycle events that survive MultiplayerAPI swaps, and 
 | | Member | Summary |
 |---|---|---|
 | property | `Context` | The stack this server belongs to; resolved when it enters the tree. |
-| property | `Enabled` | Events are only emitted while enabled. Initial value comes from netfox/events/enabled. |
+| property | `Enabled` | Events are only emitted while enabled. Initial value comes from cracknet/events/enabled. |
 | method | `StopClient` | Emits OnClientStop at most once per session, however the session ended. |
 | event | `OnClientStart` | (own peer id) |
 | event | `OnMultiplayerChange` | (old, new) |
@@ -112,7 +112,7 @@ Tracks network identities: nodes are referenced by scene path, replaced with com
 | method | `QueueIdentifierFor(Godot.Node,System.Int32)` | Queue sending the numeric id of `node` to `peer`. Sent on the next FlushQueue. |
 | method | `RegisterNode(Godot.Node)` | Register a node so it can be referred to over the network. Must be registered with the same path on all peers. |
 | method | `ResetSession` | Forgets the ids exchanged with peers, keeping the nodes registered locally. |
-| method | `ResolveReference(System.Int32,Netfox.Core.Data.NetworkIdentityReference,System.Boolean)` | Resolves a reference received from `peer`. Ids are in our local id space; names queue our id for that peer. |
+| method | `ResolveReference(System.Int32,CrackNet.Core.Data.NetworkIdentityReference,System.Boolean)` | Resolves a reference received from `peer`. Ids are in our local id space; names queue our id for that peer. |
 
 ### NetworkNodeExtensions
 
@@ -146,11 +146,11 @@ One replicated object. While its root is this peer's multiplayer authority it se
 | property | `Transferable` | Whether other peers may take authority or ownership. Set by `Kind`; by hand only for `Custom`. The current authority sends runtime changes through the host. |
 | method | `Answered(System.Int32)` | The host answered `requestId`: events held for it go wherever authority now is. |
 | method | `AutoProperties(Godot.Node)` | What is sent for a root of this type before its `[Synced]` properties. |
-| method | `Deliver(System.Int32,Netfox.NetworkObject.EventKind,Godot.Variant,System.Int32)` | Raises an event here if this peer is the authority, and passes it on otherwise. While this peer's own request is unanswered its authority may be about to be taken back, so the event waits for the host's answer. |
+| method | `Deliver(System.Int32,CrackNet.NetworkObject.EventKind,Godot.Variant,System.Int32)` | Raises an event here if this peer is the authority, and passes it on otherwise. While this peer's own request is unanswered its authority may be about to be taken back, so the event waits for the host's answer. |
 | method | `DescribeSynced` | The inspector's list. In the editor a script without `[Tool]` is a placeholder, so its `[Synced]` properties are read from the compiled type the script path points at. |
 | method | `Despawn` | Ends this authoritative object's timeline. It is hidden and stops processing here immediately; remote peers hide it when their playback reaches the flagged final sample, and the root is freed after the playback grace period so a `MultiplayerSpawner` cannot remove it from observers early. |
+| method | `Impulse(CrackNet.NetworkObject,Godot.Vector3)` | This object struck `target`: takes the target when it can (`NetworkObject`), so a crate flies on this peer's simulation at once, then pushes it. A player, which cannot be taken, is pushed on its own peer. If the host gives the target to someone else, the winner's simulation stands and this push is lost with the claim. |
 | method | `Impulse(Godot.Vector3)` | Pushes this object with nothing doing the pushing - an explosion, a trap: its authority applies `impulse` to a rigid body or raises `Impulsed`. Delivered like `Variant`. |
-| method | `Impulse(Netfox.NetworkObject,Godot.Vector3)` | This object struck `target`: takes the target when it can (`NetworkObject`), so a crate flies on this peer's simulation at once, then pushes it. A player, which cannot be taken, is pushed on its own peer. If the host gives the target to someone else, the winner's simulation stands and this push is lost with the claim. |
 | method | `IsNewer(System.Int32,System.Int32)` | True when ( `ownershipSequence`, `authoritySequence`) is newer than what this object has. |
 | method | `KindFor(Godot.Node)` | What `Auto` resolves to for a root of this type. |
 | method | `Of(Godot.Node)` | The object whose root is `root`, or null when it is not a registered object. |
@@ -158,7 +158,7 @@ One replicated object. While its root is this peer's multiplayer authority it se
 | method | `ReleaseClaim(Godot.Vector3)` | Lets go of a held object with `velocity`: the throw flies on this peer's simulation. |
 | method | `Send(Godot.Variant)` | Delivers `payload` to whoever is this object's authority, reliably and exactly once, even if authority moves while it is on its way. On the authority itself it is raised at once. |
 | method | `Snap` | The next state this peer sends applies without interpolation on the others: a respawn, not a flight. |
-| method | `Spread(Netfox.NetworkObject)` | Passes this object's authority to `other` after contact. Physics bodies call it themselves; call it for contact the physics engine does not report. The source's depth limit follows the whole chain; the host verifies this object as the cause and arbitrates opposing requests. |
+| method | `Spread(CrackNet.NetworkObject)` | Passes this object's authority to `other` after contact. Physics bodies call it themselves; call it for contact the physics engine does not report. The source's depth limit follows the whole chain; the host verifies this object as the cause and arbitrates opposing requests. |
 | method | `TakeImpulses(System.Double,System.Single)` | The pushes received and not yet used up, decaying by `decay` per second: add it to a character's velocity each physics frame, before moving. |
 | method | `TryClaim` | Makes the object this peer's: authority and ownership, so nobody else can take it until it is released. A physics body is frozen while claimed; the game moves it. False when someone else holds it. |
 | method | `UnsupportedReason(Godot.Node)` | Why a root of this type cannot be replicated, or null when it can. |
@@ -184,7 +184,7 @@ Sends the state of every `NetworkObject` this peer is authority for, once per ti
 | method | `HandleAuthority(System.Int32,System.Byte[])` | On the host: accepts a guest's change when it is newer and the object is free or already the guest's, and tells everyone; otherwise tells the guest what stands. On a guest: whatever the host says stands. |
 | method | `HandleEvent(System.Int32,System.Byte[])` | Raises an event on its object if this peer is the authority, and passes it on to the authority otherwise. |
 | method | `SendAllAuthorityTo(System.Int32)` | On the host: tells a peer that just joined who has authority over and who holds every object. |
-| method | `SubmitAuthority(Netfox.NetworkObject)` | Sends an authority change this peer just applied: a guest asks the host, the host tells everyone. |
+| method | `SubmitAuthority(CrackNet.NetworkObject)` | Sends an authority change this peer just applied: a guest asks the host, the host tells everyone. |
 
 ### NetworkTickrateHandshake
 
@@ -192,7 +192,7 @@ Exchanges the configured tickrate with the host when peers join. Port of time/ne
 
 | | Member | Summary |
 |---|---|---|
-| property | `Context` | The netfox stack this node uses; resolved when it enters the tree. |
+| property | `Context` | The CrackNet stack this node uses; resolved when it enters the tree. |
 | method | `IsAuthority` | Overridable to ease testing; pretending to be a client is messy from a unit test. |
 | method | `Run` | Run the handshake: broadcast tickrate, and send it to every joining peer. Called by NetworkTime. |
 | event | `OnTickrateMismatch` | (peer, tickrate) |
@@ -219,7 +219,7 @@ The shared tick clock: runs ticks at a fixed rate and keeps them in step with th
 
 ### NetworkTimeSynchronizer
 
-Continuously synchronizes the reference clock to the host. Transport and timing live here, the clock math lives in Netfox.Core.Time.ClockSynchronizer. Port of network-time-synchronizer.gd.
+Continuously synchronizes the reference clock to the host. Transport and timing live here, the clock math lives in CrackNet.Core.Time.ClockSynchronizer. Port of network-time-synchronizer.gd.
 
 | | Member | Summary |
 |---|---|---|
@@ -283,7 +283,7 @@ A property a NetworkObject replicates: its path relative to the declaring node, 
 |---|---|---|
 | method | `#ctor(System.String,System.Boolean)` | A property a NetworkObject replicates: its path relative to the declaring node, and whether playback blends it. |
 
-## Netfox.Core.Data
+## CrackNet.Core.Data
 
 ### NetworkIdentifier`1
 
@@ -297,13 +297,13 @@ Maps a subject to its local id and per-peer ids. Port of servers/data/network-id
 
 Either a compact numeric id or a full node name. Port of servers/data/network-identity-reference.gd.
 
-## Netfox.Core.Logging
+## CrackNet.Core.Logging
 
-### NetfoxLogger
+### CrackNetLogger
 
-Logger with per-module levels and context tags. Port of netfox.internals/logger.gd. Output sinks are pluggable so the core stays engine-agnostic; Netfox.Godot wires them to GD.Print / PushWarning / PushError.
+Logger with per-module levels and context tags. Port of netfox.internals/logger.gd. Output sinks are pluggable so the core stays engine-agnostic; CrackNet.Godot wires them to GD.Print / PushWarning / PushError.
 
-## Netfox.Core.Serialization
+## CrackNet.Core.Serialization
 
 ### ByteReader
 
@@ -338,7 +338,7 @@ Encodes a NetworkIdentityReference as varuint id, or 0 followed by a c-string na
 
 Variable-length unsigned integer: 7 data bits per byte, high bit marks continuation. Port of _VaruintSerializer.
 
-## Netfox.Core.Time
+## CrackNet.Core.Time
 
 ### ClockSample
 
@@ -350,7 +350,7 @@ One NTP-style ping/pong measurement. Port of network-clock-sample.gd.
 
 ### ClockSynchronizer
 
-Transport-free core of NetworkTimeSynchronizer: owns the reference clock, in-flight and completed samples, and disciplines the clock after every completed sample. Netfox.Godot drives it with ping/pong commands and a timer. Port of the algorithm in network-time-synchronizer.gd.
+Transport-free core of NetworkTimeSynchronizer: owns the reference clock, in-flight and completed samples, and disciplines the clock after every completed sample. CrackNet.Godot drives it with ping/pong commands and a timer. Port of the algorithm in network-time-synchronizer.gd.
 
 | | Member | Summary |
 |---|---|---|
@@ -423,11 +423,11 @@ The arithmetic of the NetworkTime tick loop without any side effects: clock stre
 | method | `CompleteTick` | Call after each simulated tick. |
 | method | `Reset(System.Double)` | Aligns the simulation clock with the reference clock, e.g. after the initial sync. |
 
-## Netfox.Extras
+## CrackNet.Extras
 
 ### EnetMesh
 
-A full ENet mesh over a local network, for running a session in several windows or over a LAN. Guests send state straight to each other in this model, so a star through the host would add a hop to every sample: the host hands out compact peer ids over a temporary ENet lobby, then every pair owns one `ENetConnection`. A development tool, like `NetworkSimulator` and autoconnect: it needs a reachable port per pair, which rules it out over the internet. There, hand netfox a transport that is a mesh already - the Steam peer in `examples/steam` - or any other `MultiplayerPeer`; netfox never creates one itself.
+A full ENet mesh over a local network, for running a session in several windows or over a LAN. Guests send state straight to each other in this model, so a star through the host would add a hop to every sample: the host hands out compact peer ids over a temporary ENet lobby, then every pair owns one `ENetConnection`. A development tool, like `NetworkSimulator` and autoconnect: it needs a reachable port per pair, which rules it out over the internet. There, hand CrackNet a transport that is a mesh already - the Steam peer in `examples/steam` - or any other `MultiplayerPeer`; CrackNet never creates one itself.
 
 ### NetworkSimulator
 
@@ -440,8 +440,8 @@ Editor convenience: the first launched instance hosts and later ones join. Link 
 | property | `JoinPeerFactory` | Creates the peer used when the hosting port was already taken. |
 | property | `Peer` | The peer produced by autoconnect, wrapped with this instance's link conditions. |
 | method | `Connect` | Hosts if the configured port is free, otherwise joins, then installs the simulated peer. |
-| method | `InLossBurst(Netfox.Extras.NetworkSimulator.Profile,System.UInt64)` | Whether an unreliable packet sent now falls inside a periodic link outage. |
-| method | `OscillatingJitter(Netfox.Extras.NetworkSimulator.Profile,System.UInt64)` | A raised cosine over the period, so delay drifts instead of jumping. |
+| method | `InLossBurst(CrackNet.Extras.NetworkSimulator.Profile,System.UInt64)` | Whether an unreliable packet sent now falls inside a periodic link outage. |
+| method | `OscillatingJitter(CrackNet.Extras.NetworkSimulator.Profile,System.UInt64)` | A raised cosine over the period, so delay drifts instead of jumping. |
 
 ### SimulatedMultiplayerPeer
 
@@ -449,7 +449,7 @@ A transport wrapper that applies a `Profile` once, on the sending side of each r
 
 ### WindowTiler
 
-Tiles the windows of game instances launched together from the editor (Debug > Customize Run Instances), on Project Settings > Netfox > Extras > Auto Tile Windows. Every instance keeps a lock file in the cache directory fresh twice a second; a lock that has not been touched for a few seconds belongs to an instance that is gone. Each instance lays itself out again whenever the set of live locks changes. The original decided once, in its first two seconds, and deleted every lock older than three: instances that take several seconds each to start - C# and a physics extension - each saw only themselves and all maximised on top of each other.
+Tiles the windows of game instances launched together from the editor (Debug > Customize Run Instances), on Project Settings > CrackNet > Extras > Auto Tile Windows. Every instance keeps a lock file in the cache directory fresh twice a second; a lock that has not been touched for a few seconds belongs to an instance that is gone. Each instance lays itself out again whenever the set of live locks changes. The original decided once, in its first two seconds, and deleted every lock older than three: instances that take several seconds each to start - C# and a physics extension - each saw only themselves and all maximised on top of each other.
 
 | | Member | Summary |
 |---|---|---|

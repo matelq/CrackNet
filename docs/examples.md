@@ -2,12 +2,12 @@
 
 The smallest code for each thing a co-op game needs. Everything here compiles against the current API; the
 playground (`examples/playground`) is the same, fleshed out. Every script below is an ordinary Godot node script:
-nothing inherits from netfox, a `NetworkObject` child node does the networking. Every file starts with:
+nothing inherits from CrackNet, a `NetworkObject` child node does the networking. Every file starts with:
 
 <!-- check: usings -->
 ```csharp
 using Godot;
-using Netfox;
+using CrackNet;
 ```
 
 ## 1. Players

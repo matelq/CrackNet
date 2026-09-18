@@ -1,6 +1,6 @@
 using Godot;
 
-namespace Netfox.Tests;
+namespace CrackNet.Tests;
 
 /// <summary>A peer joining mid-session gets the world as it is: spawned objects, who simulates and holds what, and state.</summary>
 public partial class LateJoinTests : HarnessSuite

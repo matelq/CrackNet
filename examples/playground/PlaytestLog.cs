@@ -1,7 +1,7 @@
 using Godot;
 using FileAccess = Godot.FileAccess;
 
-namespace Netfox.Examples.Playground;
+namespace CrackNet.Examples.Playground;
 
 /// <summary>
 /// A per-window log for playtests, to read afterwards rather than watch: user://playtest/&lt;start&gt;_pid&lt;pid&gt;.log,

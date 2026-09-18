@@ -1,4 +1,4 @@
-# netfox-net
+# CrackNet
 
 Co-op netcode for Godot C#: distributed authority with state synchronization. Started as a port of netfox; on this
 branch (`distributed-authority`) it no longer is one. The model, its decisions and sources: `docs/design/distributed-authority.md`
@@ -7,12 +7,12 @@ parity checks) do not apply here; `reworked` and `master` keep the port. Roadmap
 
 ## Layout
 
-- `Netfox.Core/` — engine-agnostic core, no Godot reference (being merged into the addon). Godot aliases in `addons/netfox-net/Internal/GlobalUsings.cs`.
-- `addons/netfox-net/` — the addon (namespace `Netfox`, extras in `Netfox.Extras`). Autoloads expose `Instance`; order is fixed in `Editor/NetfoxPlugin.cs` and `project.godot` (dependencies first).
-- `test/` — Godot-side tests (`TestSuite` + `[Test]`), `Netfox.Core.Tests/` — xUnit. `test/Harness/` runs several stacks in one tree over a loopback peer.
-- `NetfoxContext`: servers register into `NetfoxContext.Default`; a `NetfoxContextRoot` node gives its subtree a second stack. Nodes resolve `Context` in `_EnterTree`; `Instance` still points at the default stack.
+- `CrackNet.Core/` — engine-agnostic core, no Godot reference (being merged into the addon). Godot aliases in `addons/cracknet/Internal/GlobalUsings.cs`.
+- `addons/cracknet/` — the addon (namespace `CrackNet`, extras in `CrackNet.Extras`). Autoloads expose `Instance`; order is fixed in `Editor/CrackNetPlugin.cs` and `project.godot` (dependencies first).
+- `test/` — Godot-side tests (`TestSuite` + `[Test]`), `CrackNet.Core.Tests/` — xUnit. `test/Harness/` runs several stacks in one tree over a loopback peer.
+- `CrackNetContext`: servers register into `CrackNetContext.Default`; a `CrackNetContextRoot` node gives its subtree a second stack. Nodes resolve `Context` in `_EnterTree`; `Instance` still points at the default stack.
 - `examples/playground/` — the co-op sample (its smoke lives in `test/Playground/`); `examples/steam/` — GodotSteam bootstrap under `#if GODOTSTEAM`.
-- Repo root is the Godot project. Godot 4.7.2 mono binary: `.tools/godot/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe` (gitignored). Use exactly this version: older editors downgrade the SDK in Netfox.csproj.
+- Repo root is the Godot project. Godot 4.7.2 mono binary: `.tools/godot/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe` (gitignored). Use exactly this version: older editors downgrade the SDK in CrackNet.csproj.
 - **Rapier-first** (netfox-net#52): `project.godot` asks for `Rapier3D`, and the extension is gitignored, so a fresh clone
   needs `sh tools/install-extensions.sh rapier` before anything with a physics body runs (`steam` installs GodotSteam).
   The addon itself names no engine.
@@ -20,8 +20,8 @@ parity checks) do not apply here; `reworked` and `master` keep the port. Roadmap
 ## Commands
 
 ```
-dotnet test Netfox.slnx                                                   # core tests
-dotnet build Netfox.csproj                                                # addon + tests
+dotnet test CrackNet.slnx                                                   # core tests
+dotnet build CrackNet.csproj                                                # addon + tests
 <godot> --headless --path . res://test/TestRunner.tscn                    # Godot tests, exit 0 = ok
 <godot> --path . res://examples/playground/playground.tscn                # the sample: Host in one window, Join in others
 <godot> --headless --path . res://examples/playground/playground.tscn -- --smoke --host --seconds=36 --port=20000
@@ -39,10 +39,10 @@ class per `.cs` file, named after the file - a second class in the same file sil
 
 ## Property attributes
 
-`Netfox.SourceGenerators` turns `[Synced]` on a property into the declaring interface `NetworkObject` gathers from, so
-the paths come from the symbols and cannot go stale on a rename. The type has to be `partial` (NFX001 otherwise), and
+`CrackNet.SourceGenerators` turns `[Synced]` on a property into the declaring interface `NetworkObject` gathers from, so
+the paths come from the symbols and cannot go stale on a rename. The type has to be `partial` (CRN001 otherwise), and
 properties only: Godot exposes a partial class's properties to `Get`/`Set`, not its plain fields. It is referenced as an
-analyzer and ships built in the release zip under `addons/netfox-net/analyzers/`. `NetworkedNodeAnalyzer` (NFX006)
+analyzer and ships built in the release zip under `addons/cracknet/analyzers/`. `NetworkedNodeAnalyzer` (CRN006)
 reads the same `.tscn` additional files to check that a class using `this.Authority`, `crate.TryClaim()` and the rest
 has a scene with a `NetworkObject`; the harness builds bodies in code and disables it with a pragma. Roslyn 5.0 is
 required by the analyzer project: C# 14 extension members are what it looks for.
@@ -64,7 +64,7 @@ a session that predates `.mcp.json`, talk to the server over stdio yourself (spa
 `initialize`, `tools/call`); it connects to the editor asynchronously, so wait a couple of seconds before the first call.
 Quirks: `godot_exec` takes `source`, runs outside the tree, so reach the scene through
 `Engine.get_main_loop().current_scene`; buttons are pressed with `emit_signal("pressed")`; `godot_input sequence` takes
-`inputs: [{action_name, duration_ms, start_ms}]`; `screenshot_game` returns the PNG inline. `godot_game_time freeze` pauses the tree and holds the netfox tick, but
+`inputs: [{action_name, duration_ms, start_ms}]`; `screenshot_game` returns the PNG inline. `godot_game_time freeze` pauses the tree and holds the CrackNet tick, but
 `step` makes NetworkTime catch up to the wall clock in a burst and other peers keep running - pause one peer to look at
 it, never step a multiplayer session with it. Used first to see #60 with
 your own eyes: the NPC had a collision shape and no mesh, and the after-screenshot is how the fix was checked.
@@ -72,22 +72,22 @@ your own eyes: the NPC had a collision shape and no mesh, and the after-screensh
 ## Docs
 
 `docs/` holds the guides, written for C# users of the library rather than for this repo. `docs/api.md` is generated:
-`dotnet build Netfox.csproj` then `python docs/generate-api.py`. Regenerate it when public API or its XML comments
+`dotnet build CrackNet.csproj` then `python docs/generate-api.py`. Regenerate it when public API or its XML comments
 change. Both projects have `GenerateDocumentationFile` on with CS1591 suppressed, so the XML exists without demanding
 a comment on every member.
 
-Editor playtests use autoconnect (Project Settings > Netfox > Autoconnect > Enabled, plus Debug > Customize Run
+Editor playtests use autoconnect (Project Settings > CrackNet > Autoconnect > Enabled, plus Debug > Customize Run
 Instances). That setting lands in project.godot: never commit it, and run headless checks locally with
-`NETFOX_NO_AUTOCONNECT=1` while it is on, or they connect to each other.
+`CRACKNET_NO_AUTOCONNECT=1` while it is on, or they connect to each other.
 
 ## Before committing
 
 Warnings are errors in every project (`Directory.Build.props`). Fix the cause; do not suppress.
 
-Run the whole CI set locally, not a subset: `dotnet format Netfox.slnx --verify-no-changes`, `dotnet test Netfox.slnx`,
-`dotnet build Netfox.csproj`, `python tools/check-doc-examples.py`, then the Godot runner. `docs/examples.md` is how
+Run the whole CI set locally, not a subset: `dotnet format CrackNet.slnx --verify-no-changes`, `dotnet test CrackNet.slnx`,
+`dotnet build CrackNet.csproj`, `python tools/check-doc-examples.py`, then the Godot runner. `docs/examples.md` is how
 the API is judged: keep every block marked and compiling. Building only the project you touched once let a broken
-`Netfox.csproj` through, because the Godot project compiles everything under the repo root that is not excluded.
+`CrackNet.csproj` through, because the Godot project compiles everything under the repo root that is not excluded.
 
 A check that only compares state after the keys are released is blind to what a player sees: a crate drawn on the
 floor between two ticks, a remote player snapping, a body left behind while its mesh moved. Measure during motion and
@@ -103,8 +103,8 @@ same build, so measure in isolation and take allocations and byte counts, which 
 
 ## Releasing
 
-Bump `version` in `addons/netfox-net/plugin.cfg`, then tag `vX.Y.Z`. The release workflow refuses a tag that disagrees
-with plugin.cfg. It packages `addons/netfox-net` with the `Netfox.Core` sources copied into `addons/netfox-net/Core`, so
+Bump `version` in `addons/cracknet/plugin.cfg`, then tag `vX.Y.Z`. The release workflow refuses a tag that disagrees
+with plugin.cfg. It packages `addons/cracknet` with the `CrackNet.Core` sources copied into `addons/cracknet/Core`, so
 a consumer drops in one folder and needs no project reference, and it builds that layout on its own before zipping.
 The addon needs `ImplicitUsings` and `Nullable` enabled in the consuming project.
 
@@ -112,7 +112,7 @@ The addon needs `ImplicitUsings` and `Nullable` enabled in the consuming project
 
 - Signals → C# `event`. Events are NOT auto-disconnected when a node is freed: store the delegate and unsubscribe in `_ExitTree`.
 - Command ids are explicit (`CommandIds`), never auto-incremented.
-- Read settings via `Internal/Settings.cs`; log via `NetfoxLogger` with `{0}` placeholders.
+- Read settings via `Internal/Settings.cs`; log via `CrackNetLogger` with `{0}` placeholders.
 - `Variant` has no value equality: use `VariantComparer`. `NodePath` is a valid dictionary key.
 - Not on purpose: noray/nohub/trimsock, server authority, lag compensation by rewinding. Ask before adding them.
 

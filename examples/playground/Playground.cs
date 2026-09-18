@@ -1,15 +1,15 @@
+using CrackNet.Examples.Steam;
+using CrackNet.Extras;
 using Godot;
-using Netfox.Examples.Steam;
-using Netfox.Extras;
 
-namespace Netfox.Examples.Playground;
+namespace CrackNet.Examples.Playground;
 
 /// <summary>
 /// The co-op sample: host or join, walk around, push and grab crates, push other players, shoot. Everything replicated
 /// is a <see cref="NetworkObject"/>; crates are tinted with the colour of the peer that simulates them right now.
 /// <para>
 /// Run two or more windows (Debug > Customize Run Instances), Host in one and Join in the others. The host puts a
-/// in-process link simulator on each mesh connection with the profile from Project Settings &gt; Netfox &gt;
+/// in-process link simulator on each mesh connection with the profile from Project Settings &gt; CrackNet &gt;
 /// Autoconnect &gt; Simulated Profile, or <c>-- --profile=bad</c> on the command line.
 /// </para>
 /// </summary>
@@ -74,7 +74,7 @@ public partial class Playground : Node3D
             if (id == 1) StartHosting();
         };
 
-        // Editor autoconnect (Project Settings > Netfox > Autoconnect > Enabled): the first instance hosts, the rest
+        // Editor autoconnect (Project Settings > CrackNet > Autoconnect > Enabled): the first instance hosts, the rest
         // join. The simulator's temporary star elects the role, then the playground replaces it with its ENet mesh.
         if (GetNodeOrNull<NetworkSimulator>("/root/NetworkSimulator") is { } simulator)
         {
@@ -104,7 +104,7 @@ public partial class Playground : Node3D
         foreach (var arg in OS.GetCmdlineUserArgs())
             if (arg.StartsWith("--profile=") && NetworkSimulator.Profile.Named(arg["--profile=".Length..]) is { } named)
                 return named;
-        return NetworkSimulator.Profile.Named(NetfoxSettings.Instance.SimulatedProfile) ?? NetworkSimulator.Profile.Default;
+        return NetworkSimulator.Profile.Named(CrackNetSettings.Instance.SimulatedProfile) ?? NetworkSimulator.Profile.Default;
     }
 
     private static int ReadPort()

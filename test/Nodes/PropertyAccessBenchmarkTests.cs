@@ -1,8 +1,8 @@
 using System.Diagnostics;
+using CrackNet.Internal;
 using Godot;
-using Netfox.Internal;
 
-namespace Netfox.Tests;
+namespace CrackNet.Tests;
 
 /// <summary>
 /// Not a check, a measurement: how the ways of reading and writing a property compare, since record and restore do this
@@ -48,7 +48,7 @@ public partial class PropertyAccessBenchmarkTests : TestSuite
             node.Position = value;
         });
 
-        // What netfox actually uses: PropertyAccess keeps a shared cache
+        // What CrackNet actually uses: PropertyAccess keeps a shared cache
         var throughCache = Measure(() =>
         {
             var value = node.GetValue(path);
@@ -61,7 +61,7 @@ public partial class PropertyAccessBenchmarkTests : TestSuite
             $"PropertyAccess cache {throughCache:F1}ms, C# property {typed:F1}ms");
         GD.Print($"{line}, {line2}");
 
-        // Guards the optimization itself: the netfox path has to stay clear of the indexed one. The margin is
+        // Guards the optimization itself: the CrackNet path has to stay clear of the indexed one. The margin is
         // generous because this runs on shared CI hardware, where the ratio is nearer 0.6 than the 0.3 seen locally.
         Expect.True(throughCache < indexed * 0.8,
             $"the PropertyAccess cache ({throughCache:F1}ms) should stay clear of GetIndexed/SetIndexed ({indexed:F1}ms)");

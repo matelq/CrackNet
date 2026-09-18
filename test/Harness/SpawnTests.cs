@@ -1,11 +1,11 @@
 using Godot;
 
-namespace Netfox.Tests;
+namespace CrackNet.Tests;
 
 /// <summary>A generated Spawn puts a scene on every peer, and freeing it or its peer leaving takes it off everywhere.</summary>
 public partial class SpawnTests : HarnessSuite
 {
-    private NetfoxStack _third = null!;
+    private CrackNetStack _third = null!;
 
     public override async Task BeforeCase()
     {
@@ -15,7 +15,7 @@ public partial class SpawnTests : HarnessSuite
         Expect.True(synced, "peers never synced");
     }
 
-    private NetfoxStack[] Stacks => [Host, Client, _third];
+    private CrackNetStack[] Stacks => [Host, Client, _third];
 
     [Test]
     public async Task ASpawnAppearsEverywhereAtItsGlobalTransformWithItsAuthorityAndData()

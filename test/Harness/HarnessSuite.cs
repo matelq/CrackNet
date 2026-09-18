@@ -1,10 +1,10 @@
 using Godot;
 
-namespace Netfox.Tests;
+namespace CrackNet.Tests;
 
 /// <summary>
 /// A host and a client in one SceneTree, talking over a <see cref="LoopbackNetwork"/>. Each gets its own
-/// <see cref="NetfoxContext"/> and its own MultiplayerAPI, so the stacks are as separate as separate processes.
+/// <see cref="CrackNetContext"/> and its own MultiplayerAPI, so the stacks are as separate as separate processes.
 /// <para>
 /// Two of them are always there, because most cases only need a host and a client. A case that needs more calls
 /// <see cref="AddPeer"/>: three is the first count at which a peer has to deal with a player that is neither its own
@@ -14,22 +14,22 @@ namespace Netfox.Tests;
 public abstract partial class HarnessSuite : TestSuite
 {
     protected LoopbackNetwork Network { get; private set; } = null!;
-    protected NetfoxStack Host { get; private set; } = null!;
-    protected NetfoxStack Client { get; private set; } = null!;
+    protected CrackNetStack Host { get; private set; } = null!;
+    protected CrackNetStack Client { get; private set; } = null!;
 
-    private readonly List<NetfoxStack> _stacks = new();
-    private NetfoxSettings _settingsBackup = null!;
+    private readonly List<CrackNetStack> _stacks = new();
+    private CrackNetSettings _settingsBackup = null!;
 
     public override async Task BeforeCase()
     {
         // Sync faster than the defaults so a case does not have to wait seconds for the initial clock handshake.
         // The servers read settings when they are constructed, which happens below.
-        _settingsBackup = NetfoxSettings.Instance;
-        var settings = NetfoxSettings.Load();
+        _settingsBackup = CrackNetSettings.Instance;
+        var settings = CrackNetSettings.Load();
         settings.SyncInterval = 0.02;
         settings.SyncSamples = 4;
         settings.SyncAdjustSteps = 2;
-        NetfoxSettings.Instance = settings;
+        CrackNetSettings.Instance = settings;
 
         Network = new LoopbackNetwork();
         Host = CreateStack("Host", 1);
@@ -46,13 +46,13 @@ public abstract partial class HarnessSuite : TestSuite
             _stacks[i].Teardown();
         _stacks.Clear();
 
-        NetfoxSettings.Instance = _settingsBackup;
+        CrackNetSettings.Instance = _settingsBackup;
         await NextFrame();
     }
 
-    protected NetfoxStack CreateStack(string name, int peerId)
+    protected CrackNetStack CreateStack(string name, int peerId)
     {
-        var stack = NetfoxStack.Create(this, name, Network, peerId);
+        var stack = CrackNetStack.Create(this, name, Network, peerId);
         _stacks.Add(stack);
         return stack;
     }
@@ -61,7 +61,7 @@ public abstract partial class HarnessSuite : TestSuite
     /// Adds one more peer to the session, connected to everyone already in it. Its stack is named after its id, and
     /// it joins after the first two, exactly the way a third player does.
     /// </summary>
-    protected NetfoxStack AddPeer(int peerId)
+    protected CrackNetStack AddPeer(int peerId)
     {
         var stack = CreateStack($"Peer_{peerId}", peerId);
         Network.ConnectLate(stack.Peer);

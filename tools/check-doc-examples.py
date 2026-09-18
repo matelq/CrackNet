@@ -47,7 +47,7 @@ try:
             sys.exit(f"unknown check marker: {kind}")
         # Godot binds one class per file named after it; these are never attached to nodes, so any name works
         (out / f"Block{i}.cs").write_text(header + body, encoding="utf8")
-    build = subprocess.run(["dotnet", "build", str(root / "Netfox.csproj")], capture_output=True, text=True)
+    build = subprocess.run(["dotnet", "build", str(root / "CrackNet.csproj")], capture_output=True, text=True)
     errors = sorted({line.strip() for line in build.stdout.splitlines() if "error CS" in line})
     print("\n".join(errors) if errors else f"docs/examples.md: {len(blocks) - 1} blocks compile")
     sys.exit(build.returncode)

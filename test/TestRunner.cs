@@ -1,7 +1,7 @@
 using System.Reflection;
 using Godot;
 
-namespace Netfox.Tests;
+namespace CrackNet.Tests;
 
 /// <summary>Marks a test method on a TestSuite. Methods may return void or Task.</summary>
 [AttributeUsage(AttributeTargets.Method)]
@@ -90,7 +90,7 @@ public abstract partial class TestSuite : Node
     protected async Task NextFrame() => await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
 
     /// <summary>
-    /// Pumps frames until <paramref name="condition"/> holds or <paramref name="seconds"/> of wall clock pass. Netfox
+    /// Pumps frames until <paramref name="condition"/> holds or <paramref name="seconds"/> of wall clock pass. CrackNet
     /// ticks on real time, so tests that need ticks have to wait on the clock, not on a frame count.
     /// </summary>
     protected async Task<bool> WaitUntil(Func<bool> condition, double seconds = 3)
@@ -157,7 +157,7 @@ public partial class TestRunner : Node
                 {
                     // Cases share the autoload servers, so a case that ran ticks would leave the history buffers
                     // ahead of where the next case starts, and its writes would be dropped as out of window
-                    NetfoxContext.Default.ResetSession();
+                    CrackNetContext.Default.ResetSession();
                     await suite.BeforeCase();
                     var result = test.Invoke(suite, null);
                     if (result is Task task) await task;

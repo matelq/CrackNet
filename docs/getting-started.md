@@ -5,9 +5,9 @@ same thing: keep it open alongside.
 
 ## Installing
 
-Drop `addons/netfox-net` into your project and enable the plugin in **Project Settings > Plugins**. That registers the
+Drop `addons/cracknet` into your project and enable the plugin in **Project Settings > Plugins**. That registers the
 autoloads (`NetworkTime`, `NetworkEvents`, the servers behind `NetworkObject`) in the order they need, and the project
-settings under **Netfox**.
+settings under **CrackNet**.
 
 The addon compiles into your game's own assembly, so the project needs `ImplicitUsings` and `Nullable`. `[Synced]` and
 the generated `Spawn` come from the source generator in the release zip, which reads your scenes to check that every
@@ -19,7 +19,7 @@ spawnable class has one:
   <Nullable>enable</Nullable>
 </PropertyGroup>
 <ItemGroup>
-  <Analyzer Include="addons/netfox-net/analyzers/Netfox.SourceGenerators.dll" />
+  <Analyzer Include="addons/cracknet/analyzers/CrackNet.SourceGenerators.dll" />
   <AdditionalFiles Include="**/*.tscn" Exclude=".godot/**" />
 </ItemGroup>
 ```
@@ -36,7 +36,7 @@ Multiplayer.MultiplayerPeer = peer;
 ```
 
 Guests send state straight to each other, so the intended transport is a full mesh: `SteamMultiplayerPeer` joins every
-lobby member, and `Netfox.Extras.EnetMesh` builds the same over ENet for local windows and a LAN.
+lobby member, and `CrackNet.Extras.EnetMesh` builds the same over ENet for local windows and a LAN.
 
 ## A crate
 
@@ -127,7 +127,7 @@ Shown read-only on every `NetworkObject` in the inspector:
 | `CharacterBody3D` | transform, velocity, then `[Synced]` |
 | other `Node3D` | transform, then `[Synced]` |
 | `Node`, `Control` | `[Synced]` only |
-| any `Node2D` | not supported: netfox-net is 3D only |
+| any `Node2D` | not supported: CrackNet is 3D only |
 
 Nothing else: child transforms, animation and particles only when marked `[Synced]`. Changed state goes out at the
 next send (15 times a second), unchanged state once a second. `SoftBody3D` and ragdoll bones are not supported: the

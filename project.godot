@@ -10,30 +10,30 @@ config_version=5
 
 [application]
 
-config/name="netfox-net"
+config/name="CrackNet"
 config/description="Co-op netcode for Godot C#: distributed authority"
 run/main_scene="res://examples/playground/playground.tscn"
 config/features=PackedStringArray("4.7", "C#", "Forward Plus")
 
 [autoload]
 
-NetworkCommandServer="*res://addons/netfox-net/Servers/NetworkCommandServer.cs"
-NetworkTime="*res://addons/netfox-net/NetworkTime.cs"
-NetworkTimeSynchronizer="*res://addons/netfox-net/NetworkTimeSynchronizer.cs"
-NetworkEvents="*res://addons/netfox-net/NetworkEvents.cs"
-NetworkIdentityServer="*res://addons/netfox-net/Servers/NetworkIdentityServer.cs"
-NetworkObjectServer="*res://addons/netfox-net/Servers/NetworkObjectServer.cs"
-WindowTiler="*res://addons/netfox-net/Extras/WindowTiler.cs"
-NetworkSimulator="*res://addons/netfox-net/Extras/NetworkSimulator.cs"
+NetworkCommandServer="*res://addons/cracknet/Servers/NetworkCommandServer.cs"
+NetworkTime="*res://addons/cracknet/NetworkTime.cs"
+NetworkTimeSynchronizer="*res://addons/cracknet/NetworkTimeSynchronizer.cs"
+NetworkEvents="*res://addons/cracknet/NetworkEvents.cs"
+NetworkIdentityServer="*res://addons/cracknet/Servers/NetworkIdentityServer.cs"
+NetworkObjectServer="*res://addons/cracknet/Servers/NetworkObjectServer.cs"
+WindowTiler="*res://addons/cracknet/Extras/WindowTiler.cs"
+NetworkSimulator="*res://addons/cracknet/Extras/NetworkSimulator.cs"
 MCPGameBridge="res://addons/godot_mcp/game_bridge/mcp_game_bridge.gd"
 
 [dotnet]
 
-project/assembly_name="Netfox"
+project/assembly_name="CrackNet"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/netfox-net/plugin.cfg", "res://addons/godot_mcp/plugin.cfg")
+enabled=PackedStringArray("res://addons/cracknet/plugin.cfg", "res://addons/godot_mcp/plugin.cfg")
 
 [godot_mcp]
 
@@ -42,7 +42,7 @@ custom_bind_ip=""
 port_override_enabled=false
 port_override=6550
 
-[netfox]
+[cracknet]
 
 general/clear_settings=false
 events/enabled=true

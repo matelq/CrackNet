@@ -1,6 +1,6 @@
 using Godot;
 
-namespace Netfox.Examples.Playground;
+namespace CrackNet.Examples.Playground;
 
 /// <summary>
 /// A player character. A character body, so its <see cref="NetworkObject"/> is Personal: always simulated by its own

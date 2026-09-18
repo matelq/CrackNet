@@ -1,6 +1,6 @@
 using Godot;
 
-namespace Netfox.Tests;
+namespace CrackNet.Tests;
 
 /// <summary>What NetworkObject reads from the type of its root: the kind, what is sent, and which roots it refuses.</summary>
 public partial class ObjectKindTests : TestSuite

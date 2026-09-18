@@ -20,9 +20,9 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - name: Check formatting
-        run: dotnet format Netfox.slnx --verify-no-changes
+        run: dotnet format CrackNet.slnx --verify-no-changes
       - name: Run tests
-        run: dotnet test Netfox.slnx
+        run: dotnet test CrackNet.slnx
 
   godot:
     name: Godot tests
@@ -55,7 +55,7 @@ jobs:
         # --import exits with a segfault after a successful import on 4.7.2, so its exit code says nothing
         run: $GODOT --headless --path . --import || true
       - name: Build
-        run: dotnet build Netfox.csproj
+        run: dotnet build CrackNet.csproj
       - name: Doc examples compile
         run: python3 tools/check-doc-examples.py
       - name: Run Godot tests

@@ -1,4 +1,4 @@
-# netfox-net
+# CrackNet
 
 Co-op netcode for Godot 4.7 .NET: distributed authority with state synchronization, after Glenn Fiedler's
 [Networked Physics in Virtual Reality](https://gafferongames.com/post/networked_physics_in_virtual_reality/). Built for
@@ -31,9 +31,9 @@ playground can host and join over Steam; that path has been built and checked ag
 
 ## Using it
 
-1. Copy `addons/netfox-net` into `res://addons/` (a release zip carries the `Netfox.Core` sources inside it).
-2. Enable the plugin in **Project Settings > Plugins**. It registers the `netfox/*` settings and the autoloads.
-3. Enable `ImplicitUsings` and `Nullable`, and reference `addons/netfox-net/analyzers/Netfox.SourceGenerators.dll` as
+1. Copy `addons/cracknet` into `res://addons/` (a release zip carries the `CrackNet.Core` sources inside it).
+2. Enable the plugin in **Project Settings > Plugins**. It registers the `cracknet/*` settings and the autoloads.
+3. Enable `ImplicitUsings` and `Nullable`, and reference `addons/cracknet/analyzers/CrackNet.SourceGenerators.dll` as
    an `Analyzer` for `[Synced]`.
 4. Assign `Multiplayer.MultiplayerPeer`. The clock starts on its own once the session does.
 5. Add a `NetworkObject` under each replicated node.
@@ -66,25 +66,25 @@ public partial class Player : CharacterBody3D
 
 | Path | What |
 |---|---|
-| `addons/netfox-net/` | The addon: `NetworkObject`, the clock, transport helpers, the network simulator. |
-| `Netfox.Core/` | Engine-agnostic core: playback clock, sample tracks, clock sync math. |
-| `Netfox.SourceGenerators/` | `[Synced]` and its generator. |
+| `addons/cracknet/` | The addon: `NetworkObject`, the clock, transport helpers, the network simulator. |
+| `CrackNet.Core/` | Engine-agnostic core: playback clock, sample tracks, clock sync math. |
+| `CrackNet.SourceGenerators/` | `[Synced]` and its generator. |
 | `docs/` | Guides, the design document, a generated API reference. |
 | `examples/playground/` | The co-op sample: players, crates, grab and throw, pushes, projectiles, and the smoke check. |
 | `examples/steam/` | GodotSteam bootstrap. |
-| `test/`, `Netfox.Core.Tests/` | Godot-side tests and xUnit tests. |
+| `test/`, `CrackNet.Core.Tests/` | Godot-side tests and xUnit tests. |
 
 ## Try the sample
 
 From a fresh clone. You need [Godot 4.7.2 .NET](https://godotengine.org/download/archive/) - exactly
-this version, older editors downgrade the SDK in `Netfox.csproj` - the [.NET 10 SDK](https://dotnet.microsoft.com/download),
+this version, older editors downgrade the SDK in `CrackNet.csproj` - the [.NET 10 SDK](https://dotnet.microsoft.com/download),
 and for the script `sh`, `curl` and `python` (on Windows, Git Bash has the first two).
 
 ```
 git clone https://github.com/matelq/netfox-net.git
 cd netfox-net
 sh tools/install-extensions.sh all      # Rapier (required: the crates are Rapier bodies) and GodotSteam
-dotnet build Netfox.csproj
+dotnet build CrackNet.csproj
 godot --path . res://examples/playground/playground.tscn
 ```
 
@@ -115,6 +115,6 @@ Then:
   above**.
 
 Steam relays the traffic: no ports, no addresses. A simulated network profile (`-- --profile=casual|realistic|bad|hostile`,
-or **Project Settings > Netfox > Autoconnect > Simulated Profile**) is applied on top of the real network; without one
+or **Project Settings > CrackNet > Autoconnect > Simulated Profile**) is applied on top of the real network; without one
 the Steam peer is used as it is. If Steam does not come up, `godot --headless --path . res://examples/steam/SteamSmoke.tscn`
 says what is missing. Leave editor autoconnect off for this, or the instances connect to each other over ENet.

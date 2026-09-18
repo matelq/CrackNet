@@ -1,10 +1,10 @@
+using CrackNet.Extras;
 using Godot;
-using Netfox.Extras;
 
-namespace Netfox.Examples.Steam;
+namespace CrackNet.Examples.Steam;
 
 /// <summary>
-/// Steam as netfox's transport: create or join a lobby, hand the resulting peer to Godot, and netfox behaves exactly
+/// Steam as CrackNet's transport: create or join a lobby, hand the resulting peer to Godot, and CrackNet behaves exactly
 /// as it does over ENet - it never creates peers itself.
 /// <para>
 /// Driven through <c>ClassDB</c> and the <c>Steam</c> singleton rather than through C# bindings, the same way
@@ -76,7 +76,7 @@ public partial class SteamLobbyBootstrap : Node
     /// <summary>Steam's callbacks are pumped by hand, the way its API expects.</summary>
     public override void _Process(double delta) => _steam?.Call("run_callbacks");
 
-    /// <summary>Creates a lobby and hosts inside it. The lobby owner is the host, and netfox's peer 1.</summary>
+    /// <summary>Creates a lobby and hosts inside it. The lobby owner is the host, and CrackNet's peer 1.</summary>
     public void Host() => _steam?.Call("createLobby", LobbyType, MaxPlayers);
 
     /// <summary>Joins an existing lobby; its owner is the host.</summary>
@@ -123,7 +123,7 @@ public partial class SteamLobbyBootstrap : Node
         }
 
         // Nagle holds a small message back for a few milliseconds hoping more shows up, then sends them together. A
-        // tick-based netcode is exactly the program it was written to punish: netfox sends once per tick on purpose,
+        // tick-based netcode is exactly the program it was written to punish: CrackNet sends once per tick on purpose,
         // so every message here is what Valve's own docs name as the proper case for turning it off - "flushing the
         // last message in a server tick". Left on, it adds latency to the input every peer is waiting for, which
         // input_delay then compensates for.
@@ -132,7 +132,7 @@ public partial class SteamLobbyBootstrap : Node
         // (_get_steam_packet_flags), and Steam says it is invalid for reliable messages: a message that cannot go out
         // within ~200ms is dropped rather than queued. Right for per-tick state, wrong for the identity handshake.
         // The same function maps Unreliable onto Steam's unreliable send, which object state uses, and
-        // UnreliableOrdered onto Reliable, which netfox-net does not use.
+        // UnreliableOrdered onto Reliable, which CrackNet does not use.
         peer.Set("no_nagle", true);
 
         var error = (Error)peer.Call(method, lobbyId).AsInt32();
@@ -145,7 +145,7 @@ public partial class SteamLobbyBootstrap : Node
 
         Peer = peer;
 
-        // From here netfox is on its own: NetworkEvents starts the tick loop with the session, exactly as over ENet
+        // From here CrackNet is on its own: NetworkEvents starts the tick loop with the session, exactly as over ENet
         Multiplayer.MultiplayerPeer = Conditions == NetworkSimulator.Profile.Clear ? peer : new SimulatedMultiplayerPeer(peer, Conditions);
         LobbyReady?.Invoke(lobbyId);
     }

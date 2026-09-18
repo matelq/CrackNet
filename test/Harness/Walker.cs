@@ -1,6 +1,6 @@
 using Godot;
 
-namespace Netfox.Tests;
+namespace CrackNet.Tests;
 
 /// <summary>A character body that walks at a constant velocity on its own peer.</summary>
 public partial class Walker : CharacterBody3D

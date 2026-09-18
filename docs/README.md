@@ -1,4 +1,4 @@
-# netfox-net guides
+# CrackNet guides
 
 Co-op netcode for Godot C#: every object is simulated by one peer - its authority - and played back everywhere else.
 Authority moves to whoever interacts with an object, and the host settles conflicts. The guides assume you know

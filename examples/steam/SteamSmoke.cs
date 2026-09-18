@@ -1,6 +1,6 @@
 using Godot;
 
-namespace Netfox.Examples.Steam;
+namespace CrackNet.Examples.Steam;
 
 /// <summary>
 /// #6, the half that needs no second account: does GodotSteam load into this Godot, are the classes we drive through

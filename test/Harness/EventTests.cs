@@ -1,11 +1,11 @@
 using Godot;
 
-namespace Netfox.Tests;
+namespace CrackNet.Tests;
 
 /// <summary>Events reach the authority of their object exactly once, wherever it moved in the meantime.</summary>
 public partial class EventTests : HarnessSuite
 {
-    private NetfoxStack _third = null!;
+    private CrackNetStack _third = null!;
 
     public override async Task BeforeCase()
     {

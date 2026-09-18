@@ -1,6 +1,6 @@
-using Netfox.Core.Serialization;
+using CrackNet.Core.Serialization;
 
-namespace Netfox.Tests;
+namespace CrackNet.Tests;
 
 /// <summary>A packet that does not decode is dropped with a warning; it does not throw out of the transport.</summary>
 public partial class MalformedPacketTests : HarnessSuite

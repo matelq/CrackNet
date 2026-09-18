@@ -18,19 +18,19 @@ transport resends reliable ones. Latency is each way.
 | `bad` | 150 ms | 100 ms | 5% | 200 ms every 5 s | Default. A friend across the continent on Wi-Fi. |
 | `hostile` | 250 ms | 150 ms | 15% | 300 ms every 3 s | For checks: fails when the code is wrong. |
 
-Pick one under **Project Settings > Netfox > Autoconnect > Simulated Profile**. Leave it empty to use the custom fields
+Pick one under **Project Settings > CrackNet > Autoconnect > Simulated Profile**. Leave it empty to use the custom fields
 next to it (latency, packet loss chance, jitter, burst length and interval).
 
 ## Playtesting in the editor
 
-1. **Project Settings > Netfox > Autoconnect > Enabled** on, and choose a simulated profile.
+1. **Project Settings > CrackNet > Autoconnect > Enabled** on, and choose a simulated profile.
 2. **Debug > Customize Run Instances**: enable multiple instances and set the count.
-3. Optionally **Netfox > Extras > Auto Tile Windows**, to lay the windows out side by side.
+3. Optionally **CrackNet > Extras > Auto Tile Windows**, to lay the windows out side by side.
 4. Run `examples/playground/playground.tscn`. The first instance becomes the host, the others join, and each player gets
    a colour by joining order.
 
 Autoconnect lands in `project.godot`. Do not commit it, and while it is on run headless checks with
-`NETFOX_NO_AUTOCONNECT=1`, or they connect to your editor instances.
+`CRACKNET_NO_AUTOCONNECT=1`, or they connect to your editor instances.
 
 Playground controls: WASD to move, Space to jump, F to grab and throw a crate, E to push a player in front of you, left
 mouse or Enter to shoot. A crate is tinted with the colour of the peer simulating it right now.

@@ -1,6 +1,6 @@
 using Godot;
 
-namespace Netfox.Tests;
+namespace CrackNet.Tests;
 
 /// <summary>A replicated node whose state is as large as <see cref="Blob"/> makes it, for packet size cases.</summary>
 public partial class HarnessBlob : Node3D

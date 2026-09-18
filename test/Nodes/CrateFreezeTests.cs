@@ -1,8 +1,8 @@
+using CrackNet.Examples.Playground;
+using CrackNet.Internal;
 using Godot;
-using Netfox.Examples.Playground;
-using Netfox.Internal;
 
-namespace Netfox.Tests;
+namespace CrackNet.Tests;
 
 /// <summary>
 /// A playground crate that stops being simulated here must stay where it is. Under Rapier, freezing a body that was

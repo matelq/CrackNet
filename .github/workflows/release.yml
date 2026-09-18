@@ -33,27 +33,27 @@ jobs:
       # plugin.cfg is the source of truth, so a tag that disagrees with it is a mistake, not something to paper over
       - name: Check plugin.cfg against the version
         run: |
-          declared=$(sed -n 's/^version="\(.*\)"$/\1/p' addons/netfox-net/plugin.cfg)
+          declared=$(sed -n 's/^version="\(.*\)"$/\1/p' addons/cracknet/plugin.cfg)
           if [ "$declared" != "${{ steps.version.outputs.version }}" ]; then
             echo "plugin.cfg says $declared, the release says ${{ steps.version.outputs.version }}" >&2
             exit 1
           fi
 
-      # The addon compiles into the game's own assembly, so Netfox.Core ships as sources next to it: dropping the one
+      # The addon compiles into the game's own assembly, so CrackNet.Core ships as sources next to it: dropping the one
       # folder into a project is enough, with no project reference to add
       - name: Stage the addon
         run: |
           mkdir -p stage/addons
-          cp -r addons/netfox-net stage/addons/netfox-net
-          mkdir -p stage/addons/netfox-net/Core
-          (cd Netfox.Core && find . -name '*.cs' -not -path './obj/*' -not -path './bin/*' -exec cp --parents {} ../stage/addons/netfox-net/Core/ \;)
-          cp LICENSE stage/addons/netfox-net/ 2>/dev/null || true
+          cp -r addons/cracknet stage/addons/cracknet
+          mkdir -p stage/addons/cracknet/Core
+          (cd CrackNet.Core && find . -name '*.cs' -not -path './obj/*' -not -path './bin/*' -exec cp --parents {} ../stage/addons/cracknet/Core/ \;)
+          cp LICENSE stage/addons/cracknet/ 2>/dev/null || true
 
           # The property generator is a compiler plugin, so it ships built. It is optional: without it the declaring
           # interfaces can still be implemented by hand, only the attributes go away.
-          dotnet build Netfox.SourceGenerators/Netfox.SourceGenerators.csproj -c Release
-          mkdir -p stage/addons/netfox-net/analyzers
-          cp Netfox.SourceGenerators/bin/Release/netstandard2.0/Netfox.SourceGenerators.dll stage/addons/netfox-net/analyzers/
+          dotnet build CrackNet.SourceGenerators/CrackNet.SourceGenerators.csproj -c Release
+          mkdir -p stage/addons/cracknet/analyzers
+          cp CrackNet.SourceGenerators/bin/Release/netstandard2.0/CrackNet.SourceGenerators.dll stage/addons/cracknet/analyzers/
 
       # Proves the packaged layout is usable on its own: same folder, no project reference, nothing else from the repo
       - name: Check the package compiles by itself
@@ -67,11 +67,11 @@ jobs:
               <EnableDynamicLoading>true</EnableDynamicLoading>
               <Nullable>enable</Nullable>
               <ImplicitUsings>enable</ImplicitUsings>
-              <RootNamespace>Netfox</RootNamespace>
+              <RootNamespace>CrackNet</RootNamespace>
               <LangVersion>latest</LangVersion>
             </PropertyGroup>
             <ItemGroup>
-              <Analyzer Include="addons/netfox-net/analyzers/Netfox.SourceGenerators.dll" />
+              <Analyzer Include="addons/cracknet/analyzers/CrackNet.SourceGenerators.dll" />
             </ItemGroup>
           </Project>
           EOF
@@ -80,12 +80,12 @@ jobs:
       - name: Zip
         run: |
           cd stage
-          zip -qr "../netfox-net-${{ steps.version.outputs.version }}.zip" addons
+          zip -qr "../cracknet-${{ steps.version.outputs.version }}.zip" addons
 
       - uses: actions/upload-artifact@v4
         with:
-          name: netfox-net-${{ steps.version.outputs.version }}
-          path: netfox-net-${{ steps.version.outputs.version }}.zip
+          name: cracknet-${{ steps.version.outputs.version }}
+          path: cracknet-${{ steps.version.outputs.version }}.zip
 
       - name: Attach to the release
         if: startsWith(github.ref, 'refs/tags/')
@@ -94,4 +94,4 @@ jobs:
         run: |
           gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
             || gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
-          gh release upload "$GITHUB_REF_NAME" "netfox-net-${{ steps.version.outputs.version }}.zip" --clobber
+          gh release upload "$GITHUB_REF_NAME" "cracknet-${{ steps.version.outputs.version }}.zip" --clobber

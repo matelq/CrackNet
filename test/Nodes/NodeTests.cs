@@ -1,8 +1,8 @@
+using CrackNet.Core.Serialization;
 using Godot;
-using Netfox.Core.Serialization;
 
 
-namespace Netfox.Tests;
+namespace CrackNet.Tests;
 
 public partial class GodotInteropAssumptionTests : TestSuite
 {
