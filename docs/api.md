@@ -144,15 +144,17 @@ One replicated object. While its root is this peer's multiplayer authority it se
 
 | | Member | Summary |
 |---|---|---|
-| property | `Attached` | The roots of the items hanging on this object, as this peer shows them. |
+| property | `Attached` | The roots of the items hanging on this object, as this peer shows them. A character standing on it is not one. |
 | property | `AttachedTo` | The root of the object this one hangs on, or null, as this peer shows it. |
-| property | `AttachmentState` | What this item sends about its attachment, or null when it is free. |
+| property | `AttachmentState` | What this item is hung on here, or null when it is free. |
 | property | `Authority` | Who simulates the object and sends its state, and taking or returning that by hand. |
+| property | `Base` | The object whose body the engine reports as this character's floor, set by its physics handling every physics frame on the authority: its position goes out relative to that body, and every peer puts it on its own copy. |
 | property | `ClaimAttachment` | The attachment that rides on this object's claim record: where the claimant wants it hung. A carried player's own peer hangs the player from it when the host's record arrives; for a crate the claimant hangs it itself. |
 | property | `ClaimedBy` | The peer holding the object, or 0 when nobody does. |
 | property | `Context` | The stack this object belongs to; resolved when it enters the tree. |
 | property | `Diagnostics` | Sequences, display tick and sample events: for checks and diagnostics, not for game logic. |
 | property | `EarlySamples` | State from a peer that is not the authority here yet, kept for when the host's word arrives. |
+| property | `Hanging` | Everything placed relative to this object here: attached items and riders, for the placer. |
 | property | `ImpulseDecay` | How fast `ImpulseVelocity` fades, in metres per second per second. |
 | property | `ImpulseStrength` | How hard a character body pushes the rigid bodies it slides into, along the contact normal; 0 is off. The library takes the body and pushes it on this peer's simulation. |
 | property | `ImpulseVelocity` | The velocity the pushes received give a root that is not a rigid body, fading by `ImpulseDecay` each physics frame. A character adds it where it composes its `Velocity`, next to gravity, every frame: a controller writes its horizontal velocity from input each frame, so a push added once would last one frame. |
@@ -177,7 +179,7 @@ One replicated object. While its root is this peer's multiplayer authority it se
 | method | `DescribeSynced` | The inspector's list. In the editor a script without `[Tool]` is a placeholder, so its `[Synced]` properties are read from the compiled type the script path points at. |
 | method | `Despawn` | Ends this authoritative object's timeline. It is hidden and stops processing here immediately; remote peers hide it when their playback reaches the flagged final sample, and the root is freed after the playback grace period so a `MultiplayerSpawner` cannot remove it from observers early. |
 | method | `Detach(CrackNet.NetworkObject)` | Takes `item` off this object and lets go of it: from here on it sends its own transform again, and a physics body falls or flies. To throw it, `Detach` and then `Vector3` it. Other peers show the change when their playback reaches it and draw the item catching up from the hand to where the thrower has it (see `Visual`). False when the item is not attached here or not simulated here. |
-| method | `Hang(CrackNet.NetworkObject,Godot.Node3D,Godot.Transform3D)` | Hangs this object on `anchor` of `carrier` on this peer: by the authority, or by playback. |
+| method | `Hang(CrackNet.NetworkObject,Godot.Node3D,Godot.Transform3D,System.Boolean)` | Hangs this object on `anchor` of `carrier` on this peer: by the authority, or by playback. |
 | method | `Impulse(CrackNet.NetworkObject,Godot.Vector3)` | This object struck `target`: takes the target when it can (`NetworkObject`), so a crate flies on this peer's simulation at once, then pushes it. A player, which cannot be taken, is pushed on its own peer. If the host gives the target to someone else, the winner's simulation stands and the push is passed on to it, so two players striking the same crate at once both count. |
 | method | `Impulse(Godot.Vector3)` | Pushes this object with nothing doing the pushing - an explosion, a trap: its authority applies `impulse` to a rigid body or raises `Impulsed`. Delivered like `Variant`. |
 | method | `IsNewer(System.Int32,System.Int32)` | True when ( `ownershipSequence`, `authoritySequence`) is newer than what this object has. |
@@ -187,6 +189,7 @@ One replicated object. While its root is this peer's multiplayer authority it se
 | method | `ReleaseClaim` | Lets go of a held object. This peer keeps simulating it until someone else touches it. |
 | method | `ReleaseClaim(Godot.Vector3)` | Lets go of a held object with `velocity`: the throw flies on this peer's simulation. |
 | method | `Send(Godot.Variant)` | Delivers `payload` to whoever is this object's authority, reliably and exactly once, even if authority moves while it is on its way. On the authority itself it is raised at once. |
+| method | `SentAttachment` | What this object's samples say about where it hangs or stands: the attachment, else the base, else nothing. |
 | method | `ShowAttached(CrackNet.NetworkObject.Attachment,Godot.Transform3D)` | Playback reached a sample that hangs this item on `attachment`: shown on this peer's own copy of the carrier. |
 | method | `ShowFree` | Playback reached a free sample: off the carrier, if playback had hung it. |
 | method | `Snap` | The next state this peer sends applies without interpolation on the others: a respawn, not a flight. |

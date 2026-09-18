@@ -231,17 +231,26 @@ internal abstract class PhysicsHandling
         public override void PhysicsProcess()
         {
             if (!Object.Authority.IsLocal) return;
+            NetworkObject? floor = null;
             for (var i = 0; i < body.GetSlideCollisionCount(); i++)
             {
                 var collision = body.GetSlideCollision(i);   // Godot reuses these: the handle may be the game's too
                 if (collision.GetCollider() is not Node node || NetworkObject.Of(node) is not { } other) continue;
                 // What it stands on stays where it is: taken, a crate at rest went back to the host and was taken again
-                // by the next frame's floor contact, over and over
-                if (collision.GetNormal().AngleTo(body.UpDirection) <= body.FloorMaxAngle) continue;
+                // by the next frame's floor contact, over and over. It is the base the character rides instead: its
+                // position goes out relative to that body, so a player on a moving crate or lift is drawn on it
+                // everywhere rather than a playback delay behind it. The game opts out per layer with
+                // platform_floor_layers, as it does for the platform's velocity
+                if (collision.GetNormal().AngleTo(body.UpDirection) <= body.FloorMaxAngle)
+                {
+                    if (other.Root is CollisionObject3D under && (under.CollisionLayer & body.PlatformFloorLayers) != 0) floor = other;
+                    continue;
+                }
                 // Godot's character bodies do not push rigid bodies: push the ones taken here, along the contact
                 if (Object.ImpulseStrength > 0 && node is RigidBody3D) Object.Impulse(other, -collision.GetNormal() * Object.ImpulseStrength);
                 else Object.Spread(other);
             }
+            Object.Base = body.IsOnFloor() ? floor : null;
         }
     }
 }

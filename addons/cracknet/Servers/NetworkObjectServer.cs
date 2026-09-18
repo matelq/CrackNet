@@ -465,12 +465,14 @@ public partial class NetworkObjectServer : Node
             if (!obj.Authority.IsLocal || identities.GetIdentifierOf(obj.Root!) is not { } identifier) continue;
 
             // Flags: 1 teleport, 2 resumed after a rest, 4 final despawn sample, 8 first since this peer took it,
-            // 16 attached: the carrier and anchor follow, and the transform is relative to the anchor.
+            // 16 attached: the carrier and anchor follow, and the transform is relative to the anchor; 32 with it:
+            // standing on the carrier rather than held by it.
             var resumed = obj.LastSentBody is not null && stateTick - obj.LastSentTick > StateIntervalTicks;
-            var attachment = obj.AttachmentState;
+            var attachment = obj.SentAttachment();
             var writer = new ByteWriter();
             writer.PutU8((byte)((obj.SnapPending ? 1 : 0) | (resumed ? 2 : 0) | (obj.DespawnRequested ? 4 : 0)
-                                | (obj.LastSentBody is null ? FirstSinceTaken : 0) | (attachment is null ? 0 : Attached)));
+                                | (obj.LastSentBody is null ? FirstSinceTaken : 0) | (attachment is null ? 0 : Attached)
+                                | (attachment is { Riding: true } ? Riding : 0)));
             if (attachment is not null)
             {
                 writer.PutUtf8String(attachment.Carrier);
@@ -574,6 +576,7 @@ public partial class NetworkObjectServer : Node
     private const ulong EarlySampleAgeMs = 1_000;
     private const byte FirstSinceTaken = 8;
     private const byte Attached = 16;
+    private const byte Riding = 32;
 
     /// <summary>
     /// <paramref name="obj"/> just changed authority here: the new authority's samples that came first are played
@@ -635,7 +638,9 @@ public partial class NetworkObjectServer : Node
         var teleport = (flags & 1) != 0;
         var resumed = (flags & 2) != 0;
         var despawned = (flags & 4) != 0;
-        var attachment = (flags & Attached) != 0 ? new NetworkObject.Attachment(reader.GetUtf8String(), reader.GetUtf8String()) : null;
+        var attachment = (flags & Attached) != 0
+            ? new NetworkObject.Attachment(reader.GetUtf8String(), reader.GetUtf8String(), (flags & Riding) != 0)
+            : null;
         var values = new Variant[obj.Properties.Count];
         for (var i = 0; i < values.Length; i++)
             values[i] = CompactValues.Decode(reader);
@@ -691,9 +696,8 @@ public partial class NetworkObjectServer : Node
 
     private static void PlaceHangingOn(NetworkObject carrier)
     {
-        foreach (var root in carrier.Attached)
+        foreach (var item in carrier.Hanging.ToArray())
         {
-            if (NetworkObject.Of(root) is not { } item) continue;
             item.Place();
             PlaceHangingOn(item);
         }

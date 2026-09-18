@@ -350,6 +350,14 @@ Two decisions here are made but not built, and both matter enough to keep in sig
     only after `MoveAndSlide`, so a choice made from what the character stands on applies from the next frame.
   - Godot has no exception for a single body among others on the same layer: "this crate carries me, that identical one
     does not" needs separate layers or a mask changed per situation.
+  - **Built in stage B, step 5, for the other peers:** the character's physics handling takes the floor collider of
+    the slide collisions (within `FloorMaxAngle`, on a layer in `platform_floor_layers`) as `Base`; its samples then
+    go out with flags 16+32, the base's name and the anchor `.`, and the transform relative to the base, and every
+    other peer places it on its copy of the base once per frame with the attached items. Nothing is claimed, collisions
+    stay on, `Attached` leaves riders out. `ARiderOnAMovingPlatformIsDrawnOnItWhereItsPeerHasIt` compares, per drawn
+    frame on the host, the rider's offset on the host's platform against the offsets the rider's peer sent around the
+    displayed tick: 0.000 m over 272 frames at 4 m/s and 100 ms; 0.7 m from world positions. **Deferred to the end of
+    stage B (owner's call):** the rider's own peer, where the copy is a frozen static that does not carry it.
 - **Handover starts from the freshest state.** A peer that takes an object simulates on from the newest sample it has
   of it, not from what it displayed a playback delay ago, and an observer plays the new authority from the sample that
   opened its turn (flag 8), never from the tail of an earlier turn still in flight. On the playtest scenario (two

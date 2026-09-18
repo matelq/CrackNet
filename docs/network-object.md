@@ -91,6 +91,13 @@ reaching for one at once the first request wins. The carried player's controller
 `AttachedTo` is set; a throw is `Detach` and `Impulse`, which the player's own peer flies through `ImpulseVelocity`.
 Either the carrier or the carried player may `Detach`; a carrier leaving the session puts the player down.
 
+**Standing on a moving body** uses the same mechanism without a call. A character whose floor, as the engine reports
+it after `MoveAndSlide`, is another object's body sends its position relative to that body, and every other peer puts
+it on its own copy of the body: a player riding a crate or a lift is drawn on it everywhere rather than a playback
+delay behind it. Nothing is claimed, collisions stay on and `Attached` does not list riders. The game opts out per
+layer through the character's `platform_floor_layers`, as for the platform's velocity. Not in yet: on the rider's own
+peer a copy of a moving body is a frozen static and does not carry the character standing on it.
+
 ## Events and state
 
 Every call below also works on the game's own node: `crate.Impulse(...)`, `crate.TryClaim()`, `this.Authority.IsLocal`,

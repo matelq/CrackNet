@@ -47,6 +47,21 @@ internal static class HarnessWorld
         return walker;
     }
 
+    /// <summary>A long floating slab the host drives at a set velocity: a lift or a moving crate, for riders to stand on.</summary>
+    public static RigidBody3D Platform(CrackNetStack stack, string name, Vector3 position, Vector3 size)
+    {
+        var platform = new RigidBody3D
+        {
+            Name = name, Position = position, GravityScale = 0, LockRotation = true,
+            LinearDampMode = RigidBody3D.DampMode.Replace, LinearDamp = 0, CanSleep = false,
+        };
+        platform.SetMultiplayerAuthority(1);
+        platform.AddChild(Shapes.Collision(new BoxShape3D { Size = size }));
+        platform.AddChild(new NetworkObject { Name = "NetworkObject" });
+        World(stack).AddChild(platform);
+        return platform;
+    }
+
     /// <summary>
     /// A hand in front of <paramref name="carrier"/> that an AnimationPlayer bobs 0.6 m up and down twice a second, on
     /// every peer in its own real time, as a game's animation does. At a playback delay of 70 ms an item played back

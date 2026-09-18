@@ -489,4 +489,67 @@ public partial class CarryingTests : HarnessSuite
         Expect.True(await WaitUntil(() => carried[0].ClaimedBy == 0 && carried[2].AttachedTo is null && carried[2].ClaimedBy == 0, 4),
             $"the player stayed in the hand of a peer that left: host says held by {carried[0].ClaimedBy}, the player's peer shows {carried[2].AttachedTo?.Name ?? "free"}");
     }
+
+    /// <summary>
+    /// The host drives a platform; peer 2's player stands on it; the host watches. Played back from world positions,
+    /// the rider sits a playback delay behind the host's platform, sliding on it by the platform's speed times that
+    /// delay. Sent relative to the platform, it is drawn on the host where peer 2 had it on its own copy: compared per
+    /// drawn frame against the offsets peer 2 actually sent around the displayed tick, as the playground smoke does,
+    /// so neither the platform's own delay nor loss is blamed on the placement. The rider's own peer is not measured:
+    /// its copy of the platform is a frozen static and does not carry it yet (deferred, see the design doc).
+    /// </summary>
+    [Test]
+    public async Task ARiderOnAMovingPlatformIsDrawnOnItWhereItsPeerHasIt()
+    {
+        Network.LatencyMs = 100;
+        var stacks = new[] { Host, Client };
+        var platforms = stacks.Select(stack => HarnessWorld.Platform(stack, "Platform", new Vector3(0, 3, 0), new Vector3(24, 1, 3))).ToArray();
+        var riders = stacks.Select(stack => HarnessWorld.Walker(stack, 2, new Vector3(-8, 4.4f, 0), Vector3.Zero)).ToArray();
+        foreach (var rider in riders)
+        {
+            rider.Falls = true;
+            rider.SafeMargin = 0.05f;
+        }
+        for (var i = 0; i < 30; i++) await NextFrame();
+        Expect.True(riders[1].IsOnFloor() && riders[1].GlobalPosition.Y > 4, $"the rider is not standing on the platform: {riders[1].GlobalPosition}");
+
+        // What peer 2 sent: the rider relative to its own copy of the platform, per sample
+        var sent = new SortedList<int, Vector3>();
+        riders[1].Net().Diagnostics.SampleSent += tick => sent[tick] = (platforms[1].GlobalTransform.AffineInverse() * riders[1].GlobalTransform).Origin;
+        // What the host drew: the rider relative to its own platform, at the rider's display tick
+        var shown = new List<(double Tick, Vector3 Offset)>();
+        var drawn = new DrawnFrame();
+        AddChild(drawn);
+        drawn.Drawn += () =>
+        {
+            if (riders[0].Net().Diagnostics.DisplayTick is { } tick)
+                shown.Add((tick, (platforms[0].GlobalTransform.AffineInverse() * riders[0].GlobalTransform).Origin));
+        };
+
+        platforms[0].LinearVelocity = new Vector3(4, 0, 0);
+        var start = platforms[0].GlobalPosition.X;
+        for (var seconds = 0.0; seconds < 2.5; seconds += GetProcessDeltaTime()) await NextFrame();
+        drawn.QueueFree();
+
+        var interval = Client.Context.NetworkObjectServer.StateIntervalTicks;
+        var worst = 0f;
+        var compared = 0;
+        foreach (var (tick, offset) in shown)
+        {
+            var next = sent.Keys.ToList().FindIndex(at => at >= tick);
+            if (next <= 0) continue;
+            var (fromTick, toTick) = (sent.Keys[next - 1], sent.Keys[next]);
+            if (toTick - fromTick > interval * 2) continue;   // a gap the sender made on purpose, at rest
+            var expected = sent.Values[next - 1].Lerp(sent.Values[next], (float)((tick - fromTick) / (toTick - fromTick)));
+            worst = Mathf.Max(worst, expected.DistanceTo(offset));
+            compared++;
+        }
+        var report = $"worst {worst:F3} m over {compared} frames; the platform travelled {platforms[0].GlobalPosition.X - start:F1} m";
+        GD.Print("RIDER ON A PLATFORM " + report);
+        // Played back from world positions, the rider's copy stood still on the host while the platform moved under
+        // it, and a kinematic body has infinite mass: it braked the platform to a halt
+        Expect.True(platforms[0].GlobalPosition.X - start > 3, "the platform did not move: braked by the rider's copy, or nothing was measured: " + report);
+        Expect.True(compared > 15, "too few frames compared: " + report);
+        Expect.True(worst < 0.05f, "the host draws the rider elsewhere on the platform than its peer has it: " + report);
+    }
 }
