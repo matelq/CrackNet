@@ -417,6 +417,9 @@ public partial class NetworkObject : Node
         {
             SetAuthority(Root!, authority);
             if (IsAuthority && !Shown) SetShown(true);
+            // Taken here: simulate on from the freshest state heard, not from the one displayed a playback delay ago.
+            // Every other peer is already showing the old authority close to that, so the handover does not jump back
+            if (IsAuthority && Track.TryGetNewest(out _, out var newest)) Jump(newest);
             // Samples are stamped on the previous authority's clock; the new one sends its own, at once even at rest
             Track.Clear();
             PlaybackCursor.Reset();
@@ -565,6 +568,12 @@ public partial class NetworkObject : Node
         => DespawnRequested || RemoteDespawned ? PlaybackState.Ending
             : IsAuthority || Shown ? PlaybackState.Playing
             : PlaybackState.Pending;
+
+    private void Jump(Sample sample)
+    {
+        for (var i = 0; i < Properties.Count; i++)
+            Properties[i].Node.SetValue(Properties[i].Property, sample.Values[i]);
+    }
 
     internal bool Shown { get; private set; } = true;
 

@@ -313,6 +313,13 @@ Two decisions here are made but not built, and both matter enough to keep in sig
     only after `MoveAndSlide`, so a choice made from what the character stands on applies from the next frame.
   - Godot has no exception for a single body among others on the same layer: "this crate carries me, that identical one
     does not" needs separate layers or a mask changed per situation.
+- **Handover starts from the freshest state.** A peer that takes an object simulates on from the newest sample it has
+  of it, not from what it displayed a playback delay ago, and an observer plays the new authority from the sample that
+  opened its turn (flag 8), never from the tail of an earlier turn still in flight. On the playtest scenario (two
+  players shooting one crate in turn, a third watching, 80 ms) the largest drawn jump on a handover went from
+  0.74-2.58 m to 0-0.70 m, the observer's from 1.09-2.40 to 0.06-0.20 (`HandoversDoNotJumpTheDisplayedCrate`). What is
+  left is the ping's worth: the newest sample is still one trip old. Extrapolating it, or stepping the body forward, is
+  the next step if a playtest still shows it, and only with a number that says it helps.
 - **Handover smoothing.** A launch is physics (infinite-mass pushes, kinematic velocity, depenetration) and is fixed as
   physics; what a handover can still leave is a visible snap of a metre or so, the playback delay's worth of position.
   Photon Fusion corrects that in presentation only, over about 0.15 s, and Fiedler blends extrapolation error the same

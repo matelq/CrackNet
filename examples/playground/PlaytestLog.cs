@@ -11,6 +11,8 @@ namespace CrackNet.Examples.Playground;
 /// <item>ACTION: what the local player did (grab, throw, shoot, push); SHOT: a shot hit a crate.</item>
 /// <item>AUTH: a crate changed authority or holder here, with its state at that moment.</item>
 /// <item>MOVE: ten times a second, every crate moving faster than a walk, compactly.</item>
+/// <item>JUMP: a crate drawn further in one frame than its speed covers, by more than <see cref="JumpDistance"/>, with
+/// how long ago it last changed hands here.</item>
 /// <item>LAUNCH: a crate simulated here went faster than <see cref="LaunchSpeed"/>; the half second before it follows,
 /// every frame, for the crates and players within four metres.</item>
 /// </list>
@@ -22,6 +24,7 @@ public static class PlaytestLog
     public const float LaunchSpeed = 12;
     private const float MovingSpeed = 0.3f;
     private const int FramesBefore = 30;
+    public const float JumpDistance = 0.3f;
 
     private static FileAccess? _file;
     private static bool? _on;
@@ -36,6 +39,8 @@ public static class PlaytestLog
     }
 
     private static readonly Queue<(ulong Frame, Vector3 At, string Line)> Recent = new();
+    private static readonly Dictionary<PlaygroundCrate, (Vector3 At, float Speed)> Drawn = new();
+    private static readonly Dictionary<PlaygroundCrate, ulong> ChangedAt = new();
     private static ulong _lastLaunch;
 
     private static FileAccess? File(Node node)
@@ -64,7 +69,11 @@ public static class PlaytestLog
 
     public static void Note(Node node, string what) => Write(node, what);
 
-    public static void Authority(PlaygroundCrate crate) => Write(crate, $"AUTH {State(crate)}");
+    public static void Authority(PlaygroundCrate crate)
+    {
+        ChangedAt[crate] = Time.GetTicksMsec();
+        Write(crate, $"AUTH {State(crate)}");
+    }
 
     /// <summary>Once per physics frame, from the playground.</summary>
     public static void Frame(Node playground, IReadOnlyList<PlaygroundCrate> crates, IEnumerable<PlaygroundPlayer> players)
@@ -73,6 +82,23 @@ public static class PlaytestLog
         foreach (var crate in crates) Recent.Enqueue((frame, crate.GlobalPosition, State(crate)));
         foreach (var player in players) Recent.Enqueue((frame, player.GlobalPosition, $"{player.Name} at {player.GlobalPosition:F2} v {player.Velocity:F1}"));
         while (Recent.Count > 0 && Recent.Peek().Frame + FramesBefore < frame) Recent.Dequeue();
+
+        var delta = (float)playground.GetPhysicsProcessDeltaTime();
+        foreach (var crate in crates)
+        {
+            var speed = crate.LinearVelocity.Length();
+            if (Drawn.TryGetValue(crate, out var last))
+            {
+                var excess = crate.GlobalPosition.DistanceTo(last.At) - Mathf.Max(speed, last.Speed) * delta;
+                if (excess > JumpDistance)
+                {
+                    var since = ChangedAt.TryGetValue(crate, out var at) ? $"{Time.GetTicksMsec() - at} ms" : "never";
+                    Write(playground, $"JUMP {crate.Name} {excess:F2} m beyond its speed, from {last.At:F2} to " +
+                                      $"{crate.GlobalPosition:F2}, authority {crate.Authority.Peer}, changed hands {since} ago");
+                }
+            }
+            Drawn[crate] = (crate.GlobalPosition, speed);
+        }
 
         if (frame % 6 == 0)
         {

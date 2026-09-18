@@ -420,10 +420,11 @@ public partial class NetworkObjectServer : Node
         {
             if (!obj.Authority.IsLocal || identities.GetIdentifierOf(obj.Root!) is not { } identifier) continue;
 
-            // Flags: 1 teleport, 2 resumed after a rest, 4 final despawn sample.
+            // Flags: 1 teleport, 2 resumed after a rest, 4 final despawn sample, 8 first since this peer took it.
             var resumed = obj.LastSentBody is not null && stateTick - obj.LastSentTick > StateIntervalTicks;
             var writer = new ByteWriter();
-            writer.PutU8((byte)((obj.SnapPending ? 1 : 0) | (resumed ? 2 : 0) | (obj.DespawnRequested ? 4 : 0)));
+            writer.PutU8((byte)((obj.SnapPending ? 1 : 0) | (resumed ? 2 : 0) | (obj.DespawnRequested ? 4 : 0)
+                                | (obj.LastSentBody is null ? FirstSinceTaken : 0)));
             foreach (var (node, property, _) in obj.Properties)
                 CompactValues.Encode(node.GetValue(property), writer);
             var body = writer.ToArray();
@@ -518,6 +519,7 @@ public partial class NetworkObjectServer : Node
     }
 
     private const ulong EarlySampleAgeMs = 1_000;
+    private const byte FirstSinceTaken = 8;
 
     /// <summary>
     /// <paramref name="obj"/> just changed authority here: the new authority's samples that came first are played
@@ -532,7 +534,11 @@ public partial class NetworkObjectServer : Node
             .OrderBy(sample => sample.Tick).ToArray();
         obj.EarlySamples.Clear();
         if (!_clocks.TryGetValue(authority, out var clock)) return;
-        foreach (var sample in early) KeepSample(obj, clock, sample.Tick, sample.Body);
+        // From the sample that opened this authority's turn: the ones before it are the end of an earlier turn of the
+        // same peer, still in flight when it lost the object. Without that sample (lost), none are safe to play
+        var opening = Array.FindLastIndex(early, sample => (sample.Body[0] & FirstSinceTaken) != 0);
+        if (opening < 0) return;
+        foreach (var sample in early[opening..]) KeepSample(obj, clock, sample.Tick, sample.Body);
     }
 
     private void BufferPendingSample(int sender, NetworkIdentityReference reference, int tick, byte[] body)

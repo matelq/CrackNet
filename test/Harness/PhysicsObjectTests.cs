@@ -199,6 +199,75 @@ public partial class PhysicsObjectTests : HarnessSuite
             $"the observer's first sample of the flight is for tick {kept.Min()}, struck at {struckAt}: its opening was dropped");
     }
 
+    /// <summary>
+    /// The playtest that showed it: two players shooting one crate in turn from opposite sides, a third watching.
+    /// Each handover restarts the crate from the new authority's view, which is behind by its ping and playback
+    /// delay, so every peer's crate jumps back. Measured on what each peer displays, per rendered frame, as the error
+    /// of carrying the last step on: after a handover against the rest of the flight. Prints its numbers.
+    /// </summary>
+    [Test]
+    public async Task HandoversDoNotJumpTheDisplayedCrate()
+    {
+        Network.LatencyMs = 80;
+        var peers = new[] { Host, Client, AddPeer(3), AddPeer(4) };
+        foreach (var peer in peers)
+            Expect.True(await WaitUntil(() => peer.Context.NetworkTime.IsInitialSyncDone(), 5), $"{peer.Name} never synced");
+        var crates = peers.Select(peer => Crate(peer, "Crate", new Vector3(0, 0.5f, 0))).ToArray();
+        var south = peers.Select(peer => Walker(peer, 2, new Vector3(0, 1, -12), Vector3.Zero)).ToArray();
+        var north = peers.Select(peer => Walker(peer, 3, new Vector3(0, 1, 12), Vector3.Zero)).ToArray();
+        for (var i = 0; i < 30; i++) await NextFrame();
+
+        var history = crates.Select(_ => new List<(Vector3 At, Vector3 Velocity, int Authority, double Delta)>()).ToArray();
+        var strikes = 0;
+        var sinceStrike = 0.0;
+        for (var frame = 0; frame < 400; frame++)
+        {
+            await NextFrame();
+            var delta = GetProcessDeltaTime();
+            for (var i = 0; i < crates.Length; i++) history[i].Add((crates[i].GlobalPosition, crates[i].LinearVelocity, crates[i].Net().Authority.Peer, delta));
+            sinceStrike += GetProcessDeltaTime();
+            if (strikes >= 8 || sinceStrike < 0.4) continue;
+            sinceStrike = 0;
+            // Each striker hits what it sees, as the playground's shot does
+            if (strikes++ % 2 == 0) south[1].Impulse(crates[1], new Vector3(0, 0, 4));
+            else north[2].Impulse(crates[2], new Vector3(0, 0, -4));
+        }
+
+        var report = new List<string>();
+        float worst = 0;
+        foreach (var (name, i) in new[] { ("host", 0), ("south striker", 1), ("north striker", 2), ("observer", 3) })
+        {
+            var (handover, steady) = Jumps(history[i]);
+            worst = Mathf.Max(worst, handover);
+            report.Add($"{name}: handover {handover:F2} m, steady {steady:F2} m");
+        }
+        GD.Print("HANDOVER JUMPS " + string.Join("; ", report));
+        Expect.True(worst < HandoverJumpLimit, "handovers jump the displayed crate: " + string.Join("; ", report));
+    }
+
+    // Before the freshest-state takeover and the opening sample: 0.74-2.58 m; after: 0-0.70 (six runs each)
+    private const float HandoverJumpLimit = 1;
+
+    /// <summary>
+    /// The largest distance a displayed frame moved beyond what the crate's own speed covers in that frame, within ten
+    /// frames after the displayed authority changed, and everywhere else. A strike reverses the crate without moving
+    /// it; a jump moves it without the speed for it.
+    /// </summary>
+    private static (float Handover, float Steady) Jumps(List<(Vector3 At, Vector3 Velocity, int Authority, double Delta)> history)
+    {
+        float handover = 0, steady = 0;
+        var sinceChange = int.MaxValue;
+        for (var i = 1; i < history.Count; i++)
+        {
+            sinceChange = history[i].Authority != history[i - 1].Authority ? 0 : sinceChange + 1;
+            var speed = Mathf.Max(history[i].Velocity.Length(), history[i - 1].Velocity.Length());
+            var excess = history[i].At.DistanceTo(history[i - 1].At) - speed * (float)history[i].Delta;
+            if (sinceChange <= 10) handover = Mathf.Max(handover, excess);
+            else steady = Mathf.Max(steady, excess);
+        }
+        return (handover, steady);
+    }
+
     [Test]
     public async Task TwoStrikesFromOppositeSidesAtOnceBothCount() => await StrikeFromBothSides(gapMs: 0);
 
