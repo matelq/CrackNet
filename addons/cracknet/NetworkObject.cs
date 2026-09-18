@@ -613,7 +613,7 @@ public partial class NetworkObject : Node
         }
     }
 
-    private static Type? TypeOfScript(string path)
+    internal static Type? TypeOfScript(string path)
         => AppDomain.CurrentDomain.GetAssemblies()
             .SelectMany(assembly =>
             {
@@ -626,7 +626,8 @@ public partial class NetworkObject : Node
                     return e.Types.OfType<Type>().ToArray();
                 }
             })
-            .FirstOrDefault(type => type.GetCustomAttribute<ScriptPathAttribute>()?.Path == path);
+            // Not inherited: a subclass of another script would carry both paths
+            .FirstOrDefault(type => type.GetCustomAttribute<ScriptPathAttribute>(inherit: false)?.Path == path);
 
     private static bool HasOwnObject(Node node, NetworkObject? except)
     {

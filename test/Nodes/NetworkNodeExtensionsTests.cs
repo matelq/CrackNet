@@ -33,6 +33,16 @@ public partial class NetworkNodeExtensionsTests : TestSuite
         bare.Free();
     }
 
+    /// <summary>
+    /// The inspector's [Synced] list finds a script's type by its path. A subclass of another script carries its base's
+    /// path too, and reading attributes with inheritance threw on it in the editor.
+    /// </summary>
+    [Test]
+    public void AScriptIsFoundByItsPathWhenItsTypeSubclassesAnotherScript()
+    {
+        Expect.Equal(typeof(NetworkNodeExtensionsTests), NetworkObject.TypeOfScript("res://test/Nodes/NetworkNodeExtensionsTests.cs"));
+    }
+
     [Test]
     public void TheFirstAuthorityNotificationComesAfterTheNodeIsReady()
     {
