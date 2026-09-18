@@ -37,17 +37,33 @@ public partial class NetworkObjectServer : Node
     /// <summary>The stack this server belongs to; resolved when it enters the tree.</summary>
     public CrackNetContext Context { get; private set; } = CrackNetContext.Default;
 
-    /// <summary>How many ticks behind the newest sample remote objects are shown.</summary>
-    public double PlaybackDelayTicks { get; set; } = StateIntervalTicks + 0.5;
+    /// <summary>
+    /// The least number of ticks behind the newest sample remote objects are shown, before jitter adds to it: two send
+    /// intervals and a margin, so one lost packet does not empty the buffer. One interval was enough at 15 Hz only
+    /// because the margin was then a tick of 33 ms; at 30 Hz on 60 Hz ticks it left the loss test drawing twice the jumps.
+    /// </summary>
+    public double PlaybackDelayTicks { get; set; } = StateIntervalTicks * 2 + 0.5;
 
-    /// <summary>The deepest a playback buffer grows to absorb jitter; also what a despawn waits out.</summary>
-    public const double MaxPlaybackDepthTicks = 20;
-
-    /// <summary>State goes out every this many ticks: 2 at 30 Hz is 15 snapshots a second.</summary>
+    /// <summary>
+    /// State goes out every this many ticks: with the tick on the physics step (the default, 60 Hz), 2 is every other
+    /// step, 30 snapshots a second.
+    /// </summary>
     public const int StateIntervalTicks = 2;
 
-    /// <summary>An object whose state has not changed is sent again only this often.</summary>
-    public const int RestHeartbeatTicks = 30;
+    // Times rather than ticks: the tickrate is the physics rate by default and a project may change it
+    private const double MaxPlaybackDepthSeconds = 2.0 / 3;
+    private const double RestHeartbeatSeconds = 1;
+    private const double ResyncSeconds = 1;
+    private const double MaxLeadSeconds = 4.0 / 3;   // past the heartbeat gap, so motion after a rest shows at once
+    private const double LatenessWindowSeconds = 20;
+
+    private double Tickrate => Context.NetworkTime.Tickrate;
+
+    /// <summary>The deepest a playback buffer grows to absorb jitter, in ticks; also what a despawn waits out.</summary>
+    public double MaxPlaybackDepthTicks => MaxPlaybackDepthSeconds * Tickrate;
+
+    /// <summary>An object whose state has not changed is sent again only this often, in ticks.</summary>
+    private int RestHeartbeatTicks => (int)Math.Round(RestHeartbeatSeconds * Tickrate);
 
     private static readonly CrackNetLogger Logger = CrackNetLogger.ForCrackNet("NetworkObjectServer");
 
@@ -486,7 +502,9 @@ public partial class NetworkObjectServer : Node
         var tick = reader.GetI32();
 
         if (!_clocks.TryGetValue(sender, out var clock))
-            _clocks[sender] = clock = new PlaybackClock(PlaybackDelayTicks, maxDepthTicks: MaxPlaybackDepthTicks);
+            _clocks[sender] = clock = new PlaybackClock(PlaybackDelayTicks, resyncTicks: ResyncSeconds * Tickrate,
+                maxLeadTicks: MaxLeadSeconds * Tickrate, maxDepthTicks: MaxPlaybackDepthTicks,
+                latenessWindowTicks: LatenessWindowSeconds * Tickrate);
         clock.Observe(tick);
         // A state for tick N is taken as tick N-1 finishes, so on a clean link it arrives as N comes around
         AddAge(AgesOf(sender).Network, Math.Max(0, LocalTick - tick));

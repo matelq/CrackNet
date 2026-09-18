@@ -22,7 +22,6 @@ public sealed class PlaybackClock
     // Twenty seconds of arrivals, by time rather than count (a resting peer sends one a second), and percentiles
     // rather than min and max: a long window keeps the depth steady, and one outlier - the first packet, the one after
     // an outage, a hitch on the sending machine - must not inflate it for the whole window
-    private const double LatenessWindowTicks = 600;
     private const double LowPercentile = 0.05, HighPercentile = 0.95;
 
     // Below this many arrivals in the window the percentiles are just the extremes, and a first late packet with a few
@@ -38,6 +37,7 @@ public sealed class PlaybackClock
     private readonly double _delay;
     private readonly double _resyncDepth;
     private readonly double _maxLead;
+    private readonly double _latenessWindow;
     private double _time;
 
     /// <param name="delayTicks">The minimum depth behind the newest tick: the send interval and a margin.</param>
@@ -50,8 +50,11 @@ public sealed class PlaybackClock
     /// of a resting peer, so motion after a rest shows at the normal depth at once.
     /// </param>
     /// <param name="maxDepthTicks">The most jitter the buffer absorbs; past it, late packets are late.</param>
-    public PlaybackClock(double delayTicks, double resyncTicks = 30, double maxLeadTicks = 40, double maxDepthTicks = 20)
+    /// <param name="latenessWindowTicks">How far back arrivals count towards the jitter: twenty seconds at 30 Hz.</param>
+    public PlaybackClock(double delayTicks, double resyncTicks = 30, double maxLeadTicks = 40, double maxDepthTicks = 20,
+        double latenessWindowTicks = 600)
     {
+        _latenessWindow = latenessWindowTicks;
         _maxDepth = Math.Max(delayTicks, maxDepthTicks);
         if (!double.IsFinite(delayTicks) || delayTicks < 0) throw new ArgumentOutOfRangeException(nameof(delayTicks));
         _delay = delayTicks;
@@ -73,7 +76,7 @@ public sealed class PlaybackClock
 
     private void UpdateDepth()
     {
-        while (_lateness.Count > 0 && _now - _lateness.Peek().At > LatenessWindowTicks) _lateness.Dequeue();
+        while (_lateness.Count > 0 && _now - _lateness.Peek().At > _latenessWindow) _lateness.Dequeue();
         if (_lateness.Count < MinSamplesForJitter)
         {
             _depth = _delay;

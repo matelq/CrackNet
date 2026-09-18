@@ -10,7 +10,7 @@ pushing each other, joint QTEs), physics and projectiles, fast and slow. Listen-
 concern: clients are trusted. **3D only** (decided): 2D roots are refused rather than kept as an untested copy of every
 physics rule.
 
-Tick 30 Hz, state snapshots 15-20 Hz. The host leaving ends the session; a late joiner gets a full snapshot of the world
+Tick on the physics step (60 Hz), state snapshots every other step (30 Hz). The host leaving ends the session; a late joiner gets a full snapshot of the world
 and its owners. No host migration.
 
 ## Why not the other models
@@ -119,7 +119,7 @@ one `ENetConnection` in `ENetMultiplayerPeer.CreateMesh`. Its `MultiplayerPeerEx
 once on each sending link—delay and jitter to all packets, steady and burst loss only to unreliable packets—so a
 guest-to-guest packet is no longer relayed or charged twice.
 
-**Bandwidth.** State goes out every 2 ticks (15 Hz). Values are written compactly (a type byte, floats). An object
+**Bandwidth.** State goes out every 2 ticks: with the tick on the physics step (`sync_to_physics`, on by default) that is 30 Hz. Measured against 15 Hz on a 30 Hz tick: traffic x1.8 (1.0 Mbit/s against 0.56 to one guest for 50 moving crates), and the playback buffer had to grow to two send intervals to ride out a lost packet, so what is shown is only about 8 ms fresher. Kept for the finer samples; quantization and deltas are what pay for it. Values are written compactly (a type byte, floats). An object
 whose state has not changed is sent only as a heartbeat once a second; a receiver that sees a sample after such a gap
 holds the resting value until just before it, so the object starts moving when its authority did. Measured by
 `BandwidthTests`: 50 moving and 150 resting objects cost about 136 kbit/s of state payload per peer (was 1.8 Mbit/s).

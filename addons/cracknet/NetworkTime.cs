@@ -50,11 +50,18 @@ public partial class NetworkTime : Node
         _tickTag = () => $"@{Tick}";
     }
 
-    /// <summary>Ticks per second. Equals the physics tickrate when SyncToPhysics is on.</summary>
+    /// <summary>
+    /// Ticks per second. Equals the physics tickrate when SyncToPhysics is on, and setting it then sets the physics
+    /// tickrate: a guest adjusting to the host's rate has no other rate to change.
+    /// </summary>
     public int Tickrate
     {
         get => SyncToPhysics ? Engine.PhysicsTicksPerSecond : _clock.Tickrate;
-        internal set => _clock.Tickrate = value;
+        internal set
+        {
+            _clock.Tickrate = value;
+            if (SyncToPhysics) Engine.PhysicsTicksPerSecond = value;
+        }
     }
 
     private bool SyncToPhysics => _clock.SyncToPhysics;

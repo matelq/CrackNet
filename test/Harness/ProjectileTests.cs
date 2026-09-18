@@ -74,8 +74,8 @@ public partial class ProjectileTests : HarnessSuite
             onHost ??= Host.GetNodeOrNull<HarnessBody>(fired.Name.ToString());
             if (onHost is not { Visible: true }) continue;
 
-            var perTick = Speed.X / Host.Context.NetworkTime.Tickrate;
-            Expect.True(onHost.Location.X < perTick * 3,
+            // A tenth of a second of flight at most; losing the muzzle samples starts it 300 ms down range
+            Expect.True(onHost.Location.X < Speed.X * 0.1f,
                 $"first displayed at {onHost.Location.X:F2}, after the muzzle samples were sent");
             return;
         }

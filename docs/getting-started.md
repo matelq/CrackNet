@@ -130,7 +130,7 @@ Shown read-only on every `NetworkObject` in the inspector:
 | any `Node2D` | not supported: CrackNet is 3D only |
 
 Nothing else: child transforms, animation and particles only when marked `[Synced]`. Changed state goes out at the
-next send (15 times a second), unchanged state once a second. `SoftBody3D` and ragdoll bones are not supported: the
+next send (30 times a second), unchanged state once a second. `SoftBody3D` and ragdoll bones are not supported: the
 node shows an error and the game quits at start.
 
 Next: **[NetworkObject](network-object.md)** for kinds, grabbing, knocks and events.

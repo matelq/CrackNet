@@ -14,10 +14,10 @@ public partial class BandwidthTests : HarnessSuite
 
     /// <summary>
     /// Bytes per second the host sends one peer for 50 moving and 150 resting crates; the host sends this to every
-    /// guest. Measured at about 70.5 kB/s (564 kbit/s): 50 crates at 15 Hz dominate. A regression guard, not a target -
+    /// guest. Measured at about 125 kB/s (1.0 Mbit/s): 50 crates at 30 Hz dominate (70.5 kB/s at 15 Hz). A regression guard, not a target -
     /// quantization and deltas (see Deferred) are what would bring it down.
     /// </summary>
-    private const double BudgetBytesPerSecond = 76_000;
+    private const double BudgetBytesPerSecond = 136_000;
 
     private static void AddCrates(CrackNetStack stack)
     {

@@ -132,6 +132,7 @@ One replicated object. While its root is this peer's multiplayer authority it se
 | property | `ClaimedBy` | The peer holding the object, or 0 when nobody does. |
 | property | `Context` | The stack this object belongs to; resolved when it enters the tree. |
 | property | `Diagnostics` | Sequences, display tick and sample events: for checks and diagnostics, not for game logic. |
+| property | `EarlySamples` | State from a peer that is not the authority here yet, kept for when the host's word arrives. |
 | property | `ImpulseStrength` | How hard a character body pushes the rigid bodies it slides into, along the contact normal; 0 is off. The library takes the body and pushes it on this peer's simulation. |
 | property | `Kind` | How authority over this object moves. Read when the object enters the tree. |
 | property | `LastSentBody` | What this peer last sent for the object, and when: an unchanged object is not sent again for a while. |
@@ -174,15 +175,16 @@ Sends the state of every `NetworkObject` this peer is authority for, once per ti
 |---|---|---|
 | property | `Context` | The stack this server belongs to; resolved when it enters the tree. |
 | property | `Diagnostics` | Playback timing per peer: for readouts and checks rather than for game logic. |
-| property | `PlaybackDelayTicks` | How many ticks behind the newest sample remote objects are shown. |
-| field | `MaxPlaybackDepthTicks` | The deepest a playback buffer grows to absorb jitter; also what a despawn waits out. |
-| field | `RestHeartbeatTicks` | An object whose state has not changed is sent again only this often. |
-| field | `StateIntervalTicks` | State goes out every this many ticks: 2 at 30 Hz is 15 snapshots a second. |
+| property | `MaxPlaybackDepthTicks` | The deepest a playback buffer grows to absorb jitter, in ticks; also what a despawn waits out. |
+| property | `PlaybackDelayTicks` | The least number of ticks behind the newest sample remote objects are shown, before jitter adds to it: two send intervals and a margin, so one lost packet does not empty the buffer. One interval was enough at 15 Hz only because the margin was then a tick of 33 ms; at 30 Hz on 60 Hz ticks it left the loss test drawing twice the jumps. |
+| property | `RestHeartbeatTicks` | An object whose state has not changed is sent again only this often, in ticks. |
+| field | `StateIntervalTicks` | State goes out every this many ticks: with the tick on the physics step (the default, 60 Hz), 2 is every other step, 30 snapshots a second. |
 | method | `ErasePeer(System.Int32)` | Forgets a peer's clock. On the host, also takes back every object the peer simulated or held and tells everyone: otherwise a crate carried out of the session stays with nobody for good. |
 | method | `GetDisplayTick(System.Int32)` | The display tick for objects of `peer`, or null before anything arrived from it. |
 | method | `GetPlaybackStatus(System.Int32)` | How old what `peer` is shown is, averaged over the last second, or null before any state arrived. Measured on arrival and against the clock's running time rather than against the newest tick: a resting peer sends only a heartbeat a second, and "local tick minus newest tick" then read up to a second of delay that was never there. |
 | method | `HandleAuthority(System.Int32,System.Byte[])` | On the host: accepts a guest's change when it is newer and the object is free or already the guest's, and tells everyone; otherwise tells the guest what stands. On a guest: whatever the host says stands. |
 | method | `HandleEvent(System.Int32,System.Byte[])` | Raises an event on its object if this peer is the authority, and passes it on to the authority otherwise. |
+| method | `ReplayEarlySamples(CrackNet.NetworkObject)` | `obj` just changed authority here: the new authority's samples that came first are played from the start of its flight; anyone else's are dropped, since the host did not give it to them. |
 | method | `SendAllAuthorityTo(System.Int32)` | On the host: tells a peer that just joined who has authority over and who holds every object. |
 | method | `SubmitAuthority(CrackNet.NetworkObject)` | Sends an authority change this peer just applied: a guest asks the host, the host tells everyone. |
 
@@ -207,7 +209,7 @@ The shared tick clock: runs ticks at a fixed rate and keeps them in step with th
 | property | `RemoteRtt` | Estimated roundtrip time to the server. Always 0 on the server. |
 | property | `Tick` | Current network time in ticks, continuously synced with the server. |
 | property | `TickFactor` | 0.0 right after a tick, 1.0 right before the next. |
-| property | `Tickrate` | Ticks per second. Equals the physics tickrate when SyncToPhysics is on. |
+| property | `Tickrate` | Ticks per second. Equals the physics tickrate when SyncToPhysics is on, and setting it then sets the physics tickrate: a guest adjusting to the host's rate has no other rate to change. |
 | property | `Ticktime` | Duration of a single tick, in seconds. |
 | property | `Time` | Current network time in seconds, continuously synced with the server. |
 | method | `Start` | Start NetworkTime: synchronize with the host, then emit ticks. On clients, ticks start after the initial sync. Returns Ok, AlreadyInUse if already running, or Unavailable without a multiplayer peer. |

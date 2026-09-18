@@ -36,7 +36,7 @@ public partial class CrackNetPlugin : EditorPlugin
         new("cracknet/time/sync_interval", 0.25, Variant.Type.Float, PropertyHint.Range, $"{NetworkTimeSynchronizer.MinSyncInterval},2,or_greater"),
         new("cracknet/time/sync_samples", 8, Variant.Type.Int),
         new("cracknet/time/sync_adjust_steps", 8, Variant.Type.Int),
-        new("cracknet/time/sync_to_physics", false, Variant.Type.Bool),
+        new("cracknet/time/sync_to_physics", true, Variant.Type.Bool),
         new("cracknet/time/max_time_stretch", 1.25, Variant.Type.Float, PropertyHint.Range, "1,2,0.05,or_greater"),
         new("cracknet/time/tickrate_mismatch_action", (int)TickrateMismatchAction.Warn, Variant.Type.Int, PropertyHint.Enum, "Warn,Disconnect,Adjust,Signal"),
         new("cracknet/time/suppress_offline_peer_warning", false, Variant.Type.Bool),

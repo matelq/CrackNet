@@ -10,7 +10,7 @@ public partial class NetworkObjectTests : HarnessSuite
     [Test]
     public async Task PlaybackReadoutSeparatesNetworkAndPlaybackDelay()
     {
-        // 100 ms each way at 30 Hz: state is about three ticks old when it arrives, then waits in the playback buffer
+        // 100 ms each way: state is about a tenth of a second old when it arrives, then waits in the playback buffer
         Network.LatencyMs = 100;
         HarnessBody.Place(Host, "Clock", 1, Speed);
         HarnessBody.Place(Client, "Clock", 1, Speed);
@@ -118,13 +118,16 @@ public partial class NetworkObjectTests : HarnessSuite
             await NextFrame();
             var step = onClient.Location.X - previous;
             Expect.True(step >= 0, $"frame {frame}: moved back by {-step}");
-            biggest = Math.Max(biggest, step);
+            // Beyond what the frame's own length covers: a headless frame can span several ticks
+            biggest = Math.Max(biggest, step - Speed.X * (float)GetProcessDeltaTime());
             previous = onClient.Location.X;
         }
 
-        // At most a couple of ticks' worth of motion in one frame: a snap would be the whole buffer at once
-        var perTick = Speed.X / Host.Context.NetworkTime.Tickrate;
-        Expect.True(biggest < perTick * 2.5f, $"biggest step {biggest}, per tick {perTick}");
+        GD.Print($"PLAYBACK SMOOTHNESS biggest step beyond the frame's own motion {biggest:F3} m");
+        // A snap would be the whole buffer at once; under 85 ms of motion is ordinary rate slewing (at 15 Hz on 30 Hz
+        // ticks this read 0.11-0.17 m; one interval of buffer at 30 Hz on 60 Hz ticks read 0.18-0.29)
+        var bound = Speed.X * 0.085f;
+        Expect.True(biggest < bound, $"biggest step {biggest} beyond the frame's motion, bound {bound}");
     }
 
     [Test]
