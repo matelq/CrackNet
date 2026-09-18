@@ -39,6 +39,8 @@ public partial class PlaygroundSmoke : Node
     private readonly HashSet<string> _fallen = new();
     private const string CrateName = "Crate0";
     private const double MaxDisplayError = 0.25;
+    /// <summary>A carried crate is placed on the hand after the animation: anything beyond float noise is a lag.</summary>
+    private const double MaxHandError = 0.005;
 
     private bool _isHost;
     private bool _isObserver;
@@ -70,7 +72,11 @@ public partial class PlaygroundSmoke : Node
     private int _clientPeer;
     private bool _sawGuestCrate;
 
-    private readonly List<(int Tick, Vector3 Position)> _sent = new();
+    /// <summary>While the crate is in a hand: frames measured at the end of the frame, and how far the drawn crate got from the drawn hand.</summary>
+    private int _carriedFrames;
+    private double _handError;
+
+    private readonly List<(int Tick, Vector3 Position, bool Attached)> _sent = new();
     private readonly List<(double Tick, Vector3 Position)> _displayed = new();
     private readonly HashSet<int> _received = new();
 
@@ -85,6 +91,8 @@ public partial class PlaygroundSmoke : Node
             if (arg.StartsWith("--port=")) _port = int.Parse(arg["--port=".Length..], CultureInfo.InvariantCulture);
         }
 
+        // Measured after every node processed and every deferred call ran, which is when the crate is in the hand
+        ProcessPriority = int.MaxValue;
         _playground = GetParent<Playground>();
         _crate = _playground.GetNode<PlaygroundCrate>($"Crates/{CrateName}");
         _crateStart = _crate.GlobalPosition;
@@ -208,7 +216,7 @@ public partial class PlaygroundSmoke : Node
     /// <summary>On the client, what it sent for the crate while simulating it: exactly the samples that went out.</summary>
     private void RecordSent(int stateTick)
     {
-        if (!_isHost) _sent.Add((stateTick, _crate.GlobalPosition));
+        if (!_isHost) _sent.Add((stateTick, _crate.GlobalPosition, _crate.AttachedTo is not null));
     }
 
     public override void _PhysicsProcess(double delta)
@@ -216,8 +224,17 @@ public partial class PlaygroundSmoke : Node
         if (_botClock >= 0) _botClock += delta;
     }
 
+    /// <summary>What is drawn this frame: the carried crate against the hand of whoever carries it, on this peer's copies.</summary>
+    private void MeasureDrawn()
+    {
+        if (!IsInsideTree() || _crate.AttachedTo is not PlaygroundPlayer carrier) return;
+        _carriedFrames++;
+        _handError = Math.Max(_handError, _crate.GlobalPosition.DistanceTo(carrier.GetNode<Node3D>("Hand").GlobalPosition));
+    }
+
     public override void _Process(double delta)
     {
+        Callable.From(MeasureDrawn).CallDeferred();
         _elapsed += delta;
         _crateMaxTravel = Math.Max(_crateMaxTravel, _crate.GlobalPosition.DistanceTo(_crateStart));
 
@@ -306,8 +323,9 @@ public partial class PlaygroundSmoke : Node
             var (maxError, compared) = Compare(sent);
             var homeAgain = _homeAfterReset;
             ok = _clientPeer != 0 && _crateMaxTravel is > 1.5 and < MaxCrateTravel && compared > 20 && maxError < MaxDisplayError
-                 && _returnedWhileGuestConnected && homeAgain == _crateHome.Count;
+                 && _returnedWhileGuestConnected && homeAgain == _crateHome.Count && _carriedFrames > 10 && _handError < MaxHandError;
             detail = $"clientTookIt={_clientPeer != 0} travel={_crateMaxTravel:F2} compared={compared} maxError={maxError:F3} " +
+                     $"carriedFrames={_carriedFrames} handError={_handError:F3} " +
                      $"returnedAtRest={_returnedWhileGuestConnected} cratesHomeAfterReset={homeAgain}/{_crateHome.Count}";
         }
         else if (!_isObserver)
@@ -315,9 +333,9 @@ public partial class PlaygroundSmoke : Node
             WriteTrace();
             var sawHost = _sawHost;
             ok = sawHost && _sent.Count > 20 && _crateMaxTravel is > 1.5 and < MaxCrateTravel && backToHost && _shotTookCrate
-                 && _stackHangingFrames <= MaxStackHangingFrames;
+                 && _stackHangingFrames <= MaxStackHangingFrames && _carriedFrames > 10 && _handError < MaxHandError;
             detail = $"sawHost={sawHost} sent={_sent.Count} travel={_crateMaxTravel:F2} backToHost={backToHost} shotHitCrate={_shotTookCrate} " +
-                     $"stackHangingFrames={_stackHangingFrames}";
+                     $"stackHangingFrames={_stackHangingFrames} carriedFrames={_carriedFrames} handError={_handError:F3}";
         }
         else
         {
@@ -351,9 +369,10 @@ public partial class PlaygroundSmoke : Node
     /// another peer's samples, drawing a crate before its state arrived.
     /// </para>
     /// </summary>
-    private (double MaxError, int Compared) Compare(List<(int Tick, Vector3 Position)> sent)
+    private (double MaxError, int Compared) Compare(List<(int Tick, Vector3 Position, bool Attached)> sent)
     {
         var sentAt = sent.ToDictionary(sample => sample.Tick, sample => sample.Position);
+        var attachedAt = sent.ToDictionary(sample => sample.Tick, sample => sample.Attached);
         var received = _received.Where(sentAt.ContainsKey).OrderBy(tick => tick).ToList();
         var maxError = 0.0;
         var compared = 0;
@@ -365,6 +384,9 @@ public partial class PlaygroundSmoke : Node
             // A gap the client made on purpose - the crate at rest - has no line to follow
             if (Enumerable.Range(fromTick, toTick - fromTick).Any(at => at % NetworkObjectServer.Instance.StateIntervalTicks == 0 && !sentAt.ContainsKey(at)))
                 continue;
+            // Into or out of the hand there is no line to follow: playback holds until the switch, by design. While in
+            // the hand the crate is measured against the drawn hand instead (handError)
+            if (attachedAt[fromTick] || attachedAt[toTick]) continue;
 
             var expected = sentAt[fromTick].Lerp(sentAt[toTick], (float)((tick - fromTick) / (toTick - fromTick)));
             maxError = Math.Max(maxError, expected.DistanceTo(position));
@@ -376,23 +398,23 @@ public partial class PlaygroundSmoke : Node
     private void WriteTrace()
     {
         using var file = FileAccess.Open(TracePath, FileAccess.ModeFlags.Write);
-        foreach (var (tick, p) in _sent)
-            file.StoreLine(string.Create(CultureInfo.InvariantCulture, $"{tick},{p.X},{p.Y},{p.Z}"));
+        foreach (var (tick, p, attached) in _sent)
+            file.StoreLine(string.Create(CultureInfo.InvariantCulture, $"{tick},{p.X},{p.Y},{p.Z},{(attached ? 1 : 0)}"));
         // The host starts reading as soon as the file exists: this line says the client finished writing it
         file.StoreLine(TraceEnd);
     }
 
-    private List<(int Tick, Vector3 Position)> ReadTrace()
+    private List<(int Tick, Vector3 Position, bool Attached)> ReadTrace()
     {
-        var result = new List<(int, Vector3)>();
+        var result = new List<(int, Vector3, bool)>();
         if (!FileAccess.FileExists(TracePath)) return result;
         using var file = FileAccess.Open(TracePath, FileAccess.ModeFlags.Read);
         while (!file.EofReached())
         {
             var parts = file.GetLine().Split(',');
-            if (parts.Length != 4) continue;
+            if (parts.Length != 5) continue;
             float F(int i) => float.Parse(parts[i], CultureInfo.InvariantCulture);
-            result.Add((int.Parse(parts[0], CultureInfo.InvariantCulture), new Vector3(F(1), F(2), F(3))));
+            result.Add((int.Parse(parts[0], CultureInfo.InvariantCulture), new Vector3(F(1), F(2), F(3)), parts[4] == "1"));
         }
         return result;
     }

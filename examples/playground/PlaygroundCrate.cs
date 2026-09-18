@@ -31,10 +31,6 @@ public partial class PlaygroundCrate : RigidBody3D, IAuthorityChanged
     private void Refresh()
     {
         _material.AlbedoColor = Playground.ColorOf(this.Authority.Peer).Lerp(Colors.SaddleBrown, 0.35f);
-        // A held crate is moved by hand, a teleport every frame: colliding, it would land inside the crates around it
-        // and the physics engine would blow them out of the world. It passes through things while held, on every peer
-        CollisionLayer = this.ClaimedBy != 0 ? 0u : 1u;
-        CollisionMask = this.ClaimedBy != 0 ? 0u : 1u;
         if (IsInsideTree()) PlaytestLog.Authority(this);
     }
 }
