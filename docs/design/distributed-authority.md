@@ -425,7 +425,9 @@ Two decisions here are made but not built, and both matter enough to keep in sig
 - [ ] Soft separation of overlapping players (optional, built in)
 - [ ] Hitscan (a plain ray query by the shooter)
 - [ ] QTE: press together within a window (example over `Send`)
-- [ ] Standing on, carrying and throwing a player: playtest the sketch in Deferred before deciding
+- [x] Carrying and throwing a crate at the hand marker (`TryAttach`, `Detach` + `Impulse`), animated by parameters
+- [x] Carrying and throwing a player (library and harness; the playground has no key for it yet)
+- [ ] Standing on a moving crate on the rider's own peer (drawn right on every other peer already)
 - [x] Steam transport: host a friends-only lobby, join from the overlay or by lobby id, simulated profile on top
 - [ ] Production-ready playground: scenes with proper node trees for every object and for the level instead of
   building them in code, and code clean enough to copy into a game
@@ -442,9 +444,10 @@ Two decisions here are made but not built, and both matter enough to keep in sig
 - Extrapolating targets to the present for hit tests, in the style of Photon Fusion "Forecast". Revisit if dodges do
   not count on Casual or Realistic.
 - Sequence number overflow (review finding).
-- Carrying a player, standing on one, and throwing one. Sketch: `AttachTo(other, offset)` / `Detach()` called by the
-  carried player, which follows the carrier's displayed transform; a throw is a knock that also detaches, so
-  authority over a player never moves. Needs playtesting before it becomes API; may stay game code.
+- Riding on the rider's own peer: a copy of a moving body is a frozen static and does not carry the character
+  standing on it, while every other peer draws the rider on the body (stage B, step 5). Options: the library adds the
+  copy's displacement per physics frame to the character, or the rider's peer takes the body it stands on. Decide
+  after a playtest with lifts and crates.
 - Typed events (`Send<T>` / `On<T>`) for several kinds of event per object without unpacking a `Variant`.
 - Smaller transforms per root type (position and yaw for an upright character). Everything sends the
   full transform until measurements ask.
