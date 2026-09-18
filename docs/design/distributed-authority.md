@@ -440,7 +440,11 @@ Two decisions here are made but not built, and both matter enough to keep in sig
   request and a forwarding duty to the host, to save one trip in a rare case. The pattern (the arbiter delivers what
   rode on a refused request) may fit other contested actions.
 - Pusher-side predicted knockback shown as a decaying presentation offset. Revisit if push latency still bothers on
-  Casual or Realistic after the mesh.
+  Casual or Realistic after the mesh. For a thrown player the decision after the second playtest is the other way round first:
+  release with a wind-up (the item leaves the hand when the carried player's stream says so, hidden by a throw
+  animation of a round trip's length), an impulse kept and applied when the carried player is freed, and the first
+  free sample shown at once with playback catching up; extrapolating the flight on the thrower's screen only if that
+  still bothers.
 - Extrapolating targets to the present for hit tests, in the style of Photon Fusion "Forecast". Revisit if dodges do
   not count on Casual or Realistic.
 - Sequence number overflow (review finding).
@@ -463,7 +467,12 @@ Two decisions here are made but not built, and both matter enough to keep in sig
   the latest snapshot the peer acknowledged (Gaffer on Games, Quake 3; needs acks and per-peer history, deltas stay a
   few ticks small) or a periodic keyframe such as the heartbeat (no acks, but deltas grow with time since it, and a
   lost keyframe blocks decoding until the next one).
-- A common display time instead of per-link buffers. Session-wide: every screen shows every remote object at the same
+- A common display time instead of per-link buffers. Seen in the second stage B playtest (2026-09-18): a crate on a
+  moving platform is drawn at its authority's display time and the platform at the host's, so it sits shifted by
+  v x (d_host - d_authority), and the shift jumps when the crate changes hands. Decided: fix it with relative sending
+  (the crate's samples relative to the body it rests on, as riders already do), and keep the common display time as
+  the backup. A common tick numbering is not the missing piece: ticks are already global and comparable across
+  authorities; what differs per link is the display depth. Session-wide: every screen shows every remote object at the same
   moment, set by the worst link, so one bad connection slows everyone. Per screen: each viewer uses the deepest of its
   own links, so only the players on a bad link pay. Revisit if playtests show objects of different players visibly out
   of step with each other outside interactions, which authority transfer already puts on one clock.
