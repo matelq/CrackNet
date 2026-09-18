@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [ "master", "reworked", "distributed-authority" ]
+    branches: [ "master", "reworked", "distributed-authority", "simplified-api" ]
   pull_request:
   workflow_dispatch:
 

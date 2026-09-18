@@ -34,9 +34,12 @@ try:
             if name and ("[Scene]" in code or "ISpawnedWith" in code):
                 cls = name.group(1)
                 (out / f"{cls}.cs").write_text(header + body, encoding="utf8")
+                # With a NetworkObject, as a real one has: CRN006 fails the build otherwise
                 (out / f"{cls}.tscn").write_text(
-                    f'[gd_scene load_steps=2 format=3]\n\n[ext_resource type="Script" path="res://examples/_doccheck/{cls}.cs" id="1"]\n\n'
-                    f'[node name="{cls}" type="Node"]\nscript = ExtResource("1")\n', encoding="utf8")
+                    f'[gd_scene load_steps=3 format=3]\n\n[ext_resource type="Script" path="res://examples/_doccheck/{cls}.cs" id="1"]\n'
+                    f'[ext_resource type="Script" path="res://addons/cracknet/NetworkObject.cs" id="2"]\n\n'
+                    f'[node name="{cls}" type="Node"]\nscript = ExtResource("1")\n\n'
+                    f'[node name="NetworkObject" type="Node" parent="."]\nscript = ExtResource("2")\n', encoding="utf8")
                 continue
         elif kind.startswith("members "):
             body = f"public partial class {kind.split()[1]}\n{{\n{code}\n}}\n"
@@ -48,7 +51,10 @@ try:
         # Godot binds one class per file named after it; these are never attached to nodes, so any name works
         (out / f"Block{i}.cs").write_text(header + body, encoding="utf8")
     build = subprocess.run(["dotnet", "build", str(root / "CrackNet.csproj")], capture_output=True, text=True)
-    errors = sorted({line.strip() for line in build.stdout.splitlines() if "error CS" in line})
+    # Any error, not only the compiler's: an analyzer's (CRN...) failed the build while this printed success
+    errors = sorted({line.strip() for line in build.stdout.splitlines() if re.search(r"error [A-Z]+\d+", line)})
+    if build.returncode != 0 and not errors:
+        errors = [line.strip() for line in build.stdout.splitlines() if "error" in line.lower()][-10:] or ["the build failed"]
     print("\n".join(errors) if errors else f"docs/examples.md: {len(blocks) - 1} blocks compile")
     sys.exit(build.returncode)
 finally:
