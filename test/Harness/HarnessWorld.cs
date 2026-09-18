@@ -52,8 +52,13 @@ internal static class HarnessWorld
     {
         var platform = new RigidBody3D
         {
-            Name = name, Position = position, GravityScale = 0, LockRotation = true,
-            LinearDampMode = RigidBody3D.DampMode.Replace, LinearDamp = 0, CanSleep = false,
+            Name = name,
+            Position = position,
+            GravityScale = 0,
+            LockRotation = true,
+            LinearDampMode = RigidBody3D.DampMode.Replace,
+            LinearDamp = 0,
+            CanSleep = false,
         };
         platform.SetMultiplayerAuthority(1);
         platform.AddChild(Shapes.Collision(new BoxShape3D { Size = size }));
