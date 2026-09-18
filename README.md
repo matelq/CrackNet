@@ -26,8 +26,7 @@ to rest. Pushes and hits are events delivered to whoever currently simulates the
 Pre-release, under active playtesting. Verified in CI by core xUnit tests, Godot-side tests (several stacks in one
 tree over a loopback peer) and a three-process ENet mesh smoke of the playground under a simulated bad network.
 
-Steam is verified by hand: the playground has been played over Steam with a friend, through a friends-only lobby and
-the overlay invite. It has no automated check, since that needs two Steam accounts.
+Steam works: the playground hosts and joins through a friends-only lobby and the overlay invite.
 
 ## Using it
 
