@@ -314,6 +314,14 @@ parent sync.
   thrower's: the body jumps 0.59 m, the drawn crate 0.01 m and is within 1 mm of the body 2.5 s later; without the
   smoothing window it jumps the whole 0.56 m. The impulse applied in the same frame as `Detach` is not lost on the
   thrower: 3 physics steps later the crate flies at the thrown speed.
+- **Animation, built (stage B, step 6):** `AnimationTests`. A synced walk blend changes on the observer in the frame
+  the body starts moving. The one-shot counter plays the difference per sample: once per bump, twice for two bumps in
+  one snapshot (the observer sees 0, 1, 3), and a late joiner plays its first value zero times. An item in a hand
+  aimed by `LookAtModifier3D` (the hand swept 2.8 m) is exact on both peers. Root motion on the authority travels as
+  the transform (the copy is 0.000 m off the samples over 420 frames); applying it on an observer too showed no drift
+  on screen, since playback rewrites the copy every frame, so the rule stays for the physics step, not the picture.
+  The playground's player carries the crate at a `Hand` marker bobbed by an AnimationTree walk blend and fires a
+  throw one-shot from a counter; it has no skeleton, so IK lives in the harness only.
 - **Tests first:** per frame on a remote peer during a carried walk with animation, item-to-anchor distance near zero,
   failing on today's carry before the change; attach and detach at the carrier's display tick; no jump during the
   detach blend; a third peer's carried player on its displayed carrier; a late joiner sees the item in the hand.

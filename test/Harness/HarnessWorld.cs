@@ -37,9 +37,9 @@ internal static class HarnessWorld
         return crate;
     }
 
-    public static Walker Walker(CrackNetStack stack, int peer, Vector3 position, Vector3 velocity, float pushStrength = 0)
+    public static Walker Walker(CrackNetStack stack, int peer, Vector3 position, Vector3 velocity, float pushStrength = 0, string? name = null)
     {
-        var walker = new Walker { Name = $"Walker{peer}", Position = position, Walk = velocity };
+        var walker = new Walker { Name = name ?? $"Walker{peer}", Position = position, Walk = velocity };
         walker.SetMultiplayerAuthority(peer);
         walker.AddChild(Shapes.Collision(new CapsuleShape3D { Radius = 0.4f, Height = 1.8f }));
         walker.AddChild(new NetworkObject { Name = "NetworkObject", ImpulseStrength = pushStrength });
@@ -65,6 +65,78 @@ internal static class HarnessWorld
         platform.AddChild(new NetworkObject { Name = "NetworkObject" });
         World(stack).AddChild(platform);
         return platform;
+    }
+
+    /// <summary>
+    /// A walker moved by root motion: a one-bone skeleton whose bone an AnimationPlayer strides 2 m a second along +X,
+    /// extracted as root motion and applied by the walker's own controller.
+    /// </summary>
+    public static Walker RootMotionWalker(CrackNetStack stack, int peer, string name, Vector3 position)
+    {
+        var walker = Walker(stack, peer, position, Vector3.Zero, name: name);
+        var skeleton = new Skeleton3D { Name = "Skeleton" };
+        skeleton.AddBone("hips");
+        skeleton.SetBoneRest(0, Transform3D.Identity);
+        walker.AddChild(skeleton);
+
+        var animation = new Animation { Length = 1, LoopMode = Animation.LoopModeEnum.Linear };
+        var track = animation.AddTrack(Animation.TrackType.Position3D);
+        animation.TrackSetPath(track, new NodePath("Skeleton:hips"));
+        animation.PositionTrackInsertKey(track, 0, Vector3.Zero);
+        animation.PositionTrackInsertKey(track, 1, new Vector3(2, 0, 0));
+        var library = new AnimationLibrary();
+        library.AddAnimation("stride", animation);
+        var player = new AnimationPlayer
+        {
+            Name = "Animation",
+            RootMotionTrack = new NodePath("Skeleton:hips"),
+            CallbackModeProcess = AnimationMixer.AnimationCallbackModeProcess.Physics,
+        };
+        player.AddAnimationLibrary("", library);
+        walker.AddChild(player);
+        player.Play("stride");
+        walker.RootMotion = player;
+        return walker;
+    }
+
+    /// <summary>
+    /// A hand at the end of a bone that a LookAtModifier3D aims at a target circling the carrier: IK moves the hand
+    /// in the skeleton's own pass, after the animation.
+    /// </summary>
+    public static Marker3D AimingHand(Node3D carrier)
+    {
+        var skeleton = new Skeleton3D { Name = "Skeleton" };
+        skeleton.AddBone("arm");
+        var rest = new Transform3D(Basis.Identity, new Vector3(0, 0.8f, 0));
+        skeleton.SetBoneRest(0, rest);
+        skeleton.SetBonePosePosition(0, rest.Origin);
+        carrier.AddChild(skeleton);
+        var attachment = new BoneAttachment3D { Name = "ArmBone", BoneName = "arm" };
+        skeleton.AddChild(attachment);
+        var hand = new Marker3D { Name = "Hand", Position = new Vector3(0, 0, -1) };
+        attachment.AddChild(hand);
+
+        var target = new Marker3D { Name = "Target", Position = new Vector3(1.5f, 0.8f, 0) };
+        carrier.AddChild(target);
+        var animation = new Animation { Length = 2, LoopMode = Animation.LoopModeEnum.Linear };
+        var track = animation.AddTrack(Animation.TrackType.Position3D);
+        animation.TrackSetPath(track, new NodePath("Target"));
+        animation.PositionTrackInsertKey(track, 0, new Vector3(1.5f, 0.8f, 0));
+        animation.PositionTrackInsertKey(track, 0.5, new Vector3(0, 0.8f, -1.5f));
+        animation.PositionTrackInsertKey(track, 1, new Vector3(-1.5f, 0.8f, 0));
+        animation.PositionTrackInsertKey(track, 1.5, new Vector3(0, 0.8f, 1.5f));
+        animation.PositionTrackInsertKey(track, 2, new Vector3(1.5f, 0.8f, 0));
+        var library = new AnimationLibrary();
+        library.AddAnimation("circle", animation);
+        var player = new AnimationPlayer { Name = "Animation" };
+        player.AddAnimationLibrary("", library);
+        carrier.AddChild(player);
+        player.Play("circle");
+
+        var lookAt = new LookAtModifier3D { Name = "Aim", BoneName = "arm", ForwardAxis = SkeletonModifier3D.BoneAxis.MinusZ };
+        skeleton.AddChild(lookAt);
+        lookAt.TargetNode = lookAt.GetPathTo(target);
+        return hand;
     }
 
     /// <summary>

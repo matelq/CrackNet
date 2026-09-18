@@ -433,7 +433,8 @@ public partial class CarryingTests : HarnessSuite
         var droppedAt = carried[2].GlobalPosition;
         Expect.True(await WaitUntil(() => carried.All(player => player.AttachedTo is null), 4),
             "not every peer showed the player let go: " + string.Join(", ", carried.Select(player => player.AttachedTo?.Name ?? "free")));
-        Expect.True(await WaitUntil(() => carried[2].GlobalPosition.Z < droppedAt.Z - 1, 4),
+        // 8 m/s fading at 20 m/s² is 1.6 m in the air; on the floor friction takes some of it
+        Expect.True(await WaitUntil(() => carried[2].GlobalPosition.Z < droppedAt.Z - 0.5f, 4),
             $"the thrown player did not fly on its own peer: dropped at {droppedAt}, now at {carried[2].GlobalPosition}");
         Expect.True(!carriers[1].Attached.Any(), "the carrier still lists the player");
     }

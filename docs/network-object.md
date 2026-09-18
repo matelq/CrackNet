@@ -98,6 +98,38 @@ delay behind it. Nothing is claimed, collisions stay on and `Attached` does not 
 layer through the character's `platform_floor_layers`, as for the platform's velocity. Not in yet: on the rider's own
 peer a copy of a moving body is a frozen static and does not carry the character standing on it.
 
+## Animation
+
+Animation is not sent. Every peer runs its own AnimationTree, and what travels is its inputs, marked `[Synced]` like
+any other state and applied at the same display tick as the transform, so legs and body come from one sample. No pose
+sync, no animation state.
+
+```csharp
+[Synced]
+public float WalkBlend
+{
+    get;
+    set { field = value; _tree?.Set("parameters/Walk/blend_amount", value); }
+}
+```
+
+- **A loop** (walk, run, idle) is a blend parameter like the one above, set from the character's speed on the
+  authority every physics frame.
+- **A one-shot** (grab, throw, shoot) is a counter bumped in the same tick as the action, so an observer plays it in
+  the frame it sees the crate leave the hand. The setter plays the *difference* each sample brings, once the first
+  value is known: two bumps inside one snapshot arrive as one step of two, and the first value a late joiner receives
+  is history, played zero times.
+- **Root motion** runs on the authority only: the animation's displacement moves the body there and travels as the
+  transform. An observer's copy is placed from the samples every frame, so applying root motion there does not show,
+  but it walks a kinematic copy into the world between frames: skip it when `Authority.IsLocal` is false.
+- **IK and bones.** An item in a hand moved by a `SkeletonModifier3D` (`LookAtModifier3D`, two-bone IK) or on a
+  `BoneAttachment3D` is placed after the skeleton's own pass, so it does not lag the hand by a frame. Aim an IK target
+  at something synced (a `[Synced] Vector3`, or the anchor of a carried item), not at what a peer happens to display.
+- **Not in: animation phase on late join.** A peer joining mid-loop starts it from phase zero.
+
+The playground's player is the worked example: `WalkBlend` and `Throws` in `PlaygroundPlayer.cs`, the tree in
+`PlaygroundPlayer.tscn`.
+
 ## Events and state
 
 Every call below also works on the game's own node: `crate.Impulse(...)`, `crate.TryClaim()`, `this.Authority.IsLocal`,
