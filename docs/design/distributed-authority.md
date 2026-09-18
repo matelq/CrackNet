@@ -201,7 +201,7 @@ the trade exists it wins over a game word; where none does, the library's own mo
 | `Throw(velocity)` | `ReleaseClaim(velocity)` | One concept, letting go, with or without a shove |
 | `TryCarry(item, anchor)` | `TryAttach(item, anchor)`, `Detach(item)`, `Attached` | The trade's word: Unreal's `AttachmentReplication`, NGO's `AttachableBehaviour` |
 | `Push`, `Pushed`, `PushStrength` | `Impulse`, `Impulsed`, `ImpulseStrength` | Physics term rather than a plain verb, and the family stays together |
-| `TakeKnockback(delta)` | `TakeImpulses(delta)` | Drains the impulses that arrived as events; "knockback" is a genre word |
+| `TakeKnockback(delta)` | `ImpulseVelocity` | The velocity the pushes gave, faded by the library each physics frame (`ImpulseDecay`); it was `TakeImpulses(delta)` for a while, but the frame time and the decay rate are the library's business, not a term the game passes. "Knockback" is a genre word |
 | `Teleport()` | `Snap()` | The interpolation word: the next sample applies without gliding |
 | none | `PlaybackState` (`Pending`, `Playing`, `Ending`) | Replaces games reading `Visible` to tell whether an object has arrived or is leaving |
 | `Spawn`, `Despawn`, `ISpawnedWith<T>` | kept | Not generic English here but the trade's term, shared with Unity NGO, Fusion and Mirror; renaming them costs every reader who arrives from those. `Introduce`/`Retire` was the only workable alternative and was turned down |
@@ -212,7 +212,7 @@ closing the one autoconnect just made (`HostPeerFactory` / `JoinPeerFactory` wen
 `NetworkSimulator.RoleElected`, and the election holds a UDP port one below the autoconnect port.
 
 - **`this.` stays.** Extension members only apply to an explicit receiver, so a node's own calls read
-  `this.Authority.IsLocal`, `this.TakeImpulses(delta)`; on another node there is no `this` (`crate.TryClaim()`).
+  `this.Authority.IsLocal`, `this.ImpulseVelocity`; on another node there is no `this` (`crate.TryClaim()`).
   Considered and deliberately not done: a generator writing those members into each game class (they are already
   `partial` for `[Synced]`), which would allow a bare `Authority.IsLocal`. It buys five characters for a rule about
   which classes get the members and one more layer of generated code to explain. A base class such as
@@ -228,8 +228,17 @@ closing the one autoconnect just made (`HostPeerFactory` / `JoinPeerFactory` wen
   event is `Impulsed`.
 - **`ImpulseStrength`** on a character body's `NetworkObject`: the library pushes the rigid bodies the character slides
   into, along the contact normal. 0 is off, and a game that pushes along its input keeps its own loop.
-- **`TakeImpulses(delta)`**: the object accumulates pushes for a non-rigid root; `Velocity += TakeImpulses(delta)`
-  replaces a field, a subscription and a decay line. `Impulsed` stays for a custom curve.
+- **`ImpulseVelocity`**: the object accumulates pushes for a non-rigid root and fades them itself;
+  `Velocity += this.ImpulseVelocity` replaces a field, a subscription and a decay line. It has to be a term in the
+  controller's own velocity, next to gravity: the controller rewrites its horizontal velocity from input every frame,
+  so a push added once lasts a frame, and only the controller can give an upward push its arc. `IImpulsed` on the node
+  is for the moment of the hit (a sound, a hit animation, a curve of its own); `Impulsed` stays for watching another
+  object.
+- **How a node learns of events, one rule:** on the node itself an interface `I<Event>` with `On<Event>`
+  (`IAuthorityChanged`, `IImpulsed`, `IAttachmentChanged`), nothing to unsubscribe; the C# event on `NetworkObject`
+  stays for watching another object. `IReceived` waits for typed messages (#71). And game logic reads state
+  (`ClaimedBy`, `AttachedTo`, `PlaybackState`) rather than remembering a call's result: a claim is optimistic, and the
+  host's refusal arrives through `OnAuthorityChanged`, where state-driven logic undoes itself.
 - **Owning and carrying:** `TryClaim()` (mine, nobody else may take it, frozen, the game moves it), `ReleaseClaim()`,
   `ReleaseClaim(velocity)`, and `TryCarry(item, anchor)` where the item follows an anchor node of the carrier (a marker, a
   bone attachment), with `CarriedItems` on the carrier. Carrying belongs in the library, not in extras: only the

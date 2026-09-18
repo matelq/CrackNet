@@ -1,3 +1,6 @@
+// Built in code, not from a scene: CRN006 has nothing to check here
+#pragma warning disable CRN006
+
 using Godot;
 
 namespace CrackNet.Tests;

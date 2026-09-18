@@ -55,7 +55,7 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
             (Input.IsPhysicalKeyPressed(Key.S) ? 1 : 0) - (Input.IsPhysicalKeyPressed(Key.W) ? 1 : 0)).Normalized();
         if (bot is null && !GetWindow().HasFocus()) input = Vector3.Zero;
 
-        var velocity = new Vector3(input.X * Speed, Velocity.Y, input.Z * Speed) + this.TakeImpulses(delta);
+        var velocity = new Vector3(input.X * Speed, Velocity.Y, input.Z * Speed) + this.ImpulseVelocity;
         velocity.Y = IsOnFloor() && GetWindow().HasFocus() && Input.IsPhysicalKeyPressed(Key.Space) ? JumpSpeed : velocity.Y - Gravity * dt;
         if (input != Vector3.Zero) Rotation = new Vector3(0, Mathf.Atan2(-input.X, -input.Z), 0);
 

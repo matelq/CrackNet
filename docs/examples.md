@@ -138,7 +138,7 @@ private void Shove(Player other) => this.Impulse(other, -GlobalBasis.Z * 4);
 <!-- check: body Player -->
 ```csharp
 // The pushed player, in _PhysicsProcess before MoveAndSlide
-Velocity += this.TakeImpulses(delta);
+Velocity += this.ImpulseVelocity;
 ```
 
 What you get: exactly one application of each push, on the peer that simulates the pushed player, wherever the push

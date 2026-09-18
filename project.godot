@@ -27,6 +27,10 @@ WindowTiler="*res://addons/cracknet/Extras/WindowTiler.cs"
 NetworkSimulator="*res://addons/cracknet/Extras/NetworkSimulator.cs"
 MCPGameBridge="res://addons/godot_mcp/game_bridge/mcp_game_bridge.gd"
 
+[cracknet]
+
+general/clear_settings=false
+
 [dotnet]
 
 project/assembly_name="CrackNet"
@@ -42,16 +46,11 @@ custom_bind_ip=""
 port_override_enabled=false
 port_override=6550
 
-[cracknet]
-
-general/clear_settings=false
-events/enabled=true
-
-[playground]
-
-playtest_log=false
-
 [physics]
 
 3d/physics_engine="Rapier3D"
 rapier/solver/normalized_max_corrective_velocity=2.0
+
+[playground]
+
+playtest_log=false

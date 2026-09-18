@@ -33,8 +33,8 @@ public static class NetworkNodeExtensions
         /// <inheritdoc cref="NetworkObject.ReleaseClaim(Vector3)"/>
         public bool ReleaseClaim(Vector3 velocity) => node.Net().ReleaseClaim(velocity);
 
-        /// <inheritdoc cref="NetworkObject.TakeImpulses"/>
-        public Vector3 TakeImpulses(double delta, float decay = 20) => node.Net().TakeImpulses(delta, decay);
+        /// <inheritdoc cref="NetworkObject.ImpulseVelocity"/>
+        public Vector3 ImpulseVelocity => node.Net().ImpulseVelocity;
 
         /// <inheritdoc cref="NetworkObject.PlaybackState"/>
         public PlaybackState PlaybackState => node.Net().PlaybackState;

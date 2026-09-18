@@ -248,8 +248,12 @@ public partial class NetworkObject : Node
     }
 
     /// <summary>
-    /// Makes the object this peer's: authority and ownership, so nobody else can take it until it is released. A physics
-    /// body is frozen while claimed; the game moves it. False when someone else holds it.
+    /// Optimistically makes the object this peer's: authority and ownership, so nobody else can take it until it is
+    /// released. It applies here at once and the host is asked; two peers grabbing within a ping both see it in hand
+    /// until the host's answer takes it from one of them, through <see cref="IAuthorityChanged"/>. So drive game logic
+    /// from <see cref="ClaimedBy"/> rather than from the return value. A physics body is frozen while claimed; the
+    /// game moves it. False only when refusal is known here: someone else holds it, it is not transferable, or this
+    /// peer is not connected.
     /// </summary>
     public bool TryClaim()
     {
@@ -285,8 +289,9 @@ public partial class NetworkObject : Node
     public event Action<int, Variant>? Received;
 
     /// <summary>
-    /// Raised on the authority of a root that is not a rigid body, exactly once per push: the impulse. It is also added to
-    /// <see cref="TakeImpulses"/>, so handle one or the other. A rigid body takes the impulse itself.
+    /// Raised on the authority of a root that is not a rigid body, exactly once per push: the impulse, for watching
+    /// another object. The node itself implements <see cref="IImpulsed"/>. The push is also added to
+    /// <see cref="ImpulseVelocity"/>. A rigid body takes the impulse itself.
     /// </summary>
     public event Action<Vector3>? Impulsed;
 
@@ -296,18 +301,15 @@ public partial class NetworkObject : Node
     /// </summary>
     [Export(PropertyHint.Range, "0,20,0.05,or_greater")] public float ImpulseStrength { get; set; }
 
-    private Vector3 _knockback;
+    /// <summary>How fast <see cref="ImpulseVelocity"/> fades, in metres per second per second.</summary>
+    [Export(PropertyHint.Range, "0,100,0.5,or_greater")] public float ImpulseDecay { get; set; } = 20;
 
     /// <summary>
-    /// The pushes received and not yet used up, decaying by <paramref name="decay"/> per second: add it to a character's
-    /// velocity each physics frame, before moving.
+    /// The velocity the pushes received give a root that is not a rigid body, fading by <see cref="ImpulseDecay"/>
+    /// each physics frame. A character adds it where it composes its <c>Velocity</c>, next to gravity, every frame:
+    /// a controller writes its horizontal velocity from input each frame, so a push added once would last one frame.
     /// </summary>
-    public Vector3 TakeImpulses(double delta, float decay = 20)
-    {
-        var knockback = _knockback;
-        _knockback = _knockback.MoveToward(Vector3.Zero, decay * (float)delta);
-        return knockback;
-    }
+    public Vector3 ImpulseVelocity { get; private set; }
 
     /// <summary>
     /// Delivers <paramref name="payload"/> to whoever is this object's authority, reliably and exactly once, even if
@@ -371,7 +373,9 @@ public partial class NetworkObject : Node
         {
             case RigidBody3D body: body.ApplyCentralImpulse(impulse); break;
             default:
-                _knockback += impulse;
+                ImpulseVelocity += impulse;
+                // The node's own hook first, as with authority changes
+                if (Root is IImpulsed root) root.OnImpulsed(impulse);
                 Impulsed?.Invoke(impulse);
                 break;
         }
@@ -611,6 +615,8 @@ public partial class NetworkObject : Node
     {
         if (Engine.IsEditorHint()) return;
         _body?.PhysicsProcess();
+        // After the root's own step, which is where the game read it: a child processes after its parent
+        ImpulseVelocity = ImpulseVelocity.MoveToward(Vector3.Zero, ImpulseDecay * (float)delta);
     }
 
     /// <summary>

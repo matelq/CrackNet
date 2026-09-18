@@ -1,3 +1,6 @@
+// The nodes here are built in code, not from scenes: CRN006 has nothing to check
+#pragma warning disable CRN006
+
 using Godot;
 
 namespace CrackNet.Tests;
@@ -73,17 +76,22 @@ public partial class NetworkNodeExtensionsTests : TestSuite
     }
 
     [Test]
-    public async Task KnockbackAddsUpAndDecays()
+    public async Task ImpulseVelocityAddsUpAndFadesOnItsOwn()
     {
-        var player = new CharacterBody3D { Name = "Player" };
-        player.AddChild(new NetworkObject { Name = "NetworkObject" });
+        var player = new ImpulsedWatcher { Name = "Player" };
+        // Fades 3 m/s in one physics frame at 60 Hz
+        player.AddChild(new NetworkObject { Name = "NetworkObject", ImpulseDecay = 180 });
         await Mount(player);
 
-        // Offline this peer is the authority, so pushes land here at once
+        // Offline this peer is the authority, so pushes land here at once, and the node's hook hears each
         player.Impulse(new Vector3(2, 0, 0));
         player.Impulse(new Vector3(1, 0, 0));
-        Expect.Equal(new Vector3(3, 0, 0), player.Net().TakeImpulses(0.1, decay: 20));
-        Expect.Equal(new Vector3(1, 0, 0), player.Net().TakeImpulses(0.1, decay: 20));
-        Expect.Equal(Vector3.Zero, player.Net().TakeImpulses(0.1, decay: 20));
+        Expect.Equal(new Vector3(3, 0, 0), player.ImpulseVelocity);
+        Expect.SequenceEqual([new Vector3(2, 0, 0), new Vector3(1, 0, 0)], player.Heard);
+
+        await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+        Expect.True(player.ImpulseVelocity.Length() < 3, $"the library did not fade it: {player.ImpulseVelocity}");
+        Expect.True(await WaitUntil(() => player.ImpulseVelocity == Vector3.Zero, 1), $"never faded out: {player.ImpulseVelocity}");
     }
 }

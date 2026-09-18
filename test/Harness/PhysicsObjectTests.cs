@@ -105,7 +105,7 @@ public partial class PhysicsObjectTests : HarnessSuite
             $"crate velocity {crates[0].LinearVelocity}, knocked {knocked.Count}");
         for (var i = 0; i < 10; i++) await NextFrame();
         Expect.SequenceEqual([(2, new Vector3(3, 0, 0))], knocked);
-        Expect.Equal(new Vector3(3, 0, 0), walkers[1].Net().TakeImpulses(0), "the push waits in the knockback too");
+        Expect.True(walkers[1].Net().ImpulseVelocity.X > 0, "the push was not added to the impulse velocity");
     }
 
     [Test]

@@ -7,10 +7,12 @@ using Microsoft.CodeAnalysis.Operations;
 namespace CrackNet.SourceGenerators;
 
 /// <summary>
-/// The everyday calls (<c>this.Authority</c>, <c>crate.TryClaim()</c>, <c>this.TakeImpulses(delta)</c>) need a
+/// The everyday calls (<c>this.Authority</c>, <c>crate.TryClaim()</c>, <c>this.ImpulseVelocity</c>) need a
 /// <see cref="NetworkObject"/> on the node they reach. This analyzer says so at build time instead of letting the
 /// call throw at run time: the class they are used on must have a scene, and that scene's root must carry a
-/// NetworkObject as a direct child.
+/// NetworkObject as a direct child. The same goes for a class implementing one of the library's hooks
+/// (<c>IAuthorityChanged</c>, <c>IImpulsed</c>, <c>IAttachmentChanged</c>): without a NetworkObject the hook would
+/// compile and never be called.
 /// <para>
 /// Only classes declared in this compilation are judged; engine types say nothing about what a node will be at run
 /// time (a shape query returns <c>PhysicsBody3D</c>), so calls on them are left alone. Abstract classes are skipped:
@@ -22,10 +24,11 @@ namespace CrackNet.SourceGenerators;
 public sealed class NetworkedNodeAnalyzer : DiagnosticAnalyzer
 {
     private const string Extensions = "CrackNet.NetworkNodeExtensions";
+    private static readonly string[] Hooks = ["CrackNet.IAuthorityChanged", "CrackNet.IImpulsed", "CrackNet.IAttachmentChanged"];
 
     private static readonly DiagnosticDescriptor NoNetworkObject = new(
         "CRN006", "A node used over the network needs a NetworkObject in its scene",
-        "'{0}' {1}, so {2} has nowhere to go: add a NetworkObject as a direct child of the scene's root",
+        "'{0}' {1}, so {2}: add a NetworkObject as a direct child of the scene's root",
         "CrackNet", DiagnosticSeverity.Error, true);
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(NoNetworkObject);
@@ -38,7 +41,18 @@ public sealed class NetworkedNodeAnalyzer : DiagnosticAnalyzer
         {
             var scenes = new Scenes(start.Options);
             start.RegisterOperationAction(ctx => Check(ctx, scenes), OperationKind.Invocation, OperationKind.PropertyReference);
+            start.RegisterSymbolAction(ctx => CheckHooks(ctx, scenes), SymbolKind.NamedType);
         });
+    }
+
+    private static void CheckHooks(SymbolAnalysisContext context, Scenes scenes)
+    {
+        if (context.Symbol is not INamedTypeSymbol { TypeKind: TypeKind.Class, IsAbstract: false } type) return;
+        var hook = type.AllInterfaces.FirstOrDefault(i => Hooks.Contains(i.ToDisplayString()));
+        if (hook is null || scenes.Problem(type) is not { } problem) return;
+        var location = type.Locations.FirstOrDefault(l => l.IsInSource) ?? Location.None;
+        context.ReportDiagnostic(Diagnostic.Create(NoNetworkObject, location, type.Name, problem,
+            $"'{hook.Name}.{hook.GetMembers().OfType<IMethodSymbol>().FirstOrDefault()?.Name ?? "its hook"}' would never be called"));
     }
 
     private static void Check(OperationAnalysisContext context, Scenes scenes)
@@ -59,7 +73,7 @@ public sealed class NetworkedNodeAnalyzer : DiagnosticAnalyzer
 
         if (scenes.Problem(type) is not { } problem) return;
         context.ReportDiagnostic(Diagnostic.Create(NoNetworkObject, context.Operation.Syntax.GetLocation(),
-            type.Name, problem, member.Name is "Net" ? "Net()" : $"'{member.Name}'"));
+            type.Name, problem, (member.Name is "Net" ? "Net()" : $"'{member.Name}'") + " has nowhere to go"));
     }
 
     /// <summary>An extension member's receiver: the instance for a classic extension call, or its first argument.</summary>

@@ -47,10 +47,10 @@ Conflicts are settled by the host. A grab beats a touch, and of two touches the 
 The rule to hold on to: **every interaction has exactly one arbiter**, the authority of the object that started it.
 If two peers can both decide the same hit or grab, the mechanic is not finished.
 
-## Pushes and events
+## Events and state
 
 Every call below also works on the game's own node: `crate.Impulse(...)`, `crate.TryClaim()`, `this.Authority.IsLocal`,
-`this.TakeImpulses(delta)`, `crate.ClaimedBy`. `node.Net()` returns the `NetworkObject` itself, for the rarer
+`this.ImpulseVelocity`, `crate.ClaimedBy`. `node.Net()` returns the `NetworkObject` itself, for the rarer
 `Send` and `Diagnostics`.
 
 Every one of them needs a `NetworkObject` on the node it reaches, and the build says so when it is missing: `CRN006`
@@ -59,8 +59,16 @@ asks the class you used it on for a scene whose root has a `NetworkObject` as a 
 built in code instead of instantiated from a scene — a test, a generated level — silences the rule with
 `#pragma warning disable CRN006`.
 
-A node that wants to know when it itself changed hands implements `IAuthorityChanged` instead of subscribing, so there
-is nothing to unsubscribe in `_ExitTree`:
+**How a node learns of events.** One rule: the node itself implements an interface named after the event, with an
+`On...` method, and there is nothing to unsubscribe in `_ExitTree`. The C# event of the same name on `NetworkObject`
+is for watching someone else's object. `CRN006` also fires for a class implementing one of these without a
+`NetworkObject` in its scene, because the method would compile and never be called.
+
+| On the node | Called | Watching another object |
+|---|---|---|
+| `IAuthorityChanged.OnAuthorityChanged()` | on every peer, after authority or holder changed | `Net().AuthorityChanged` |
+| `IImpulsed.OnImpulsed(impulse)` | on the authority, once per push, for a root that is not a rigid body | `Net().Impulsed` |
+| `ISpawnedWith<T>.OnSpawned(args)` | on every peer, before the root enters the tree | |
 
 ```csharp
 public partial class Crate : RigidBody3D, IAuthorityChanged
@@ -69,18 +77,30 @@ public partial class Crate : RigidBody3D, IAuthorityChanged
 }
 ```
 
+**Read state, do not remember results.** `TryClaim()` is optimistic: it returns true the moment the claim applied
+here, and the host is asked afterwards. When two players grab one crate within a ping, both see it in hand, and a
+round trip later the host's answer takes it out of one player's hands: `ClaimedBy` changes and `OnAuthorityChanged`
+runs on the loser. Logic that keyed off the return value (`_carrying = true`, the carrying animation on) is now wrong
+on that peer; logic that reads `ClaimedBy` in `OnAuthorityChanged` corrects itself in the same frame. The same holds
+for `Authority.IsLocal` and `PlaybackState`: they are always right on this peer, a call's result was right when it
+returned.
+
 ```csharp
 this.Impulse(target, impulse);                              // my object struck yours: takes a crate, pushes a player
 target.Impulse(impulse);                                    // nothing doing the pushing: an explosion, a trap
-Velocity += this.TakeImpulses(delta);             // a character applies the pushes it received
+Velocity += this.ImpulseVelocity;                           // a character applies the pushes it received
 ```
 
 A push reaches whoever simulates the object: a rigid body takes the impulse itself; anything else adds it to
-`TakeImpulses` and raises `Impulsed`. `Impulse(target, impulse)` first takes the target when it can, so a crate flies on
-the striker's simulation at once; if the host gives the crate to someone else instead, the push is passed on to the
-winner. It arrives a round trip late, so two players striking one crate from opposite sides send it one way and then the
-other rather than cancelling out. Players do not collide with each other, since each would push a copy of the other
-in the past: a push is how they shove. **Impulse Strength** on a character's `NetworkObject` pushes the rigid bodies it walks into.
+`ImpulseVelocity` and calls `OnImpulsed`. `ImpulseVelocity` is the velocity the pushes gave, fading each physics frame
+by **Impulse Decay** on the `NetworkObject`; a character adds it where it composes its `Velocity`, next to gravity,
+every frame. It has to be there and not applied by the library: a controller writes its horizontal velocity from input
+each frame, so a push added once would last one frame, and only the controller can give an upward push its arc.
+`Impulse(target, impulse)` first takes the target when it can, so a crate flies on the striker's simulation at once; if
+the host gives the crate to someone else instead, the push is passed on to the winner. It arrives a round trip late, so
+two players striking one crate from opposite sides send it one way and then the other rather than cancelling out.
+Players do not collide with each other, since each would push a copy of the other in the past: a push is how they
+shove. **Impulse Strength** on a character's `NetworkObject` pushes the rigid bodies it walks into.
 
 ```csharp
 target.Object.Send("opened");                            // from anyone
@@ -90,6 +110,7 @@ Object.Received += (fromPeer, payload) => { ... };       // on the authority
 Both are delivered reliably, exactly once, to the authority. If authority moves while one is on its way, the peer that
 no longer simulates the object passes it on. On the authority itself it is raised at once - unless that authority is
 a claim the host has not confirmed yet: then it waits for the host's answer, and goes to the winner if the claim lost.
+`Received` has no interface yet: typed messages, with pattern matching over a message type, are the next step for it.
 
 ## Projectiles and hitscan
 

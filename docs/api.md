@@ -57,6 +57,14 @@ Implemented by a replicated node that wants to know when it changed hands: who s
 |---|---|---|
 | method | `OnAuthorityChanged` | Called on every peer after the authority or the holder of this node changed. |
 
+### IImpulsed
+
+Implemented by a replicated node that wants to know the moment a push reaches it: a hit animation, a sound, a knockback curve of its own. The library calls `OnImpulsed` on the peer simulating the node, once per push, after the push has been added to `ImpulseVelocity`. A rigid body takes the impulse itself as well. Preferred over subscribing to `Impulsed` from the node itself: nothing to unsubscribe in `_ExitTree`. The event stays for watching someone else's object. `public partial class Player : CharacterBody3D, IImpulsed { public void OnImpulsed(Vector3 impulse) => _animation.Play("hit"); }`
+
+| | Member | Summary |
+|---|---|---|
+| method | `OnImpulsed(Godot.Vector3)` | Called on the authority of this node for every push delivered to it. |
+
 ### ISpawnedWith`1
 
 An object that needs data when it is created: `OnSpawned(`0` runs with the same arguments on every peer, late joiners included, before the root enters the tree. The generated `Spawn` of the class takes the argument, optional only when `OnSpawned(`0` declares a default value itself.
@@ -133,7 +141,9 @@ One replicated object. While its root is this peer's multiplayer authority it se
 | property | `Context` | The stack this object belongs to; resolved when it enters the tree. |
 | property | `Diagnostics` | Sequences, display tick and sample events: for checks and diagnostics, not for game logic. |
 | property | `EarlySamples` | State from a peer that is not the authority here yet, kept for when the host's word arrives. |
+| property | `ImpulseDecay` | How fast `ImpulseVelocity` fades, in metres per second per second. |
 | property | `ImpulseStrength` | How hard a character body pushes the rigid bodies it slides into, along the contact normal; 0 is off. The library takes the body and pushes it on this peer's simulation. |
+| property | `ImpulseVelocity` | The velocity the pushes received give a root that is not a rigid body, fading by `ImpulseDecay` each physics frame. A character adds it where it composes its `Velocity`, next to gravity, every frame: a controller writes its horizontal velocity from input each frame, so a push added once would last one frame. |
 | property | `Kind` | How authority over this object moves. Read when the object enters the tree. |
 | property | `LastSentBody` | What this peer last sent for the object, and when: an unchanged object is not sent again for a while. |
 | property | `MaxSmoothingDistance` | A handover that moves the object further than this is drawn at once: it is a move, not a lag. |
@@ -164,12 +174,11 @@ One replicated object. While its root is this peer's multiplayer authority it se
 | method | `Snap` | The next state this peer sends applies without interpolation on the others: a respawn, not a flight. |
 | method | `SnapApplied` | A snap sample was applied here: it is to be seen, not smoothed. |
 | method | `Spread(CrackNet.NetworkObject)` | Passes this object's authority to `other` after contact. Physics bodies call it themselves; call it for contact the physics engine does not report. The source's depth limit follows the whole chain; the host verifies this object as the cause and arbitrates opposing requests. |
-| method | `TakeImpulses(System.Double,System.Single)` | The pushes received and not yet used up, decaying by `decay` per second: add it to a character's velocity each physics frame, before moving. |
-| method | `TryClaim` | Makes the object this peer's: authority and ownership, so nobody else can take it until it is released. A physics body is frozen while claimed; the game moves it. False when someone else holds it. |
+| method | `TryClaim` | Optimistically makes the object this peer's: authority and ownership, so nobody else can take it until it is released. It applies here at once and the host is asked; two peers grabbing within a ping both see it in hand until the host's answer takes it from one of them, through `IAuthorityChanged`. So drive game logic from `ClaimedBy` rather than from the return value. A physics body is frozen while claimed; the game moves it. False only when refusal is known here: someone else holds it, it is not transferable, or this peer is not connected. |
 | method | `UnsupportedReason(Godot.Node)` | Why a root of this type cannot be replicated, or null when it can. |
 | method | `VisualProblem(Godot.Node,Godot.Node3D)` | What is wrong with `Visual`, or null: it has to be under the root, never the root itself. |
 | event | `AuthorityChanged` | Raised after the authority or the holder changed, on every peer. |
-| event | `Impulsed` | Raised on the authority of a root that is not a rigid body, exactly once per push: the impulse. It is also added to `Single`, so handle one or the other. A rigid body takes the impulse itself. |
+| event | `Impulsed` | Raised on the authority of a root that is not a rigid body, exactly once per push: the impulse, for watching another object. The node itself implements `IImpulsed`. The push is also added to `ImpulseVelocity`. A rigid body takes the impulse itself. |
 | event | `Received` | Raised on the authority, exactly once per `Variant` call anywhere: the peer that sent it and what it sent. |
 
 ### NetworkObjectServer

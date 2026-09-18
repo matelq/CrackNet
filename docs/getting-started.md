@@ -74,7 +74,7 @@ public partial class Player : CharacterBody3D
     public override void _PhysicsProcess(double delta)
     {
         if (!this.Authority.IsLocal) return;   // everyone else plays back what this peer sends
-        Velocity += this.TakeImpulses(delta);  // pushes from other players
+        Velocity += this.ImpulseVelocity;      // pushes from other players, fading on their own
         // read input, MoveAndSlide
     }
 }

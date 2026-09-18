@@ -26,6 +26,8 @@ public class NetworkedNodeAnalyzerTests
         namespace CrackNet
         {
             public sealed class NetworkObject { public ObjectAuthority Authority { get; } = new(); }
+            public interface IAuthorityChanged { void OnAuthorityChanged(); }
+            public interface IImpulsed { void OnImpulsed(Godot.Vector3 impulse); }
             public sealed class ObjectAuthority { public bool IsLocal => true; public int Peer => 1; public bool Take() => true; }
             public static class NetworkNodeExtensions
             {
@@ -202,6 +204,25 @@ public class NetworkedNodeAnalyzerTests
         var other = "using CrackNet; namespace Game; public partial class Thing { private int _count; }";
         Assert.Empty(Run([(other, "game/Bits.cs"), (main, "game/Thing.cs")],
             ("game/Thing.tscn", SceneWith("res://game/Thing.cs", networkObject: true))));
+    }
+
+    [Fact]
+    public void AHookWithoutANetworkObjectIsAnError()
+    {
+        var source = "using CrackNet; namespace Game; public partial class Thing : Godot.RigidBody3D, IImpulsed { public void OnImpulsed(Godot.Vector3 impulse) { } }";
+        var diagnostics = Run(source, ("game/Thing.tscn", SceneWith("res://game/Thing.cs", networkObject: false)));
+        Assert.Equal("CRN006", Assert.Single(diagnostics).Id);
+        Assert.Contains("'IImpulsed.OnImpulsed' would never be called", diagnostics[0].GetMessage());
+        Assert.Empty(Run(source, ("game/Thing.tscn", SceneWith("res://game/Thing.cs", networkObject: true))));
+    }
+
+    [Fact]
+    public void AHookInheritedFromAnAbstractBaseIsJudgedOnTheSubclass()
+    {
+        var pickup = "using CrackNet; namespace Game; public abstract partial class Pickup : Godot.RigidBody3D, IAuthorityChanged { public void OnAuthorityChanged() { } }";
+        var thing = "namespace Game; public partial class Thing : Pickup { }";
+        var diagnostics = Run([(pickup, "game/Pickup.cs"), (thing, "game/Thing.cs")]);
+        Assert.Contains("'Thing'", Assert.Single(diagnostics).GetMessage());
     }
 
     [Fact]
