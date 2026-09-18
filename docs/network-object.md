@@ -83,7 +83,13 @@ Player (CharacterBody3D)
                 └── Hand (Marker3D)        this.TryAttach(crate, Hand)
 ```
 
-Carrying a player is not in yet; a player is refused by `TryAttach`.
+**Carrying a player** is the same call: `this.TryAttach(otherPlayer, Shoulder)`. The player keeps its authority. What
+travels is a claim of ownership, arbitrated by the host like a grab, whose record names the carrier and the anchor;
+when it reaches the carried player's own peer, that peer hangs its player from it, and its stream tells everyone, the
+carried player's own screen included, where it rides that peer's displayed copy of the carrier. Of two players
+reaching for one at once the first request wins. The carried player's controller skips its own movement while
+`AttachedTo` is set; a throw is `Detach` and `Impulse`, which the player's own peer flies through `ImpulseVelocity`.
+Either the carrier or the carried player may `Detach`; a carrier leaving the session puts the player down.
 
 ## Events and state
 

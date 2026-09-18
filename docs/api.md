@@ -148,6 +148,7 @@ One replicated object. While its root is this peer's multiplayer authority it se
 | property | `AttachedTo` | The root of the object this one hangs on, or null, as this peer shows it. |
 | property | `AttachmentState` | What this item sends about its attachment, or null when it is free. |
 | property | `Authority` | Who simulates the object and sends its state, and taking or returning that by hand. |
+| property | `ClaimAttachment` | The attachment that rides on this object's claim record: where the claimant wants it hung. A carried player's own peer hangs the player from it when the host's record arrives; for a crate the claimant hangs it itself. |
 | property | `ClaimedBy` | The peer holding the object, or 0 when nobody does. |
 | property | `Context` | The stack this object belongs to; resolved when it enters the tree. |
 | property | `Diagnostics` | Sequences, display tick and sample events: for checks and diagnostics, not for game logic. |

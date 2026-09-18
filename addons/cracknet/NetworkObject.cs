@@ -301,8 +301,22 @@ public partial class NetworkObject : Node
         if (ReferenceEquals(item, this) || item._carrier is not null) return false;
         for (var above = _carrier; above is not null; above = above._carrier)
             if (ReferenceEquals(above, item)) return false;   // it would carry its own carrier
-        // ponytail: a player (not transferable) is carried in a later step of #70; until then only what can be claimed
-        if (!item.Transferable || !item.TryClaim()) return false;
+        var attachment = new Attachment(Context.NetworkIdentityServer.GetIdentifierOf(root)?.FullName ?? "", root.GetPathTo(anchor).ToString());
+        if (!item.Transferable)
+        {
+            // A player keeps its authority. This is a claim of ownership only, arbitrated by the host like any grab:
+            // the record names the carrier and the anchor, and when it reaches the player's own peer that peer hangs
+            // the player and its stream tells everyone, so the switch lands at the player's display tick as for a crate
+            if (item.ClaimedBy != 0 || item.Root is not Node3D) return false;
+            item.ClaimAttachment = attachment;
+            return item.Request(item.AuthorityPeer, LocalPeer, item.AuthoritySequence, item.OwnershipSequence + 1, null, 0, -1);
+        }
+        item.ClaimAttachment = attachment;
+        if (!item.TryClaim())
+        {
+            item.ClaimAttachment = null;
+            return false;
+        }
         item.Hang(this, anchor, Transform3D.Identity);
         return true;
     }
@@ -316,10 +330,20 @@ public partial class NetworkObject : Node
     public bool Detach(NetworkObject item)
     {
         ArgumentNullException.ThrowIfNull(item);
-        if (!ReferenceEquals(item._carrier, this) || !item.IsAuthority) return false;
-        item.Unhang();
-        if (item.ClaimedBy == LocalPeer) item.ReleaseClaim();
-        return true;
+        if (!ReferenceEquals(item._carrier, this)) return false;
+        if (item.Transferable)
+        {
+            if (!item.IsAuthority) return false;
+            item.ClaimAttachment = null;
+            item.Unhang();
+            if (item.ClaimedBy == LocalPeer) item.ReleaseClaim();
+            return true;
+        }
+        // A carried player is put down by the carrier or by itself, through the host: the player's peer lets go when the
+        // record arrives, everyone else when the player's stream does
+        if (item.ClaimedBy != LocalPeer && !item.IsAuthority) return false;
+        item.ClaimAttachment = null;
+        return item.Request(item.AuthorityPeer, 0, item.AuthoritySequence, item.OwnershipSequence + 1, null, 0, -1);
     }
 
     /// <summary>The roots of the items hanging on this object, as this peer shows them.</summary>
@@ -336,6 +360,12 @@ public partial class NetworkObject : Node
 
     /// <summary>What this item sends about its attachment, or null when it is free.</summary>
     internal Attachment? AttachmentState { get; private set; }
+
+    /// <summary>
+    /// The attachment that rides on this object's claim record: where the claimant wants it hung. A carried player's
+    /// own peer hangs the player from it when the host's record arrives; for a crate the claimant hangs it itself.
+    /// </summary>
+    internal Attachment? ClaimAttachment { get; set; }
 
     internal NetworkObject? Carrier => _carrier;
 
@@ -589,7 +619,7 @@ public partial class NetworkObject : Node
             Root.Name, authority, owner, ownershipSequence, authoritySequence, causeName ?? "", spreadDepth,
             AuthorityPeer, OwnershipSequence, AuthoritySequence);
         var changed = Apply(authority, owner, authoritySequence, ownershipSequence, _transferable, TransferableSequence,
-            causeName ?? "", spreadDepth, spreadLimit, notify: false);
+            causeName ?? "", spreadDepth, spreadLimit, notify: false, claimAttachment: ClaimAttachment);
         // Sent before anyone hears of the change: a body taken here takes what rests on it, and those requests name
         // this one as their cause, so the host has to receive this one first or it refuses them
         Context.NetworkObjectServer.SubmitAuthority(this);
@@ -613,7 +643,8 @@ public partial class NetworkObject : Node
         string spreadCause = "",
         int spreadDepth = 0,
         int spreadLimit = -1,
-        bool notify = true)
+        bool notify = true,
+        Attachment? claimAttachment = null)
     {
         var changed = authority != AuthorityPeer || owner != ClaimedBy;
         if (authority != AuthorityPeer)
@@ -637,8 +668,15 @@ public partial class NetworkObject : Node
         }
 
         ClaimedBy = owner;
-        // Let go of, or taken from this peer's hand by the host's word: an item hangs only while it is held
-        if (_carrier is not null && IsAuthority && Transferable && ClaimedBy != LocalPeer) Unhang();
+        ClaimAttachment = claimAttachment;
+        if (IsAuthority)
+        {
+            // An item hangs only while its carrier's peer holds it: let go of, or taken from that hand by the host's word
+            if (_carrier is not null && ClaimedBy != _carrier.AuthorityPeer) Unhang();
+            // A player picked up: the record names the carrier, and this peer, which simulates the player, hangs it
+            else if (_carrier is null && !Transferable && ClaimedBy != 0 && ClaimedBy != LocalPeer && claimAttachment is not null)
+                ShowAttached(claimAttachment, Transform3D.Identity);
+        }
         AuthoritySequence = authoritySequence;
         OwnershipSequence = ownershipSequence;
         if (transferableSequence >= TransferableSequence)

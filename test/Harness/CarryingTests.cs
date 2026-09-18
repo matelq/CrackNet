@@ -376,4 +376,117 @@ public partial class CarryingTests : HarnessSuite
             Expect.True(handHigh[i] - handLow[i] > 0.4f, $"{stacks[i].Name}'s bone did not swing: " + report);
         Expect.True(worst.All(distance => distance < CarryTolerance), "the crate lags the bone: " + report);
     }
+
+    private static Marker3D StillHand(Node3D carrier, Vector3? at = null)
+    {
+        var hand = new Marker3D { Name = "Hand", Position = at ?? new Vector3(0, 0.8f, -1) };
+        carrier.AddChild(hand);
+        return hand;
+    }
+
+    /// <summary>
+    /// Peer 2 picks up peer 3's player and walks with it in a bobbing hand; the host watches. The player keeps its
+    /// authority: the host's record of the claim names the carrier and anchor, peer 3 hangs its own player from it,
+    /// and its stream tells everyone. Measured at the end of every frame on all three peers, the carried player's own
+    /// included, where it rides that peer's displayed copy of the carrier. Then the carrier throws it: Detach and an
+    /// impulse, which the player's own controller flies.
+    /// </summary>
+    [Test]
+    public async Task ACarriedPlayerRidesItsCarriersHandOnEveryPeer()
+    {
+        Network.LatencyMs = 50;
+        var stacks = new[] { Host, Client, await ThirdPeer() };
+        var carriers = stacks.Select(stack => HarnessWorld.Walker(stack, 2, new Vector3(0, 1, 0), Vector3.Zero)).ToArray();
+        var carried = stacks.Select(stack => HarnessWorld.Walker(stack, 3, new Vector3(0, 1, 3), Vector3.Zero)).ToArray();
+        var hands = carriers.Select(HarnessWorld.BobbingHand).ToArray();
+        for (var i = 0; i < 20; i++) await NextFrame();
+
+        Expect.True(carriers[1].TryAttach(carried[1], hands[1]), "the carrier could not ask for the player");
+        Expect.True(await WaitUntil(() => carried.Select((player, i) => player.AttachedTo == carriers[i]).All(hung => hung), 4),
+            "not every peer shows the player in the hand: " + string.Join(", ", carried.Select(player => player.AttachedTo?.Name ?? "free")));
+        Expect.Equal(3, carried[2].Authority.Peer, "carrying a player moved its authority");
+        Expect.Equal(2, carried[2].ClaimedBy);
+        foreach (var carrier in carriers) carrier.Walk = new Vector3(2, 0, 0);
+        for (var i = 0; i < 10; i++) await NextFrame();
+
+        var worst = new float[stacks.Length];
+        var drawn = new DrawnFrame();
+        AddChild(drawn);
+        drawn.Drawn += () =>
+        {
+            for (var i = 0; i < stacks.Length; i++)
+                worst[i] = Mathf.Max(worst[i], carried[i].GlobalPosition.DistanceTo(hands[i].GlobalPosition));
+        };
+        var startX = carriers[1].GlobalPosition.X;
+        for (var seconds = 0.0; seconds < 2; seconds += GetProcessDeltaTime()) await NextFrame();
+        drawn.QueueFree();
+        var report = string.Join("; ", stacks.Select((stack, i) => $"{stack.Name}: player off the hand by {worst[i]:F3} m"))
+                     + $"; carrier walked {carriers[1].GlobalPosition.X - startX:F1} m";
+        GD.Print("CARRIED PLAYER " + report);
+        Expect.True(carriers[1].GlobalPosition.X - startX > 2, "the carrier did not walk: " + report);
+        Expect.True(worst.All(distance => distance < CarryTolerance), "the carried player leaves the hand: " + report);
+
+        // Thrown: put down through the host, then pushed on its own peer
+        Expect.True(carriers[1].Detach(carried[1]));
+        carried[1].Impulse(new Vector3(0, 0, -8));
+        Expect.True(await WaitUntil(() => carried[2].AttachedTo is null && carried[2].ClaimedBy == 0, 4), "the player's own peer never let go");
+        var droppedAt = carried[2].GlobalPosition;
+        Expect.True(await WaitUntil(() => carried.All(player => player.AttachedTo is null), 4),
+            "not every peer showed the player let go: " + string.Join(", ", carried.Select(player => player.AttachedTo?.Name ?? "free")));
+        Expect.True(await WaitUntil(() => carried[2].GlobalPosition.Z < droppedAt.Z - 1, 4),
+            $"the thrown player did not fly on its own peer: dropped at {droppedAt}, now at {carried[2].GlobalPosition}");
+        Expect.True(!carriers[1].Attached.Any(), "the carrier still lists the player");
+    }
+
+    /// <summary>Two players reach for a third at once: the host takes the first request, and every peer hangs the player on that carrier.</summary>
+    [Test]
+    public async Task TwoCarriersReachForOnePlayerAndTheHostPicksOne()
+    {
+        var stacks = new[] { Host, Client, await ThirdPeer() };
+        var carried = stacks.Select(stack => HarnessWorld.Walker(stack, 1, new Vector3(0, 1, 0), Vector3.Zero)).ToArray();
+        var second = stacks.Select(stack => HarnessWorld.Walker(stack, 2, new Vector3(-2, 1, 0), Vector3.Zero)).ToArray();
+        var third = stacks.Select(stack => HarnessWorld.Walker(stack, 3, new Vector3(2, 1, 0), Vector3.Zero)).ToArray();
+        var secondHands = second.Select(walker => StillHand(walker)).ToArray();
+        var thirdHands = third.Select(walker => StillHand(walker)).ToArray();
+        for (var i = 0; i < 20; i++) await NextFrame();
+
+        Expect.True(second[1].TryAttach(carried[1], secondHands[1]));
+        Expect.True(third[2].TryAttach(carried[2], thirdHands[2]));
+        Expect.True(await WaitUntil(() => carried.All(player => player.AttachedTo is not null), 4),
+            "not every peer shows the player carried: " + string.Join(", ", carried.Select(player => player.AttachedTo?.Name ?? "free")));
+        for (var i = 0; i < 20; i++) await NextFrame();
+
+        var winner = carried[0].ClaimedBy;
+        var report = $"host says peer {winner} holds it; carriers per peer: " + string.Join(", ", carried.Select(player => player.AttachedTo?.Name ?? "free"))
+                     + $"; peer 2 lists {second[1].Attached.Count()}, peer 3 lists {third[2].Attached.Count()}";
+        GD.Print("TWO CARRIERS " + report);
+        Expect.True(winner is 2 or 3, report);
+        Expect.True(carried.All(player => player.AttachedTo?.Name == $"Walker{winner}"), "the peers disagree about who carries the player: " + report);
+        Expect.Equal(1, second[1].Attached.Count() + third[2].Attached.Count(), "the loser still lists the player: " + report);
+    }
+
+    /// <summary>A carried player may put itself down, and one whose carrier leaves the session is put down by the host.</summary>
+    [Test]
+    public async Task ACarriedPlayerIsPutDownByItselfOrWhenItsCarrierLeaves()
+    {
+        var stacks = new[] { Host, Client, await ThirdPeer() };
+        var carriers = stacks.Select(stack => HarnessWorld.Walker(stack, 2, new Vector3(0, 1, 0), Vector3.Zero)).ToArray();
+        var carried = stacks.Select(stack => HarnessWorld.Walker(stack, 3, new Vector3(0, 1, 3), Vector3.Zero)).ToArray();
+        var hands = carriers.Select(walker => StillHand(walker)).ToArray();
+        for (var i = 0; i < 20; i++) await NextFrame();
+
+        Expect.True(carriers[1].TryAttach(carried[1], hands[1]));
+        Expect.True(await WaitUntil(() => carried.All(player => player.AttachedTo is not null), 4), "never carried");
+        Expect.False(carried[2].TryAttach(carriers[2], StillHand(carried[2])), "the carried player took its own carrier");
+        // The carried player's own peer puts it down
+        Expect.True(carriers[2].Detach(carried[2]), "the carried player could not put itself down");
+        Expect.True(await WaitUntil(() => carried.All(player => player.AttachedTo is null) && carried[0].ClaimedBy == 0, 4),
+            "not every peer showed it put down: " + string.Join(", ", carried.Select(player => player.AttachedTo?.Name ?? "free")));
+
+        Expect.True(carriers[1].TryAttach(carried[1], hands[1]));
+        Expect.True(await WaitUntil(() => carried.All(player => player.AttachedTo is not null), 4), "never carried again");
+        Client.Disconnect();
+        Expect.True(await WaitUntil(() => carried[0].ClaimedBy == 0 && carried[2].AttachedTo is null && carried[2].ClaimedBy == 0, 4),
+            $"the player stayed in the hand of a peer that left: host says held by {carried[0].ClaimedBy}, the player's peer shows {carried[2].AttachedTo?.Name ?? "free"}");
+    }
 }

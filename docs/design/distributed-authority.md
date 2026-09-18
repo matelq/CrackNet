@@ -276,9 +276,15 @@ parent sync.
   hand gets there.
 - **Detach blends** the gap between the observer's anchor and the thrower's first free sample over about 0.1-0.2 s, in
   presentation only.
-- **Carried players** keep their authority. The carried player's peer decides whether to accept being carried (first
-  request wins); every peer, including a third one and the carried player's own, shows it on its own displayed carrier,
-  or a third peer sees it doubly delayed. A throw is detach plus push. Cycles are refused.
+- **Carried players** keep their authority. Picking one up is a claim of ownership only, arbitrated by the host like a
+  grab (decided at the start of stage B, replacing "the carried player's peer decides"): one code path for crates and
+  players, the late joiner gets it from the host's table, and a carrier leaving the session puts the player down
+  through the existing `ErasePeer`. The record carries the carrier and anchor; the carried player's own peer hangs the
+  player from it when the record arrives, and its stream tells everyone, so the switch lands at the player's display
+  tick. Every peer, including a third one and the carried player's own, shows it on its own displayed carrier, or a
+  third peer sees it doubly delayed. First request wins. A throw is detach plus push. Cycles are refused. Built in
+  step 4: `ACarriedPlayerRidesItsCarriersHandOnEveryPeer` (0.000 m on all three peers during a carried walk),
+  `TwoCarriersReachForOnePlayerAndTheHostPicksOne`, `ACarriedPlayerIsPutDownByItselfOrWhenItsCarrierLeaves`.
 - **Animation stays parameters:** games mark AnimationTree parameters `[Synced]`, applied at the display tick like any
   state. Root motion runs on the authority only; its result is the transform. One-shots (grab, throw) are a `[Synced]`
   counter incremented in the same tick as the change to the item, documented as a pattern, not new API. No pose sync.

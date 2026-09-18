@@ -23,8 +23,9 @@ public partial class Walker : CharacterBody3D, IAttachmentChanged
 
     public override void _PhysicsProcess(double delta)
     {
-        if (!IsMultiplayerAuthority()) return;
-        Velocity = Falls ? Walk + new Vector3(0, Velocity.Y - 14 * (float)delta, 0) : Walk + Vector3.Down;
+        // Carried: the library places it, as a game's controller skips its movement while AttachedTo is set
+        if (!IsMultiplayerAuthority() || this.AttachedTo is not null) return;
+        Velocity = (Falls ? Walk + new Vector3(0, Velocity.Y - 14 * (float)delta, 0) : Walk + Vector3.Down) + this.ImpulseVelocity;
         MoveAndSlide();
     }
 }
