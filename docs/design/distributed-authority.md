@@ -366,6 +366,11 @@ Two decisions here are made but not built, and both matter enough to keep in sig
 
 ## Deferred
 
+- A strike on a contested object forwarded by the host. Today the loser learns of its refusal and then sends its
+  impulse to the winner: about three one-way trips. The impulse could ride on the authority request instead, and the
+  host pass it straight to the winner on a refusal: two trips. Kept as a backup: it adds bytes to every contested
+  request and a forwarding duty to the host, to save one trip in a rare case. The pattern (the arbiter delivers what
+  rode on a refused request) may fit other contested actions.
 - Pusher-side predicted knockback shown as a decaying presentation offset. Revisit if push latency still bothers on
   Casual or Realistic after the mesh.
 - Extrapolating targets to the present for hit tests, in the style of Photon Fusion "Forecast". Revisit if dodges do
