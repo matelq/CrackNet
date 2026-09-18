@@ -11,11 +11,14 @@ namespace CrackNet;
 /// <summary>
 /// How old what a peer is shown is, averaged over the last second, in ticks: <see cref="NetworkTicks"/> is how old its
 /// state was on arrival, <see cref="TotalTicks"/> how far its playback runs behind the local tick. The difference is
-/// the time spent in the playback buffer.
+/// the time spent in the playback buffer. The <c>Ms</c> properties are the same in milliseconds, for a HUD.
 /// </summary>
-public readonly record struct PlaybackStatus(double NetworkTicks, double TotalTicks)
+public readonly record struct PlaybackStatus(double NetworkTicks, double TotalTicks, double MillisecondsPerTick)
 {
     public double PlaybackTicks => Math.Max(0, TotalTicks - NetworkTicks);
+    public double NetworkMs => NetworkTicks * MillisecondsPerTick;
+    public double TotalMs => TotalTicks * MillisecondsPerTick;
+    public double PlaybackMs => PlaybackTicks * MillisecondsPerTick;
 }
 
 /// <summary>
@@ -207,7 +210,8 @@ public partial class NetworkObjectServer : Node
     internal PlaybackStatus? GetPlaybackStatus(int peer)
     {
         if (!_ages.TryGetValue(peer, out var ages) || ages.Network.Count == 0 || ages.Total.Count == 0) return null;
-        return new PlaybackStatus(ages.Network.Average(sample => sample.Ticks), ages.Total.Average(sample => sample.Ticks));
+        return new PlaybackStatus(ages.Network.Average(sample => sample.Ticks), ages.Total.Average(sample => sample.Ticks),
+            1000.0 / Context.NetworkTime.Tickrate);
     }
 
     private const ulong AgeWindowMs = 1000;

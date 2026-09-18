@@ -4,20 +4,17 @@ using Godot;
 namespace CrackNet.Tests;
 
 /// <summary>
-/// #13: the autoconnect flow has to work with peers other than ENet, so a Steam or loopback peer can use it. The cases
-/// drive <c>Connect</c> directly, since <c>_Ready</c> is guarded to the editor and refuses to run on CI.
+/// #13: the autoconnect flow has to work with transports other than ENet, so a mesh or Steam can use it: such a game
+/// takes only the elected role. The cases drive <c>Connect</c> directly, since <c>_Ready</c> is guarded to the editor
+/// and refuses to run on CI.
 /// </summary>
 public partial class NetworkSimulatorTests : TestSuite
 {
-    private Func<NetworkSimulator, MultiplayerPeer?> _hostBackup = null!;
-    private Func<NetworkSimulator, MultiplayerPeer?> _joinBackup = null!;
     private LoopbackNetwork _network = null!;
     private Node _branch = null!;
 
     public override async Task BeforeCase()
     {
-        _hostBackup = NetworkSimulator.HostPeerFactory;
-        _joinBackup = NetworkSimulator.JoinPeerFactory;
         _network = new LoopbackNetwork();
 
         // The simulator assigns a peer to its MultiplayerAPI, so give it one of its own rather than the tree's
@@ -28,9 +25,6 @@ public partial class NetworkSimulatorTests : TestSuite
 
     public override async Task AfterCase()
     {
-        NetworkSimulator.HostPeerFactory = _hostBackup;
-        NetworkSimulator.JoinPeerFactory = _joinBackup;
-
         var path = _branch.GetPath();
         _branch.Multiplayer.MultiplayerPeer?.Close();
         _branch.Multiplayer.MultiplayerPeer = null;
@@ -108,29 +102,55 @@ public partial class NetworkSimulatorTests : TestSuite
         }
     }
 
+    /// <summary>
+    /// A game with its own transport only wants the role: the first instance hosts, the next one joins, and neither
+    /// is handed a peer it would have to close before connecting its own.
+    /// </summary>
     [Test]
-    public async Task HostsWithTheInjectedPeer()
+    public async Task AGameThatConnectsItselfGetsOnlyTheRole()
     {
-        var hosted = 0;
-        var joined = 0;
-        NetworkSimulator.HostPeerFactory = _ => _network.CreatePeer(1);
-        NetworkSimulator.JoinPeerFactory = _ => throw new InvalidOperationException("should not have tried to join");
-
-        // The wrapper is only there when there is something to simulate; the project's own setting (Clear on a
-        // developer's machine) must not decide this test
         var backup = CrackNetSettings.Instance;
         var settings = CrackNetSettings.Load();
-        settings.SimulatedProfile = "Bad";
+        settings.AutoconnectPort = 24999;
         CrackNetSettings.Instance = settings;
         try
         {
+            var roles = new List<bool>();
+            var first = await Simulator("First");
+            var second = await Simulator("Second");
+            first.RoleElected += roles.Add;
+            second.RoleElected += roles.Add;
+            first.Connect();
+            second.Connect();
+
+            Expect.Equal("True,False", string.Join(",", roles));
+            Expect.Null(first.Peer);
+            Expect.True(first.Multiplayer.MultiplayerPeer is OfflineMultiplayerPeer,
+                $"the simulator assigned a peer anyway: {first.Multiplayer.MultiplayerPeer}");
+        }
+        finally
+        {
+            CrackNetSettings.Instance = backup;
+        }
+    }
+
+    /// <summary>Nobody asked for the role, so the simulator connects: ENet, wrapped in the simulated conditions.</summary>
+    [Test]
+    public async Task WithoutAGameTransportItHostsOverENet()
+    {
+        var backup = CrackNetSettings.Instance;
+        var settings = CrackNetSettings.Load();
+        settings.AutoconnectPort = 24999;
+        settings.SimulatedProfile = "Bad";   // not the developer's own setting
+        CrackNetSettings.Instance = settings;
+        try
+        {
+            var hosted = 0;
             var simulator = await Simulator("Hosting Simulator");
             simulator.ServerCreated += () => hosted++;
-            simulator.ClientConnected += () => joined++;
             simulator.Connect();
 
             Expect.Equal(1, hosted);
-            Expect.Equal(0, joined);
             Expect.True(simulator.Peer is SimulatedMultiplayerPeer, $"expected the simulated wrapper, got {simulator.Peer}");
             Expect.Equal(1, simulator.Peer!.GetUniqueId());
             Expect.True(ReferenceEquals(simulator.Peer, simulator.Multiplayer.MultiplayerPeer), "the peer should be assigned to the API");
@@ -139,39 +159,6 @@ public partial class NetworkSimulatorTests : TestSuite
         {
             CrackNetSettings.Instance = backup;
         }
-    }
-
-    [Test]
-    public async Task JoinsWithTheInjectedPeerWhenHostingIsTaken()
-    {
-        var hosted = 0;
-        var joined = 0;
-        NetworkSimulator.HostPeerFactory = _ => null;
-        NetworkSimulator.JoinPeerFactory = _ => _network.CreatePeer(2);
-
-        var simulator = await Simulator("Joining Simulator");
-        simulator.ServerCreated += () => hosted++;
-        simulator.ClientConnected += () => joined++;
-        simulator.Connect();
-
-        Expect.Equal(0, hosted);
-        Expect.Equal(1, joined);
-        Expect.Equal(2, simulator.Peer!.GetUniqueId());
-    }
-
-    [Test]
-    public async Task SurvivesAFactoryThatCanNeitherHostNorJoin()
-    {
-        NetworkSimulator.HostPeerFactory = _ => null;
-        NetworkSimulator.JoinPeerFactory = _ => null;
-
-        var simulator = await Simulator("Failing Simulator");
-        simulator.Connect();
-
-        Expect.Null(simulator.Peer);
-        // A MultiplayerAPI without a peer reports the offline one, so "nothing was assigned" looks like this
-        Expect.True(simulator.Multiplayer.MultiplayerPeer is OfflineMultiplayerPeer,
-            $"nothing should have been assigned, got {simulator.Multiplayer.MultiplayerPeer}");
     }
 
     [Test]

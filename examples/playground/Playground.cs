@@ -75,22 +75,13 @@ public partial class Playground : Node3D
         };
 
         // Editor autoconnect (Project Settings > CrackNet > Autoconnect > Enabled): the first instance hosts, the rest
-        // join. The simulator's temporary star elects the role, then the playground replaces it with its ENet mesh.
+        // join. The simulator only elects the role; the playground connects over its own ENet mesh
         if (GetNodeOrNull<NetworkSimulator>("/root/NetworkSimulator") is { } simulator)
-        {
-            simulator.ServerCreated += () => Callable.From(() =>
+            simulator.RoleElected += host =>
             {
-                Multiplayer.MultiplayerPeer?.Close();
-                Multiplayer.MultiplayerPeer = null;
-                StartMeshHost(simulator.Conditions);
-            }).CallDeferred();
-            simulator.ClientConnected += () => Callable.From(() =>
-            {
-                Multiplayer.MultiplayerPeer?.Close();
-                Multiplayer.MultiplayerPeer = null;
-                StartMeshClient(simulator.Hostname, simulator.Conditions);
-            }).CallDeferred();
-        }
+                if (host) StartMeshHost(simulator.Conditions);
+                else StartMeshClient(simulator.Hostname, simulator.Conditions);
+            };
 
         if (SteamLobbyBootstrap.IsAvailable && !OS.GetCmdlineUserArgs().Contains("--smoke")) StartSteam();
 
@@ -244,7 +235,6 @@ public partial class Playground : Node3D
         if (_sinceReadout >= 1)
         {
             _sinceReadout = 0;
-            var millisecondsPerTick = 1000.0 / time.Tickrate;
             _delayReadout = string.Concat(Players.GetChildren().OfType<PlaygroundPlayer>()
                 .Where(player => player.Peer != Multiplayer.GetUniqueId())
                 .Select(player => (Player: player, Status: NetworkObjectServer.Instance.Diagnostics.GetPlaybackStatus(player.Peer)))
@@ -252,8 +242,8 @@ public partial class Playground : Node3D
                 .Select(entry =>
                 {
                     var status = entry.Status!.Value;
-                    return $"\nPeer {entry.Player.Peer}: {status.TotalTicks * millisecondsPerTick:F0}ms behind " +
-                           $"({status.NetworkTicks * millisecondsPerTick:F0}ms network + {status.PlaybackTicks * millisecondsPerTick:F0}ms playback)";
+                    return $"\nPeer {entry.Player.Peer}: {status.TotalMs:F0}ms behind " +
+                           $"({status.NetworkMs:F0}ms network + {status.PlaybackMs:F0}ms playback)";
                 }));
         }
         var delayReadout = _delayReadout;

@@ -141,5 +141,5 @@ A remote object is shown from its authority's samples, a little in the past:
   projectile starts at the muzzle, not hanging there or appearing down range.
 
 `NetworkObjectServer.Instance.Diagnostics.GetPlaybackStatus(peer)` reports, averaged over a second, how old that peer's
-state is on arrival and how long it waits in the buffer. `Object.Diagnostics` has the sequences, the display tick and
+state is on arrival and how long it waits in the buffer, in ticks and in milliseconds (`TotalMs`, `NetworkMs`, `PlaybackMs`). `Object.Diagnostics` has the sequences, the display tick and
 the sample events, for checks rather than game logic.

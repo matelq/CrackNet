@@ -7,6 +7,10 @@ namespace CrackNet.Extras;
 /// <summary>
 /// Editor convenience: the first launched instance hosts and later ones join. Link conditions are applied in process
 /// by <see cref="SimulatedMultiplayerPeer"/>, once as each packet leaves for a remote peer.
+/// <para>
+/// A game with its own transport (a mesh, Steam) subscribes to <see cref="RoleElected"/>: the simulator then only
+/// elects the role and builds no peer, and the game connects with <see cref="Conditions"/> itself.
+/// </para>
 /// </summary>
 public partial class NetworkSimulator : Node
 {
@@ -62,11 +66,16 @@ public partial class NetworkSimulator : Node
     /// <summary>Conditions applied by the in-process wrapper.</summary>
     public Profile Conditions { get; private set; } = new();
 
-    /// <summary>Creates the peer used to elect the first editor instance as host.</summary>
-    public static Func<NetworkSimulator, MultiplayerPeer?> HostPeerFactory { get; set; } = CreateENetServer;
+    /// <summary>
+    /// Raised with true on the instance elected host and false on the others, instead of connecting: subscribing
+    /// means the game connects itself. The election holds a UDP port, <see cref="ElectionPort"/>, for the session.
+    /// </summary>
+    public event Action<bool>? RoleElected;
 
-    /// <summary>Creates the peer used when the hosting port was already taken.</summary>
-    public static Func<NetworkSimulator, MultiplayerPeer?> JoinPeerFactory { get; set; } = CreateENetClient;
+    /// <summary>The port whose owner is the host: one below <see cref="ServerPort"/>, clear of the game's own ports.</summary>
+    public int ElectionPort => ServerPort - 1;
+
+    private PacketPeerUdp? _election;
 
     /// <summary>The peer produced by autoconnect, wrapped with this instance's link conditions.</summary>
     public MultiplayerPeer? Peer { get; private set; }
@@ -97,12 +106,22 @@ public partial class NetworkSimulator : Node
         if (IsInsideTree()) Connect();
     }
 
-    /// <summary>Hosts if the configured port is free, otherwise joins, then installs the simulated peer.</summary>
+    /// <summary>
+    /// Elects the role for a game that connects itself, or hosts if the configured port is free, otherwise joins, then
+    /// installs the simulated peer.
+    /// </summary>
     internal void Connect()
     {
-        var raw = HostPeerFactory(this);
+        if (RoleElected is not null)
+        {
+            _election = new PacketPeerUdp();
+            RoleElected(_election.Bind(ElectionPort) == Error.Ok);
+            return;
+        }
+
+        var raw = CreateENetServer(this);
         var hosted = raw is not null;
-        if (raw is null) raw = JoinPeerFactory(this);
+        if (raw is null) raw = CreateENetClient(this);
         if (raw is null)
         {
             Logger.Error("Autoconnect could neither host nor join");
@@ -143,6 +162,8 @@ public partial class NetworkSimulator : Node
         Logger.Error("Joining failed with error - {0}", status);
         return null;
     }
+
+    public override void _ExitTree() => _election?.Close();
 
     /// <summary>A raised cosine over the period, so delay drifts instead of jumping.</summary>
     internal static int OscillatingJitter(Profile profile, ulong now)

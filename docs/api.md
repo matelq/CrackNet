@@ -248,7 +248,7 @@ The newest state tick received from a peer and the tick currently displayed for 
 
 | | Member | Summary |
 |---|---|---|
-| method | `#ctor(System.Double,System.Double)` | The newest state tick received from a peer and the tick currently displayed for that peer. |
+| method | `#ctor(System.Double,System.Double,System.Double)` | The newest state tick received from a peer and the tick currently displayed for that peer. |
 
 ### SceneAttribute
 
@@ -431,17 +431,17 @@ A full ENet mesh over a local network, for running a session in several windows 
 
 ### NetworkSimulator
 
-Editor convenience: the first launched instance hosts and later ones join. Link conditions are applied in process by `SimulatedMultiplayerPeer`, once as each packet leaves for a remote peer.
+Editor convenience: the first launched instance hosts and later ones join. Link conditions are applied in process by `SimulatedMultiplayerPeer`, once as each packet leaves for a remote peer. A game with its own transport (a mesh, Steam) subscribes to `RoleElected`: the simulator then only elects the role and builds no peer, and the game connects with `Conditions` itself.
 
 | | Member | Summary |
 |---|---|---|
 | property | `Conditions` | Conditions applied by the in-process wrapper. |
-| property | `HostPeerFactory` | Creates the peer used to elect the first editor instance as host. |
-| property | `JoinPeerFactory` | Creates the peer used when the hosting port was already taken. |
+| property | `ElectionPort` | The port whose owner is the host: one below `ServerPort`, clear of the game's own ports. |
 | property | `Peer` | The peer produced by autoconnect, wrapped with this instance's link conditions. |
-| method | `Connect` | Hosts if the configured port is free, otherwise joins, then installs the simulated peer. |
+| method | `Connect` | Elects the role for a game that connects itself, or hosts if the configured port is free, otherwise joins, then installs the simulated peer. |
 | method | `InLossBurst(CrackNet.Extras.NetworkSimulator.Profile,System.UInt64)` | Whether an unreliable packet sent now falls inside a periodic link outage. |
 | method | `OscillatingJitter(CrackNet.Extras.NetworkSimulator.Profile,System.UInt64)` | A raised cosine over the period, so delay drifts instead of jumping. |
+| event | `RoleElected` | Raised with true on the instance elected host and false on the others, instead of connecting: subscribing means the game connects itself. The election holds a UDP port, `ElectionPort`, for the session. |
 
 ### SimulatedMultiplayerPeer
 

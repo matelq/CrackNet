@@ -27,6 +27,8 @@ public partial class NetworkObjectTests : HarnessSuite
         // latency, falls outside
         Expect.True(status.NetworkTicks >= 1 && status.NetworkTicks <= 3 + interval + 2,
             $"network age {status.NetworkTicks:F1} ticks for 100 ms of latency");
+        Expect.True(Math.Abs(status.NetworkMs - status.NetworkTicks * 1000 / Client.Context.NetworkTime.Tickrate) < 0.01,
+            $"{status.NetworkMs:F1} ms for {status.NetworkTicks:F1} ticks");
         Expect.True(status.PlaybackTicks <= Client.Context.NetworkObjectServer.PlaybackDelayTicks + interval + 2,
             $"playback age {status.PlaybackTicks:F1} ticks");
     }
