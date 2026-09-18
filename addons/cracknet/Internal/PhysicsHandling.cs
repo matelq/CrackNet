@@ -151,6 +151,8 @@ internal abstract class PhysicsHandling
         private static IEnumerable<NetworkObject> TouchingOf(RigidBody3D body, Vector3 offset = default)
         {
             if (!body.IsInsideTree()) yield break;
+            // Not disposed, unlike the query below: a Godot object has one C# handle, shared with any game code that
+            // holds this world, and disposing it would break theirs
             var space = body.GetWorld3D().DirectSpaceState;
             foreach (var shape in body.GetChildren().OfType<CollisionShape3D>())
             {
@@ -231,7 +233,7 @@ internal abstract class PhysicsHandling
             if (!Object.Authority.IsLocal) return;
             for (var i = 0; i < body.GetSlideCollisionCount(); i++)
             {
-                using var collision = body.GetSlideCollision(i);   // disposed on the main thread, as the query above
+                var collision = body.GetSlideCollision(i);   // Godot reuses these: the handle may be the game's too
                 if (collision.GetCollider() is not Node node || NetworkObject.Of(node) is not { } other) continue;
                 // What it stands on stays where it is: taken, a crate at rest went back to the host and was taken again
                 // by the next frame's floor contact, over and over
