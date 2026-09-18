@@ -282,15 +282,25 @@ public partial class NetworkObject : Node
     /// <summary>
     /// This object struck <paramref name="target"/>: takes the target when it can (<see cref="Spread"/>), so a crate flies
     /// on this peer's simulation at once, then pushes it. A player, which cannot be taken, is pushed on its own peer. If
-    /// the host gives the target to someone else, the winner's simulation stands and this push is lost with the claim.
+    /// the host gives the target to someone else, the winner's simulation stands and the push is passed on to it, so
+    /// two players striking the same crate at once both count.
     /// </summary>
     public void Impulse(NetworkObject target, Vector3 impulse)
     {
         ArgumentNullException.ThrowIfNull(target);
         Spread(target);
-        if (target.IsAuthority) target.Raise(LocalPeer, EventKind.Impulse, impulse);
-        else target.Impulse(impulse);
+        if (!target.IsAuthority)
+        {
+            target.Impulse(impulse);
+            return;
+        }
+
+        target.Raise(LocalPeer, EventKind.Impulse, impulse);
+        // Taken here before the host answered: if the host gives it to someone else, this push goes after it
+        if (target.PendingRequest != 0) target._unconfirmedImpulses.Add((LocalPeer, impulse));
     }
+
+    private readonly List<(int Origin, Vector3 Impulse)> _unconfirmedImpulses = new();
 
     internal enum EventKind { User = 0, Impulse = 1 }
 
@@ -338,6 +348,11 @@ public partial class NetworkObject : Node
     {
         if (requestId == 0 || requestId != PendingRequest) return;
         PendingRequest = 0;
+        // Applied on a simulation the host has just thrown away: the winner applies them on its own instead
+        var unconfirmed = _unconfirmedImpulses.ToArray();
+        _unconfirmedImpulses.Clear();
+        if (!IsAuthority)
+            foreach (var (origin, impulse) in unconfirmed) Deliver(origin, EventKind.Impulse, impulse, hops: 0);
         var held = _heldEvents.ToArray();
         _heldEvents.Clear();
         foreach (var (origin, kind, payload, hops) in held) Deliver(origin, kind, payload, hops);

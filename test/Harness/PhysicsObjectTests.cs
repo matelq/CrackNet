@@ -169,6 +169,48 @@ public partial class PhysicsObjectTests : HarnessSuite
     }
 
     [Test]
+    public async Task TwoStrikesFromOppositeSidesAtOnceBothCount() => await StrikeFromBothSides(gapMs: 0);
+
+    [Test]
+    public async Task TwoStrikesCloserThanThePingBothCount() => await StrikeFromBothSides(gapMs: 60);
+
+    /// <summary>
+    /// Two guests strike the same crate from opposite sides. Each takes it for itself before the host has answered,
+    /// and the host gives it to one of them: the loser's strike has to reach the winner, or the crate flies off as if
+    /// only one had hit it. It arrives a round trip late, so the two do not cancel out: the crate flies one way, then
+    /// the other, on the winner's simulation.
+    /// </summary>
+    private async Task StrikeFromBothSides(int gapMs)
+    {
+        Network.LatencyMs = 100;
+        var third = AddPeer(3);
+        Expect.True(await WaitUntil(() => third.Context.NetworkTime.IsInitialSyncDone(), 5), "third peer never synced");
+        var stacks = new[] { Host, Client, third };
+        var crates = stacks.Select(stack => Crate(stack, "Crate", new Vector3(0, 0.5f, 0))).ToArray();
+        // Far enough that the crate never reaches them: it stops on friction alone
+        var left = stacks.Select(stack => Walker(stack, 2, new Vector3(-12, 1, 0), Vector3.Zero)).ToArray();
+        var right = stacks.Select(stack => Walker(stack, 3, new Vector3(12, 1, 0), Vector3.Zero)).ToArray();
+        for (var i = 0; i < 10; i++) await NextFrame();
+
+        left[1].Impulse(crates[1], new Vector3(10, 0, 0));
+        if (gapMs > 0) await ToSignal(GetTree().CreateTimer(gapMs / 1000.0), SceneTreeTimer.SignalName.Timeout);
+        right[2].Impulse(crates[2], new Vector3(-10, 0, 0));
+
+        // On the winner's own simulation, whichever peer that is
+        float fastest = 0, slowest = 0;
+        for (var i = 0; i < 90; i++)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.PhysicsFrame);
+            var winner = crates[crates[0].Net().Authority.Peer - 1];
+            if (!winner.Net().Authority.IsLocal) continue;
+            fastest = Mathf.Max(fastest, winner.LinearVelocity.X);
+            slowest = Mathf.Min(slowest, winner.LinearVelocity.X);
+        }
+        Expect.True(fastest > 2 && slowest < -2,
+            $"the winner, peer {crates[0].Net().Authority.Peer}, moved it between {slowest:F2} and {fastest:F2} m/s: one strike was lost");
+    }
+
+    [Test]
     public async Task StrikingAPlayerPushesItOnItsOwnPeer()
     {
         var pushed = new List<(int Peer, Vector3 Impulse)>();

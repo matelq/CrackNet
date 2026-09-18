@@ -77,9 +77,10 @@ Velocity += this.TakeImpulses(delta);             // a character applies the pus
 
 A push reaches whoever simulates the object: a rigid body takes the impulse itself; anything else adds it to
 `TakeImpulses` and raises `Impulsed`. `Impulse(target, impulse)` first takes the target when it can, so a crate flies on
-the striker's simulation at once; if the host gives the crate to someone else instead, that push is lost with the
-claim. Players do not collide with each other, since each would push a copy of the other in the past: a push is how
-they shove. **Impulse Strength** on a character's `NetworkObject` pushes the rigid bodies it walks into.
+the striker's simulation at once; if the host gives the crate to someone else instead, the push is passed on to the
+winner. It arrives a round trip late, so two players striking one crate from opposite sides send it one way and then the
+other rather than cancelling out. Players do not collide with each other, since each would push a copy of the other
+in the past: a push is how they shove. **Impulse Strength** on a character's `NetworkObject` pushes the rigid bodies it walks into.
 
 ```csharp
 target.Object.Send("opened");                            // from anyone
