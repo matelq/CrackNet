@@ -26,7 +26,7 @@ to rest. Pushes and hits are events delivered to whoever currently simulates the
 Pre-release, under active playtesting. Verified in CI by core xUnit tests, Godot-side tests (several stacks in one
 tree over a loopback peer) and a three-process ENet mesh smoke of the playground under a simulated bad network.
 
-Not yet verified: **Steam against a live client** ([#6](https://github.com/matelq/cracknet/issues/6)). The
+Not yet verified: **Steam against a live client** ([#6](https://github.com/matelq/CrackNet/issues/6)). The
 playground can host and join over Steam; that path has been built and checked against the extension, not yet played.
 
 ## Using it
@@ -81,8 +81,8 @@ this version, older editors downgrade the SDK in `CrackNet.csproj` - the [.NET 1
 and for the script `sh`, `curl` and `python` (on Windows, Git Bash has the first two).
 
 ```
-git clone https://github.com/matelq/cracknet.git
-cd cracknet
+git clone https://github.com/matelq/CrackNet.git
+cd CrackNet
 sh tools/install-extensions.sh all      # Rapier (required: the crates are Rapier bodies) and GodotSteam
 dotnet build CrackNet.csproj
 godot --path . res://examples/playground/playground.tscn
