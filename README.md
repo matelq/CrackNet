@@ -90,6 +90,12 @@ godot --path . res://examples/playground/playground.tscn
 Both extensions are native binaries and are not in the repository; the script pins their versions. `steam` alone
 installs only GodotSteam, `rapier` only Rapier. Restart the editor after installing: extensions load at startup.
 
+Rapier is pinned to **v0.35.1** on purpose. From v0.35.2 the extension panics whenever it is called from a thread other
+than the main one ([appsinacup/godot-rapier-physics#614](https://github.com/appsinacup/godot-rapier-physics/issues/614)),
+and a C# project always has one: the .NET finalizer releases Godot objects on its own thread. The physics world is
+left broken after such a panic. Stay on v0.35.1 until that issue is resolved; the library itself works on any engine,
+and CI also runs it on Jolt, which is built into Godot.
+
 **On one machine:** press Host in one window and Join (`127.0.0.1`) in the others, or turn on autoconnect - see
 [Testing on a real network](docs/real-networks.md). **Over LAN or with an open port:** Host, and the others Join the
 host's address. The playground connects every pair directly, so over the internet each player needs UDP 9999 and

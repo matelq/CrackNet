@@ -16,7 +16,11 @@ set -eu
 
 # Pinned rather than "latest": an extension is built against a Godot version, and a silent bump is how a working
 # checkout stops working. Bump these deliberately, and check the tag really does carry a build for Godot 4.7.
-RAPIER_VERSION=v0.35.4
+# Rapier stays on v0.35.1: v0.35.2 dropped gdext's experimental-threads (appsinacup/godot-rapier-physics#612), and
+# since then any call from a thread other than the main one panics and leaves the physics world broken (#614, #630).
+# A C# project always has such a thread - the .NET finalizer releases Godot objects on its own - so full test runs
+# failed or crashed in about one of three; on v0.35.1 they are clean. Move on once #614 is resolved.
+RAPIER_VERSION=v0.35.1
 RAPIER_URL="https://github.com/appsinacup/godot-rapier-physics/releases/download/${RAPIER_VERSION}/godot-rapier-3d-single.zip"
 
 STEAM_VERSION=v4.22.1-gde

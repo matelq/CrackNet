@@ -15,7 +15,8 @@ parity checks) do not apply here; `reworked` and `master` keep the port. Roadmap
 - Repo root is the Godot project. Godot 4.7.2 mono binary: `.tools/godot/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe` (gitignored). Use exactly this version: older editors downgrade the SDK in CrackNet.csproj.
 - **Rapier-first** (#52): `project.godot` asks for `Rapier3D`, and the extension is gitignored, so a fresh clone
   needs `sh tools/install-extensions.sh rapier` before anything with a physics body runs (`steam` installs GodotSteam).
-  The addon itself names no engine.
+  The addon itself names no engine. Rapier is pinned to v0.35.1: later ones panic on calls from any thread but the
+  main one, which the .NET finalizer makes (appsinacup/godot-rapier-physics#614); CI also runs the suite on Jolt.
 
 ## Commands
 
