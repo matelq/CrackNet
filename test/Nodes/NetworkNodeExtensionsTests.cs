@@ -43,6 +43,25 @@ public partial class NetworkNodeExtensionsTests : TestSuite
         Expect.Equal(typeof(NetworkNodeExtensionsTests), NetworkObject.TypeOfScript("res://test/Nodes/NetworkNodeExtensionsTests.cs"));
     }
 
+    /// <summary>Smoothing moves Visual: pointed at the root it would move the body, outside the object someone else.</summary>
+    [Test]
+    public void VisualHasToBeUnderTheRootAndNotTheRoot()
+    {
+        var root = new RigidBody3D();
+        var pivot = new Node3D();
+        var model = new Node3D();
+        var elsewhere = new Node3D();
+        root.AddChild(pivot);
+        pivot.AddChild(model);
+        Expect.Null(NetworkObject.VisualProblem(root, pivot));
+        Expect.Null(NetworkObject.VisualProblem(root, model));
+        Expect.Null(NetworkObject.VisualProblem(root, null));
+        Expect.True(NetworkObject.VisualProblem(root, root) is not null, "the root itself was accepted");
+        Expect.True(NetworkObject.VisualProblem(root, elsewhere) is not null, "a node outside the object was accepted");
+        root.Free();
+        elsewhere.Free();
+    }
+
     [Test]
     public void TheFirstAuthorityNotificationComesAfterTheNodeIsReady()
     {

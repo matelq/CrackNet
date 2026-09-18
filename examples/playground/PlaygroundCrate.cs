@@ -14,7 +14,7 @@ public partial class PlaygroundCrate : RigidBody3D, IAuthorityChanged
 
     public override void _Ready()
     {
-        var mesh = GetNode<MeshInstance3D>("MeshInstance3D");
+        var mesh = GetNode<MeshInstance3D>("Visual/MeshInstance3D");
         // Its own copy: the scene's material is shared by every crate, and each shows its own peer's colour
         _material = (StandardMaterial3D)mesh.MaterialOverride.Duplicate();
         mesh.MaterialOverride = _material;

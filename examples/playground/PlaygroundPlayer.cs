@@ -34,7 +34,7 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
         Name = $"Player{Peer}";
         // The scene's capsule is white: this player's slot colour, and a material of its own to hold it
         var color = Playground.SlotColors[Slot % Playground.SlotColors.Length];
-        GetNode<MeshInstance3D>("Body").MaterialOverride = new StandardMaterial3D { AlbedoColor = color };
+        GetNode<MeshInstance3D>("Visual/Body").MaterialOverride = new StandardMaterial3D { AlbedoColor = color };
 
         Playground.SetSlot(Peer, Slot);
     }

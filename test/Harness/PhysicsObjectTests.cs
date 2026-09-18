@@ -30,12 +30,16 @@ public partial class PhysicsObjectTests : HarnessSuite
         return viewport;
     }
 
-    private static RigidBody3D Crate(CrackNetStack stack, string name, Vector3 position)
+    private static RigidBody3D Crate(CrackNetStack stack, string name, Vector3 position, bool smoothed = false)
     {
         var crate = new RigidBody3D { Name = name, Position = position };
         crate.SetMultiplayerAuthority(1);
         crate.AddChild(new CollisionShape3D { Shape = new BoxShape3D { Size = Vector3.One } });
-        crate.AddChild(new NetworkObject { Name = "NetworkObject" });
+        var visual = new Node3D { Name = "Visual" };
+        crate.AddChild(visual);
+        // Longer than the default 0.15 s: a harness frame with four stacks is 30-110 ms, and a fade that fits in one
+        // frame draws as a jump of its own. The mechanism is what is checked here, not the tuning
+        crate.AddChild(new NetworkObject { Name = "NetworkObject", Visual = smoothed ? visual : null, SmoothingTime = 0.5f });
         World(stack).AddChild(crate);
         return crate;
     }
@@ -208,24 +212,50 @@ public partial class PhysicsObjectTests : HarnessSuite
     [Test]
     public async Task HandoversDoNotJumpTheDisplayedCrate()
     {
+        var (report, body, _) = await Handovers(smoothed: false);
+        GD.Print("HANDOVER JUMPS " + report);
+        Expect.True(body < HandoverJumpLimit, "handovers jump the displayed crate: " + report);
+    }
+
+    /// <summary>
+    /// The same scenario with the crate's Visual set: the body still jumps, but what is drawn catches up instead.
+    /// Measured on the drawn node, beside the body in the same run.
+    /// </summary>
+    [Test]
+    public async Task AuthorityChangeSmoothingDrawsHandoversWithoutAJump()
+    {
+        var (report, body, drawn) = await Handovers(smoothed: true);
+        GD.Print("SMOOTHED HANDOVER JUMPS " + report);
+        Expect.True(drawn < SmoothedJumpLimit, "the drawn crate still jumps on a handover: " + report);
+    }
+
+    private async Task<(string Report, float Body, float Drawn)> Handovers(bool smoothed)
+    {
         Network.LatencyMs = 80;
         var peers = new[] { Host, Client, AddPeer(3), AddPeer(4) };
         foreach (var peer in peers)
             Expect.True(await WaitUntil(() => peer.Context.NetworkTime.IsInitialSyncDone(), 5), $"{peer.Name} never synced");
-        var crates = peers.Select(peer => Crate(peer, "Crate", new Vector3(0, 0.5f, 0))).ToArray();
+        var crates = peers.Select(peer => Crate(peer, "Crate", new Vector3(0, 0.5f, 0), smoothed)).ToArray();
+        var visuals = crates.Select(crate => crate.GetNode<Node3D>("Visual")).ToArray();
         var south = peers.Select(peer => Walker(peer, 2, new Vector3(0, 1, -12), Vector3.Zero)).ToArray();
         var north = peers.Select(peer => Walker(peer, 3, new Vector3(0, 1, 12), Vector3.Zero)).ToArray();
         for (var i = 0; i < 30; i++) await NextFrame();
 
-        var history = crates.Select(_ => new List<(Vector3 At, Vector3 Velocity, int Authority, double Delta)>()).ToArray();
+        var bodies = crates.Select(_ => new List<(Vector3 At, Vector3 Velocity, int Authority, double Delta)>()).ToArray();
+        var drawn = crates.Select(_ => new List<(Vector3 At, Vector3 Velocity, int Authority, double Delta)>()).ToArray();
         var strikes = 0;
         var sinceStrike = 0.0;
         for (var frame = 0; frame < 400; frame++)
         {
             await NextFrame();
             var delta = GetProcessDeltaTime();
-            for (var i = 0; i < crates.Length; i++) history[i].Add((crates[i].GlobalPosition, crates[i].LinearVelocity, crates[i].Net().Authority.Peer, delta));
-            sinceStrike += GetProcessDeltaTime();
+            for (var i = 0; i < crates.Length; i++)
+            {
+                var authority = crates[i].Net().Authority.Peer;
+                bodies[i].Add((crates[i].GlobalPosition, crates[i].LinearVelocity, authority, delta));
+                drawn[i].Add((visuals[i].GlobalPosition, crates[i].LinearVelocity, authority, delta));
+            }
+            sinceStrike += delta;
             if (strikes >= 8 || sinceStrike < 0.4) continue;
             sinceStrike = 0;
             // Each striker hits what it sees, as the playground's shot does
@@ -234,15 +264,41 @@ public partial class PhysicsObjectTests : HarnessSuite
         }
 
         var report = new List<string>();
-        float worst = 0;
+        float worstBody = 0, worstDrawn = 0;
         foreach (var (name, i) in new[] { ("host", 0), ("south striker", 1), ("north striker", 2), ("observer", 3) })
         {
-            var (handover, steady) = Jumps(history[i]);
-            worst = Mathf.Max(worst, handover);
-            report.Add($"{name}: handover {handover:F2} m, steady {steady:F2} m");
+            var (bodyJump, steady) = Jumps(bodies[i]);
+            var (drawnJump, _) = Jumps(drawn[i]);
+            worstBody = Mathf.Max(worstBody, bodyJump);
+            worstDrawn = Mathf.Max(worstDrawn, drawnJump);
+            report.Add($"{name}: body {bodyJump:F2} m, drawn {drawnJump:F2} m, steady {steady:F2} m");
         }
-        GD.Print("HANDOVER JUMPS " + string.Join("; ", report));
-        Expect.True(worst < HandoverJumpLimit, "handovers jump the displayed crate: " + string.Join("; ", report));
+        return (string.Join("; ", report), worstBody, worstDrawn);
+    }
+
+    // Six runs: the body's worst was 0.25-0.61 m in every one, the drawn crate's 0.05-0.18
+    private const float SmoothedJumpLimit = 0.25f;
+
+    /// <summary>
+    /// A snap is meant to be seen. Right after a handover, when jumps are being smoothed, the new authority snaps the
+    /// crate a metre and a half: another peer draws it there in the same frame its body lands, not catching up.
+    /// </summary>
+    [Test]
+    public async Task ASnapRightAfterAHandoverIsNotSmoothed()
+    {
+        var onHost = Crate(Host, "Crate", new Vector3(0, 0.5f, 0), smoothed: true);
+        var onClient = Crate(Client, "Crate", new Vector3(0, 0.5f, 0), smoothed: true);
+        for (var i = 0; i < 10; i++) await NextFrame();
+
+        Expect.True(onClient.TryClaim(), "the client could not claim the crate");
+        Expect.True(await WaitUntil(() => onHost.Net().Authority.Peer == 2, 3), "the host never saw the claim");
+
+        onClient.Snap();
+        onClient.GlobalPosition += new Vector3(1.5f, 0, 0);
+        var visual = onHost.GetNode<Node3D>("Visual");
+        Expect.True(await WaitUntil(() => onHost.GlobalPosition.X > 1.4f, 3), $"the host never saw the snap: {onHost.GlobalPosition}");
+        Expect.True(visual.GlobalPosition.DistanceTo(onHost.GlobalPosition) < 0.05f,
+            $"the snap was smoothed: drawn at {visual.GlobalPosition}, body at {onHost.GlobalPosition}");
     }
 
     // Before the freshest-state takeover and the opening sample: 0.74-2.58 m; after: 0-0.70 (six runs each)

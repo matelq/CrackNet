@@ -320,10 +320,16 @@ Two decisions here are made but not built, and both matter enough to keep in sig
   0.74-2.58 m to 0-0.70 m, the observer's from 1.09-2.40 to 0.06-0.20 (`HandoversDoNotJumpTheDisplayedCrate`). What is
   left is the ping's worth: the newest sample is still one trip old. Extrapolating it, or stepping the body forward, is
   the next step if a playtest still shows it, and only with a number that says it helps.
-- **Handover smoothing.** A launch is physics (infinite-mass pushes, kinematic velocity, depenetration) and is fixed as
-  physics; what a handover can still leave is a visible snap of a metre or so, the playback delay's worth of position.
-  Photon Fusion corrects that in presentation only, over about 0.15 s, and Fiedler blends extrapolation error the same
-  way. To add when a playtest shows the snap rather than pre-emptively, and never by blending the physics body.
+- **Authority change smoothing (done).** A playtest showed the strikers' jump that the freshest-state takeover moved to
+  them. The body moves at once; the node set as `Visual` keeps an offset that fades over `SmoothingTime` (0.15 s),
+  as Photon Fusion and Fiedler do it, in presentation only. A handover opens a one-second window, long enough for an
+  observer to reach the new authority's samples, and within it whatever a frame's body moved beyond its speed goes
+  into the offset. `Snap()` and jumps past `MaxSmoothingDistance` (2 m) are drawn at once. Measured with a 0.5 s
+  smoothing time, since a harness frame is 30-110 ms and a fade that fits in one frame draws as a jump of its own: the
+  body's worst handover jump 0.25-0.61 m over six runs, the drawn one 0.05-0.18. The default is for a playtest to
+  judge. Why a separate pivot and not the model: an animation moving the model's own root would fight the offset.
+  Known limits, deferred: ragdoll bones under Visual would be moved by hand; IK aimed at the world stretches a limb
+  for the smoothing time.
 - Already in: a character does not take what it stands on; a group touched by any character does not go back to the
   host; Rapier's `normalized_max_corrective_velocity` is 2 in the playground project.
 - **Copies are frozen static, not kinematic.** Rapier gives a kinematic body the velocity of its last move; a copy

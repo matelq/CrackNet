@@ -134,7 +134,7 @@ A remote object is shown from its authority's samples, a little in the past:
 
 - **One clock per remote peer.** Everything one peer sends is shown at the same tick, so a player and the crate it
   carries never drift apart.
-- **An adaptive buffer per link.** Depth is the send interval plus that link's measured jitter, capped at 20 ticks.
+- **An adaptive buffer per link.** Depth is two send intervals plus that link's measured jitter, capped at 2/3 s.
   The buffer absorbs jitter; it cannot absorb latency, because nothing can be shown before it arrives.
 - **No freezing, no rewriting.** On underrun the object holds its last value; after an outage playback catches up
   quickly. A late sample never rewrites what was already shown.
@@ -144,3 +144,36 @@ A remote object is shown from its authority's samples, a little in the past:
 `NetworkObjectServer.Instance.Diagnostics.GetPlaybackStatus(peer)` reports, averaged over a second, how old that peer's
 state is on arrival and how long it waits in the buffer, in ticks and in milliseconds (`TotalMs`, `NetworkMs`, `PlaybackMs`). `Object.Diagnostics` has the sequences, the display tick and
 the sample events, for checks rather than game logic.
+
+## Authority change smoothing
+
+When an object changes hands, every peer's copy of it jumps a little: the new authority simulates on from the newest
+state it heard, which is already a ping old, and the others switch from one authority's samples to the other's. The
+**Authority Change Smoothing** group on `NetworkObject` hides that jump. The body moves at once, so physics stays
+right; what is drawn stays where it was on screen and catches up over **Smoothing Time**. A jump further than **Max
+Smoothing Distance** is drawn at once, and so is anything after `Snap()`: those are moves, not lag.
+
+It moves one node, **Visual**, so everything drawn has to sit under it and nothing physical may:
+
+```
+Crate (RigidBody3D)
+├── CollisionShape3D       the body's shape: never smoothed
+├── NetworkObject          Visual = Visual
+└── Visual (Node3D)        an empty pivot: the node smoothing moves
+    └── Model              the model: meshes, skeleton, AnimationPlayer
+```
+
+Keep the pivot empty and put the model inside it: then an animation that moves the model's own root (root motion) and
+the smoothing never write to the same node. Visual empty means no smoothing. Pointed at the root itself, or at a node
+outside the object, it is refused with an editor warning, since moving it would move the body.
+
+Known limits, for now:
+
+- **Ragdolls.** `PhysicalBone3D` is physics: under Visual it would be moved by hand for a moment. Keep physical bones
+  out of Visual, or leave Visual empty on such an object.
+- **IK aimed at the world.** A foot or a hand reaching for a point in the world reaches from where the model is drawn,
+  so for the smoothing time a limb can stretch or bend by the size of the jump.
+- **Bone hitboxes** (`BoneAttachment3D` with an `Area3D`) follow the drawn model while it catches up: hits land where
+  the object is seen.
+
+Players' characters never change hands, so none of this touches them; it is for shared objects such as crates.

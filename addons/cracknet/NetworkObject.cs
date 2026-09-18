@@ -91,7 +91,40 @@ public partial class NetworkObject : Node
     /// <summary>Maximum contacts from the source of a spread chain, or -1 for unlimited.</summary>
     [Export(PropertyHint.Range, "-1,64,1")] public int MaxSpreadDepth { get; set; } = -1;
 
+    /// <summary>
+    /// The node everything drawn for this object sits under: an empty <c>Node3D</c> under the root, with the model
+    /// inside it. When the object changes hands it is drawn where it was on screen and catches up with the body over
+    /// <see cref="SmoothingTime"/>, instead of jumping; the body itself moves at once. Empty: no smoothing.
+    /// </summary>
+    [ExportGroup("Authority Change Smoothing")]
+    [Export]
+    public Node3D? Visual
+    {
+        get => _visual;
+        set
+        {
+            _visual = value;
+            UpdateConfigurationWarnings();
+        }
+    }
+
+    private Node3D? _visual;
+
+    /// <summary>What is wrong with <see cref="Visual"/>, or null: it has to be under the root, never the root itself.</summary>
+    internal static string? VisualProblem(Node? root, Node3D? visual)
+        => visual is null || root is not Node3D || visual != root && root.IsAncestorOf(visual)
+            ? null
+            : "Visual has to be a node under the object's root, not the root itself: moving it would move the body. "
+              + "Put the model under an empty Node3D and point Visual at that";
+
+    /// <summary>How long the drawing takes to catch up with the body after the object changed hands.</summary>
+    [Export(PropertyHint.Range, "0,1,0.01,suffix:s")] public float SmoothingTime { get; set; } = 0.15f;
+
+    /// <summary>A handover that moves the object further than this is drawn at once: it is a move, not a lag.</summary>
+    [Export(PropertyHint.Range, "0,20,0.1,or_greater,suffix:m")] public float MaxSmoothingDistance { get; set; } = 2;
+
     /// <summary>What this object sends, in the order it is sent. Read-only; shown in the inspector.</summary>
+    [ExportGroup("")]
     [Export(PropertyHint.MultilineText)]
     public string SyncedSummary
     {
@@ -158,7 +191,14 @@ public partial class NetworkObject : Node
     public static NetworkObject? Of(Node root) => CrackNetContext.For(root).NetworkObjectServer?.Find(root);
 
     /// <summary>The next state this peer sends applies without interpolation on the others: a respawn, not a flight.</summary>
-    public void Snap() => SnapPending = true;
+    public void Snap()
+    {
+        SnapPending = true;
+        _smoothing?.Snapped();
+    }
+
+    /// <summary>A snap sample was applied here: it is to be seen, not smoothed.</summary>
+    internal void SnapApplied() => _smoothing?.Snapped();
 
     /// <summary>
     /// Ends this authoritative object's timeline. It is hidden and stops processing here immediately; remote peers
@@ -416,6 +456,7 @@ public partial class NetworkObject : Node
         if (authority != AuthorityPeer)
         {
             SetAuthority(Root!, authority);
+            _smoothing?.Opened();
             if (IsAuthority && !Shown) SetShown(true);
             // Taken here: simulate on from the freshest state heard, not from the one displayed a playback delay ago.
             // Every other peer is already showing the old authority close to that, so the handover does not jump back
@@ -509,9 +550,13 @@ public partial class NetworkObject : Node
     }
 
     public override string[] _GetConfigurationWarnings()
-        => UnsupportedReason(Root ?? GetParent()) is { } reason && Kind != ObjectKind.Custom
-            ? [$"{reason}. The game will not start with this object; set Kind to Custom to replicate it by hand."]
-            : [];
+    {
+        var warnings = new List<string>();
+        if (UnsupportedReason(Root ?? GetParent()) is { } reason && Kind != ObjectKind.Custom)
+            warnings.Add($"{reason}. The game will not start with this object; set Kind to Custom to replicate it by hand.");
+        if (VisualProblem(Root ?? GetParent(), Visual) is { } visual) warnings.Add(visual + ". Smoothing is off.");
+        return warnings.ToArray();
+    }
 
     public override void _ValidateProperty(Dictionary property)
     {
@@ -545,6 +590,7 @@ public partial class NetworkObject : Node
         // muzzle for the playback delay before it flies
         if (!IsAuthority) SetShown(false);
         if (ResolvedKind != ObjectKind.Custom) _body = PhysicsHandling.For(this);
+        _smoothing = AuthorityChangeSmoothing.For(this);
         Context.NetworkObjectServer.Register(this);
         // The node learns who has it before its first frame, but after its own _Ready: a child is ready first
         if (Root!.IsNodeReady()) NotifyAuthorityChanged();
@@ -552,6 +598,14 @@ public partial class NetworkObject : Node
     }
 
     private PhysicsHandling? _body;
+    private AuthorityChangeSmoothing? _smoothing;
+
+    // After the server's own _Process, which places remote bodies: it is an autoload, earlier in the tree
+    public override void _Process(double delta)
+    {
+        if (Engine.IsEditorHint()) return;
+        _smoothing?.Process(delta);
+    }
 
     public override void _PhysicsProcess(double delta)
     {

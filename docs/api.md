@@ -136,15 +136,18 @@ One replicated object. While its root is this peer's multiplayer authority it se
 | property | `ImpulseStrength` | How hard a character body pushes the rigid bodies it slides into, along the contact normal; 0 is off. The library takes the body and pushes it on this peer's simulation. |
 | property | `Kind` | How authority over this object moves. Read when the object enters the tree. |
 | property | `LastSentBody` | What this peer last sent for the object, and when: an unchanged object is not sent again for a while. |
+| property | `MaxSmoothingDistance` | A handover that moves the object further than this is drawn at once: it is a move, not a lag. |
 | property | `MaxSpreadDepth` | Maximum contacts from the source of a spread chain, or -1 for unlimited. |
 | property | `PendingRequest` | The id of this guest's latest authority request the host has not answered yet, or 0. |
 | property | `PlaybackState` | Where this object is in its own timeline on this peer: `Pending` until playback reaches its first sample, `Ending` once it despawned. The authority is always past pending. Read this instead of `Visible` to tell whether a projectile can hit yet. |
 | property | `ResolvedKind` | `Kind` with `Auto` resolved from the root's type. |
 | property | `RestFrames` | Physics frames a simulated body has been at rest, counted by its physics handling. |
 | property | `Root` | The node that is the object: authority, identity and the synced subtree. The parent by default. |
+| property | `SmoothingTime` | How long the drawing takes to catch up with the body after the object changed hands. |
 | property | `SpreadsAuthority` | Whether this object passes its authority on with `NetworkObject`. Set by `Kind`. |
 | property | `SyncedSummary` | What this object sends, in the order it is sent. Read-only; shown in the inspector. |
 | property | `Transferable` | Whether other peers may take authority or ownership. Set by `Kind`; by hand only for `Custom`. The current authority sends runtime changes through the host. |
+| property | `Visual` | The node everything drawn for this object sits under: an empty `Node3D` under the root, with the model inside it. When the object changes hands it is drawn where it was on screen and catches up with the body over `SmoothingTime`, instead of jumping; the body itself moves at once. Empty: no smoothing. |
 | method | `Answered(System.Int32)` | The host answered `requestId`: events held for it go wherever authority now is. |
 | method | `AutoProperties(Godot.Node)` | What is sent for a root of this type before its `[Synced]` properties. |
 | method | `Deliver(System.Int32,CrackNet.NetworkObject.EventKind,Godot.Variant,System.Int32)` | Raises an event here if this peer is the authority, and passes it on otherwise. While this peer's own request is unanswered its authority may be about to be taken back, so the event waits for the host's answer. |
@@ -159,10 +162,12 @@ One replicated object. While its root is this peer's multiplayer authority it se
 | method | `ReleaseClaim(Godot.Vector3)` | Lets go of a held object with `velocity`: the throw flies on this peer's simulation. |
 | method | `Send(Godot.Variant)` | Delivers `payload` to whoever is this object's authority, reliably and exactly once, even if authority moves while it is on its way. On the authority itself it is raised at once. |
 | method | `Snap` | The next state this peer sends applies without interpolation on the others: a respawn, not a flight. |
+| method | `SnapApplied` | A snap sample was applied here: it is to be seen, not smoothed. |
 | method | `Spread(CrackNet.NetworkObject)` | Passes this object's authority to `other` after contact. Physics bodies call it themselves; call it for contact the physics engine does not report. The source's depth limit follows the whole chain; the host verifies this object as the cause and arbitrates opposing requests. |
 | method | `TakeImpulses(System.Double,System.Single)` | The pushes received and not yet used up, decaying by `decay` per second: add it to a character's velocity each physics frame, before moving. |
 | method | `TryClaim` | Makes the object this peer's: authority and ownership, so nobody else can take it until it is released. A physics body is frozen while claimed; the game moves it. False when someone else holds it. |
 | method | `UnsupportedReason(Godot.Node)` | Why a root of this type cannot be replicated, or null when it can. |
+| method | `VisualProblem(Godot.Node,Godot.Node3D)` | What is wrong with `Visual`, or null: it has to be under the root, never the root itself. |
 | event | `AuthorityChanged` | Raised after the authority or the holder changed, on every peer. |
 | event | `Impulsed` | Raised on the authority of a root that is not a rigid body, exactly once per push: the impulse. It is also added to `Single`, so handle one or the other. A rigid body takes the impulse itself. |
 | event | `Received` | Raised on the authority, exactly once per `Variant` call anywhere: the peer that sent it and what it sent. |

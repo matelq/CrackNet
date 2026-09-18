@@ -659,6 +659,8 @@ public partial class NetworkObjectServer : Node
                 : fraction >= 1 ? b : a;
             node.SetValue(property, value);
         }
+        // The frame the snap lands in: reaching the snap sample, or already past it
+        if (to.Snap && fraction >= 1 || from.Snap) obj.SnapApplied();
 
         if (reachedDespawn)
         {
