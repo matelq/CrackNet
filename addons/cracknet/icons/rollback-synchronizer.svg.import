@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ce3jh4jtgpwc"
-path="res://.godot/imported/rollback-synchronizer.svg-0227bdf137922c2aadd5a30a5c78c3f1.ctex"
+path="res://.godot/imported/rollback-synchronizer.svg-5ae36ad737eb6c7a1bce628c9aa9f647.ctex"
 metadata={
 "vram_texture": false
 }
@@ -11,7 +11,7 @@ metadata={
 [deps]
 
 source_file="res://addons/cracknet/icons/rollback-synchronizer.svg"
-dest_files=["res://.godot/imported/rollback-synchronizer.svg-0227bdf137922c2aadd5a30a5c78c3f1.ctex"]
+dest_files=["res://.godot/imported/rollback-synchronizer.svg-5ae36ad737eb6c7a1bce628c9aa9f647.ctex"]
 
 [params]
 

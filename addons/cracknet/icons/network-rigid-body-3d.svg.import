@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://jyma77bsekwt"
-path="res://.godot/imported/network-rigid-body-3d.svg-87f68d7febd1381e4e0f912ac798e79c.ctex"
+path="res://.godot/imported/network-rigid-body-3d.svg-329608fb9e51ea68ef953f6d1c77eb8b.ctex"
 metadata={
 "vram_texture": false
 }
@@ -11,7 +11,7 @@ metadata={
 [deps]
 
 source_file="res://addons/cracknet/icons/network-rigid-body-3d.svg"
-dest_files=["res://.godot/imported/network-rigid-body-3d.svg-87f68d7febd1381e4e0f912ac798e79c.ctex"]
+dest_files=["res://.godot/imported/network-rigid-body-3d.svg-329608fb9e51ea68ef953f6d1c77eb8b.ctex"]
 
 [params]
 

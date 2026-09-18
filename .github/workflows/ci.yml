@@ -48,7 +48,7 @@ jobs:
           fi
           echo "GODOT=$PWD/godot/Godot_v${GODOT_VERSION}_mono_linux_x86_64/Godot_v${GODOT_VERSION}_mono_linux.x86_64" >> "$GITHUB_ENV"
       - name: Install Rapier
-        # The project is Rapier-first (netfox-net#52): project.godot already asks for Rapier3D, this drops the
+        # The project is Rapier-first (#52): project.godot already asks for Rapier3D, this drops the
         # pinned extension next to it. Without this step every physics body would sit on an engine that is not there.
         run: sh tools/install-extensions.sh rapier
       - name: Import resources

@@ -13,7 +13,7 @@ parity checks) do not apply here; `reworked` and `master` keep the port. Roadmap
 - `CrackNetContext`: servers register into `CrackNetContext.Default`; a `CrackNetContextRoot` node gives its subtree a second stack. Nodes resolve `Context` in `_EnterTree`; `Instance` still points at the default stack.
 - `examples/playground/` — the co-op sample (its smoke lives in `test/Playground/`); `examples/steam/` — GodotSteam bootstrap under `#if GODOTSTEAM`.
 - Repo root is the Godot project. Godot 4.7.2 mono binary: `.tools/godot/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe` (gitignored). Use exactly this version: older editors downgrade the SDK in CrackNet.csproj.
-- **Rapier-first** (netfox-net#52): `project.godot` asks for `Rapier3D`, and the extension is gitignored, so a fresh clone
+- **Rapier-first** (#52): `project.godot` asks for `Rapier3D`, and the extension is gitignored, so a fresh clone
   needs `sh tools/install-extensions.sh rapier` before anything with a physics body runs (`steam` installs GodotSteam).
   The addon itself names no engine.
 
@@ -92,10 +92,10 @@ the API is judged: keep every block marked and compiling. Building only the proj
 A check that only compares state after the keys are released is blind to what a player sees: a crate drawn on the
 floor between two ticks, a remote player snapping, a body left behind while its mesh moved. Measure during motion and
 on displayed positions (per frame, after interpolation) as well as at rest, and make the check fail on the reported
-symptom before fixing it (netfox-net#59); the playground smoke compares what a peer displayed against the line
+symptom before fixing it (#59); the playground smoke compares what a peer displayed against the line
 between the samples it actually received, so loss is not blamed on playback nor hidden by it. And when a check passes on
 the first try, ask what it would take to make it fail; more than one check here has passed by measuring nothing
-(netfox-net#62).
+(#62).
 
 Performance claims come from tests that print their numbers (`PropertyAccessBenchmarkTests` and the
 bandwidth case in the harness) and fail on regression. Tick-level timings swing by ±60% between runs on the

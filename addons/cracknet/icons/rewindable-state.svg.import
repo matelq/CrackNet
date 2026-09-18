@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://mh18ma7ndgh8"
-path="res://.godot/imported/rewindable-state.svg-6720cc09d085d22336c2afb7cdff9ab6.ctex"
+path="res://.godot/imported/rewindable-state.svg-b4a0b48f835e324df98016733c603fe3.ctex"
 metadata={
 "vram_texture": false
 }
@@ -11,7 +11,7 @@ metadata={
 [deps]
 
 source_file="res://addons/cracknet/icons/rewindable-state.svg"
-dest_files=["res://.godot/imported/rewindable-state.svg-6720cc09d085d22336c2afb7cdff9ab6.ctex"]
+dest_files=["res://.godot/imported/rewindable-state.svg-b4a0b48f835e324df98016733c603fe3.ctex"]
 
 [params]
 
