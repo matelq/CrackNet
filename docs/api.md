@@ -49,6 +49,14 @@ Every `cracknet/*` project setting, read once into one mutable object. Upstream 
 | property | `SyncPanicThreshold` | Same `cracknet/time/recalibrate_threshold` key as `RecalibrateThreshold`, but with the fallback upstream uses in the time synchronizer (`network-time-synchronizer.gd:105`). The two differ only when the setting is absent. |
 | method | `Load` | Reads every setting from `ProjectSettings`, falling back to the defaults the plugin registers. |
 
+### IAttachmentChanged
+
+Implemented by a replicated node that wants to know when something was attached to it or detached from it, or when it was itself attached or detached. The library calls `OnAttachmentChanged` on every peer, at the moment that peer shows the change: on the authority as it happens, elsewhere when playback reaches it, so `Attached` and `AttachedTo` already read the new values. Preferred over subscribing to `AttachmentChanged` from the node itself: nothing to unsubscribe in `_ExitTree`. The event stays for watching another object.
+
+| | Member | Summary |
+|---|---|---|
+| method | `OnAttachmentChanged` | Called on every peer after this node's attachments, or its own attachment, changed there. |
+
 ### IAuthorityChanged
 
 Implemented by a replicated node that wants to know when it changed hands: who simulates it, or who holds it. The library calls `OnAuthorityChanged` on every peer, right after it has applied the change, so `this.Authority` and `this.ClaimedBy` already read the new values. Preferred over subscribing to `AuthorityChanged` from the node itself: nothing to unsubscribe in `_ExitTree`. The event stays for watching someone else's object. `public partial class Crate : RigidBody3D, IAuthorityChanged { public void OnAuthorityChanged() => _material.AlbedoColor = ColorOf(this.Authority.Peer); }`
@@ -136,6 +144,9 @@ One replicated object. While its root is this peer's multiplayer authority it se
 
 | | Member | Summary |
 |---|---|---|
+| property | `Attached` | The roots of the items hanging on this object, as this peer shows them. |
+| property | `AttachedTo` | The root of the object this one hangs on, or null, as this peer shows it. |
+| property | `AttachmentState` | What this item sends about its attachment, or null when it is free. |
 | property | `Authority` | Who simulates the object and sends its state, and taking or returning that by hand. |
 | property | `ClaimedBy` | The peer holding the object, or 0 when nobody does. |
 | property | `Context` | The stack this object belongs to; resolved when it enters the tree. |
@@ -158,25 +169,35 @@ One replicated object. While its root is this peer's multiplayer authority it se
 | property | `SyncedSummary` | What this object sends, in the order it is sent. Read-only; shown in the inspector. |
 | property | `Transferable` | Whether other peers may take authority or ownership. Set by `Kind`; by hand only for `Custom`. The current authority sends runtime changes through the host. |
 | property | `Visual` | The node everything drawn for this object sits under: an empty `Node3D` under the root, with the model inside it. When the object changes hands it is drawn where it was on screen and catches up with the body over `SmoothingTime`, instead of jumping; the body itself moves at once. Empty: no smoothing. |
+| field | `_anchorOffset` | How the item sits on the anchor: identity when hung here, whatever the authority sends otherwise. |
 | method | `Answered(System.Int32)` | The host answered `requestId`: events held for it go wherever authority now is. |
 | method | `AutoProperties(Godot.Node)` | What is sent for a root of this type before its `[Synced]` properties. |
 | method | `Deliver(System.Int32,CrackNet.NetworkObject.EventKind,Godot.Variant,System.Int32)` | Raises an event here if this peer is the authority, and passes it on otherwise. While this peer's own request is unanswered its authority may be about to be taken back, so the event waits for the host's answer. |
 | method | `DescribeSynced` | The inspector's list. In the editor a script without `[Tool]` is a placeholder, so its `[Synced]` properties are read from the compiled type the script path points at. |
 | method | `Despawn` | Ends this authoritative object's timeline. It is hidden and stops processing here immediately; remote peers hide it when their playback reaches the flagged final sample, and the root is freed after the playback grace period so a `MultiplayerSpawner` cannot remove it from observers early. |
+| method | `Detach(CrackNet.NetworkObject)` | Takes `item` off this object and lets go of it: from here on it sends its own transform again, and a physics body falls or flies. To throw it, `Detach` and then `Vector3` it. Other peers show the change when their playback reaches it and draw the item catching up from the hand to where the thrower has it (see `Visual`). False when the item is not attached here or not simulated here. |
+| method | `Hang(CrackNet.NetworkObject,Godot.Node3D,Godot.Transform3D)` | Hangs this object on `anchor` of `carrier` on this peer: by the authority, or by playback. |
 | method | `Impulse(CrackNet.NetworkObject,Godot.Vector3)` | This object struck `target`: takes the target when it can (`NetworkObject`), so a crate flies on this peer's simulation at once, then pushes it. A player, which cannot be taken, is pushed on its own peer. If the host gives the target to someone else, the winner's simulation stands and the push is passed on to it, so two players striking the same crate at once both count. |
 | method | `Impulse(Godot.Vector3)` | Pushes this object with nothing doing the pushing - an explosion, a trap: its authority applies `impulse` to a rigid body or raises `Impulsed`. Delivered like `Variant`. |
 | method | `IsNewer(System.Int32,System.Int32)` | True when ( `ownershipSequence`, `authoritySequence`) is newer than what this object has. |
 | method | `KindFor(Godot.Node)` | What `Auto` resolves to for a root of this type. |
 | method | `Of(Godot.Node)` | The object whose root is `root`, or null when it is not a registered object. |
+| method | `Place` | Puts this attached item on its anchor, where the anchor is now. Once per frame after the animation, and at once when hung. |
 | method | `ReleaseClaim` | Lets go of a held object. This peer keeps simulating it until someone else touches it. |
 | method | `ReleaseClaim(Godot.Vector3)` | Lets go of a held object with `velocity`: the throw flies on this peer's simulation. |
 | method | `Send(Godot.Variant)` | Delivers `payload` to whoever is this object's authority, reliably and exactly once, even if authority moves while it is on its way. On the authority itself it is raised at once. |
+| method | `ShowAttached(CrackNet.NetworkObject.Attachment,Godot.Transform3D)` | Playback reached a sample that hangs this item on `attachment`: shown on this peer's own copy of the carrier. |
+| method | `ShowFree` | Playback reached a free sample: off the carrier, if playback had hung it. |
 | method | `Snap` | The next state this peer sends applies without interpolation on the others: a respawn, not a flight. |
 | method | `SnapApplied` | A snap sample was applied here: it is to be seen, not smoothed. |
 | method | `Spread(CrackNet.NetworkObject)` | Passes this object's authority to `other` after contact. Physics bodies call it themselves; call it for contact the physics engine does not report. The source's depth limit follows the whole chain; the host verifies this object as the cause and arbitrates opposing requests. |
+| method | `TryAttach(CrackNet.NetworkObject,Godot.Node3D)` | Optimistically hangs `item` on `anchor`, a node under this object's root (a `Marker3D`, under a `BoneAttachment3D` for a bone). While attached the item sends no transform: its samples name the carrier and the anchor, and every peer, this one included, puts it on its own copy of the anchor after that peer's animation, so a hand and what it holds cannot drift apart. The item is claimed, so nobody else can take it, and its collisions are off. Other peers show the change when their playback of the item reaches it. False only when refusal is known here: the anchor is not under this root (an error), the item is attached already, it would carry its own carrier, or it cannot be claimed; drive game logic from `Attached` and `AttachedTo`, as with `TryClaim`. |
 | method | `TryClaim` | Optimistically makes the object this peer's: authority and ownership, so nobody else can take it until it is released. It applies here at once and the host is asked; two peers grabbing within a ping both see it in hand until the host's answer takes it from one of them, through `IAuthorityChanged`. So drive game logic from `ClaimedBy` rather than from the return value. A physics body is frozen while claimed; the game moves it. False only when refusal is known here: someone else holds it, it is not transferable, or this peer is not connected. |
+| method | `Unhang` | Takes this object off its carrier on this peer. |
 | method | `UnsupportedReason(Godot.Node)` | Why a root of this type cannot be replicated, or null when it can. |
+| method | `ValueToSend(System.Int32)` | The value property `index` sends: the anchor offset instead of the transform while attached. |
 | method | `VisualProblem(Godot.Node,Godot.Node3D)` | What is wrong with `Visual`, or null: it has to be under the root, never the root itself. |
+| event | `AttachmentChanged` | Raised after this object's attachments, or its own attachment, changed here; for watching another object. |
 | event | `AuthorityChanged` | Raised after the authority or the holder changed, on every peer. |
 | event | `Impulsed` | Raised on the authority of a root that is not a rigid body, exactly once per push: the impulse, for watching another object. The node itself implements `IImpulsed`. The push is also added to `ImpulseVelocity`. A rigid body takes the impulse itself. |
 | event | `Received` | Raised on the authority, exactly once per `Variant` call anywhere: the peer that sent it and what it sent. |
@@ -199,6 +220,7 @@ Sends the state of every `NetworkObject` this peer is authority for, once per ti
 | method | `GetPlaybackStatus(System.Int32)` | How old what `peer` is shown is, averaged over the last second, or null before any state arrived. Measured on arrival and against the clock's running time rather than against the newest tick: a resting peer sends only a heartbeat a second, and "local tick minus newest tick" then read up to a second of delay that was never there. |
 | method | `HandleAuthority(System.Int32,System.Byte[])` | On the host: accepts a guest's change when it is newer and the object is free or already the guest's, and tells everyone; otherwise tells the guest what stands. On a guest: whatever the host says stands. |
 | method | `HandleEvent(System.Int32,System.Byte[])` | Raises an event on its object if this peer is the authority, and passes it on to the authority otherwise. |
+| method | `PlaceAttached` | Puts every attached item on its anchor, carriers before what hangs on them. Once per frame after everything else has processed, from `AttachmentPlacer`. |
 | method | `ReplayEarlySamples(CrackNet.NetworkObject)` | `obj` just changed authority here: the new authority's samples that came first are played from the start of its flight; anyone else's are dropped, since the host did not give it to them. |
 | method | `SendAllAuthorityTo(System.Int32)` | On the host: tells a peer that just joined who has authority over and who holds every object. |
 | method | `SubmitAuthority(CrackNet.NetworkObject)` | Sends an authority change this peer just applied: a guest asks the host, the host tells everyone. |

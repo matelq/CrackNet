@@ -23,6 +23,7 @@ Pick a kind by hand only when the type says the wrong thing: a grenade is a rigi
 |---|---|
 | `Authority.Peer`, `Authority.IsLocal` | The peer that simulates the object and sends its state (Godot's multiplayer authority of the root), and whether it is this one. |
 | `ClaimedBy` | The peer holding the object, or 0. A held object cannot be taken by anyone else. |
+| `Attached`, `AttachedTo` | The items hanging on this object, and what this object hangs on, as this peer shows them. |
 | `PlaybackState` | `Pending` until playback here reaches the first sample, `Playing`, then `Ending` after a despawn. What a projectile checks before it hits someone, instead of `Visible`. |
 | `AuthorityChanged` | Raised on every peer after authority or holder changed; for watching someone else's object. |
 
@@ -35,7 +36,9 @@ the host at rest, a character body touches what it slides into. Games call:
 
 | Call | When |
 |---|---|
-| `TryClaim()` | The object becomes this peer's: authority and ownership, nobody else can take it. The body is frozen while claimed; move it by hand. |
+| `TryAttach(item, anchor)` | Hangs the item on a node under this object's root (a `Marker3D`, under a `BoneAttachment3D` for a bone): claimed, collisions off, placed on every peer's own copy of the anchor after that peer's animation. See [Carrying](#carrying). |
+| `Detach(item)` | Takes it off and lets go; `Impulse` it right after to throw. |
+| `TryClaim()` | The object becomes this peer's: authority and ownership, nobody else can take it. The body is frozen while claimed; move it by hand. For holding without an anchor: a lever, a crate dragged in place. |
 | `ReleaseClaim(velocity)` | Lets go with a velocity: the throw flies on this peer's simulation. |
 | `ReleaseClaim()` | Lets go without one. |
 | `Spread(other)` | Contact the physics engine does not report: a projectile that moves itself, a melee swing. |
@@ -46,6 +49,41 @@ Conflicts are settled by the host. A grab beats a touch, and of two touches the 
 
 The rule to hold on to: **every interaction has exactly one arbiter**, the authority of the object that started it.
 If two peers can both decide the same hit or grab, the mechanic is not finished.
+
+## Carrying
+
+An item in a hand is not a transform stream. While attached it sends no transform: its samples name the carrier and
+the anchor, and every peer, the carrier's own included, puts it on its own copy of the anchor once per frame, after
+that peer's animation and its bone attachments have moved. A hand animated locally from synced parameters and the
+crate in it therefore cannot drift apart, and a held crate at rest in the hand costs a heartbeat a second.
+
+- **The anchor is a node** under the carrier's root: a `Marker3D`, under a `BoneAttachment3D` for a bone. Its path
+  relative to the carrier is what travels; an anchor outside the carrier is refused with an error.
+- **Attach and detach are shown at the carrier's display tick.** The host's record of the claim arrives a playback
+  delay earlier; keyed off it, the crate would sit in the hand before the hand got there. A one-shot animation (grab,
+  throw) is a `[Synced]` counter bumped in the same tick as the `TryAttach` or `Detach`: an observer sees both in the
+  same frame.
+- **A held item passes through the world.** Moved by hand into wherever the hand is, a colliding body would land inside
+  its neighbours and the engine would throw them out of the world; its collision layer and mask are 0 while attached and
+  come back on `Detach`.
+- **A throw is `Detach` and then `Impulse`.** Other peers draw the item catching up from their hand to the thrower's
+  first free sample, through the same smoothing as a handover (`Visual`), instead of jumping.
+- `TryAttach` is optimistic like `TryClaim`: it applies here and the host is asked. A carrier that wants to know when
+  the item is really in its hand on this peer, or is told the host gave it to someone else, implements
+  `IAttachmentChanged` and reads `Attached`.
+
+```
+Player (CharacterBody3D)
+├── CollisionShape3D
+├── NetworkObject
+└── Visual
+    └── Model
+        └── Skeleton3D
+            └── BoneAttachment3D (hand bone)
+                └── Hand (Marker3D)        this.TryAttach(crate, Hand)
+```
+
+Carrying a player is not in yet; a player is refused by `TryAttach`.
 
 ## Events and state
 
@@ -68,6 +106,7 @@ is for watching someone else's object. `CRN006` also fires for a class implement
 |---|---|---|
 | `IAuthorityChanged.OnAuthorityChanged()` | on every peer, after authority or holder changed | `Net().AuthorityChanged` |
 | `IImpulsed.OnImpulsed(impulse)` | on the authority, once per push, for a root that is not a rigid body | `Net().Impulsed` |
+| `IAttachmentChanged.OnAttachmentChanged()` | on every peer, on the carrier and the item, when that peer shows the attachment change | `Net().AttachmentChanged` |
 | `ISpawnedWith<T>.OnSpawned(args)` | on every peer, before the root enters the tree | |
 
 ```csharp

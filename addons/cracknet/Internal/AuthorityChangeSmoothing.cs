@@ -62,6 +62,20 @@ internal sealed class AuthorityChangeSmoothing
     /// <summary>A snap is meant to be seen: the next jump is not smoothed, and what was being smoothed is dropped.</summary>
     public void Snapped() => _snapped = true;
 
+    /// <summary>
+    /// The body was just put where it belongs (on its anchor): nothing to smooth, and the next frame's motion is judged
+    /// from here. Called instead of <see cref="Process"/> while the object hangs on something.
+    /// </summary>
+    public void Following()
+    {
+        _lastBody = _root.GlobalTransform;
+        _lastVelocity = Vector3.Zero;
+        _offset = Vector3.Zero;
+        _rotationOffset = Quaternion.Identity;
+        if (_drawnAway) _visual.Transform = _rest;
+        _drawnAway = false;
+    }
+
     /// <summary>Once per rendered frame, after playback has placed the body.</summary>
     public void Process(double delta)
     {

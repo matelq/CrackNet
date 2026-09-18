@@ -121,6 +121,7 @@ public partial class NetworkObjectServer : Node
         _cmdAuthority = Context.NetworkCommandServer.RegisterCommandAt(CommandIds.ObjectAuthority, HandleAuthority, MultiplayerPeer.TransferModeEnum.Reliable);
         _cmdEvent = Context.NetworkCommandServer.RegisterCommandAt(CommandIds.ObjectEvent, HandleEvent, MultiplayerPeer.TransferModeEnum.Reliable);
         Spawns = new Spawns(this);
+        AddChild(new AttachmentPlacer { Server = this });
         Context.NetworkTime.AfterTick += SendState;
         Context.NetworkEvents.OnPeerLeave += ErasePeer;
         // Spawns first: the authority records name objects the joiner has to have
@@ -445,13 +446,20 @@ public partial class NetworkObjectServer : Node
         {
             if (!obj.Authority.IsLocal || identities.GetIdentifierOf(obj.Root!) is not { } identifier) continue;
 
-            // Flags: 1 teleport, 2 resumed after a rest, 4 final despawn sample, 8 first since this peer took it.
+            // Flags: 1 teleport, 2 resumed after a rest, 4 final despawn sample, 8 first since this peer took it,
+            // 16 attached: the carrier and anchor follow, and the transform is relative to the anchor.
             var resumed = obj.LastSentBody is not null && stateTick - obj.LastSentTick > StateIntervalTicks;
+            var attachment = obj.AttachmentState;
             var writer = new ByteWriter();
             writer.PutU8((byte)((obj.SnapPending ? 1 : 0) | (resumed ? 2 : 0) | (obj.DespawnRequested ? 4 : 0)
-                                | (obj.LastSentBody is null ? FirstSinceTaken : 0)));
-            foreach (var (node, property, _) in obj.Properties)
-                CompactValues.Encode(node.GetValue(property), writer);
+                                | (obj.LastSentBody is null ? FirstSinceTaken : 0) | (attachment is null ? 0 : Attached)));
+            if (attachment is not null)
+            {
+                writer.PutUtf8String(attachment.Carrier);
+                writer.PutUtf8String(attachment.Anchor);
+            }
+            for (var i = 0; i < obj.Properties.Count; i++)
+                CompactValues.Encode(obj.ValueToSend(i), writer);
             var body = writer.ToArray();
 
             // At rest: nothing new to say, apart from a heartbeat for peers that joined since or lost the last one
@@ -547,6 +555,7 @@ public partial class NetworkObjectServer : Node
 
     private const ulong EarlySampleAgeMs = 1_000;
     private const byte FirstSinceTaken = 8;
+    private const byte Attached = 16;
 
     /// <summary>
     /// <paramref name="obj"/> just changed authority here: the new authority's samples that came first are played
@@ -608,6 +617,7 @@ public partial class NetworkObjectServer : Node
         var teleport = (flags & 1) != 0;
         var resumed = (flags & 2) != 0;
         var despawned = (flags & 4) != 0;
+        var attachment = (flags & Attached) != 0 ? new NetworkObject.Attachment(reader.GetUtf8String(), reader.GetUtf8String()) : null;
         var values = new Variant[obj.Properties.Count];
         for (var i = 0; i < values.Length; i++)
             values[i] = CompactValues.Decode(reader);
@@ -623,9 +633,9 @@ public partial class NetworkObjectServer : Node
         // or playback would drift the whole way from where it came to rest. After loss it did not, and holding
         // would freeze the object for the length of the outage and then jump.
         if (resumed && obj.Track.TryGetNewest(out var newestTick, out var newest) && tick - newestTick > StateIntervalTicks)
-            obj.Track.Push(tick - StateIntervalTicks, new NetworkObject.Sample(newest.Values, false, false), shown);
+            obj.Track.Push(tick - StateIntervalTicks, new NetworkObject.Sample(newest.Values, false, false, newest.Attachment), shown);
 
-        if (obj.Track.Push(tick, new NetworkObject.Sample(values, teleport, despawned), shown))
+        if (obj.Track.Push(tick, new NetworkObject.Sample(values, teleport, despawned, attachment), shown))
             obj.Diagnostics.RaiseSampleReceived(tick);
     }
 
@@ -651,23 +661,51 @@ public partial class NetworkObjectServer : Node
         }
     }
 
+    /// <summary>
+    /// Puts every attached item on its anchor, carriers before what hangs on them. Once per frame after everything
+    /// else has processed, from <see cref="AttachmentPlacer"/>.
+    /// </summary>
+    internal void PlaceAttached()
+    {
+        foreach (var obj in _objects)
+            if (obj.Carrier is null) PlaceHangingOn(obj);
+    }
+
+    private static void PlaceHangingOn(NetworkObject carrier)
+    {
+        foreach (var root in carrier.Attached)
+        {
+            if (NetworkObject.Of(root) is not { } item) continue;
+            item.Place();
+            PlaceHangingOn(item);
+        }
+    }
+
     private static void Apply(NetworkObject obj, NetworkObject.Sample from, NetworkObject.Sample to, double fraction)
     {
         // From the first despawn sample on. It is sent repeatedly, so playback spends the grace period between two
         // despawn samples, and waiting for the last one left the object hanging where it ended
         var reachedDespawn = from.Despawned || to.Despawned && fraction >= 1;
+        // Hung or free as of the sample playback is coming from: the switch happens when playback passes the sample
+        // that made it, at the carrier's display tick, not when the host's record of the claim arrived. Across the
+        // switch the transform holds: a world position and an anchor offset have no line between them
+        var attachment = from.Attachment;
+        var switching = from.Attachment != to.Attachment;
         for (var i = 0; i < obj.Properties.Count; i++)
         {
             var (node, property, interpolate) = obj.Properties[i];
             var a = from.Values[i];
             var b = to.Values[i];
             var interpolator = Interpolators.FindInterpolatorFor(a);
+            var isTransform = i == 0 && obj.Root is Node3D;
 
-            var value = interpolate && !to.Snap && !ReferenceEquals(interpolator, Interpolators.DefaultInterpolator)
+            var value = interpolate && !to.Snap && !(switching && isTransform) && !ReferenceEquals(interpolator, Interpolators.DefaultInterpolator)
                 ? interpolator.Apply(a, b, fraction)
-                : fraction >= 1 ? b : a;
-            node.SetValue(property, value);
+                : fraction >= 1 && !(switching && isTransform) ? b : a;
+            if (isTransform && attachment is not null) obj.ShowAttached(attachment, value.AsTransform3D());
+            else node.SetValue(property, value);
         }
+        if (attachment is null) obj.ShowFree();
         // The frame the snap lands in: reaching the snap sample, or already past it
         if (to.Snap && fraction >= 1 || from.Snap) obj.SnapApplied();
 

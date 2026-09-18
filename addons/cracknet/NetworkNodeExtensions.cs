@@ -36,6 +36,18 @@ public static class NetworkNodeExtensions
         /// <inheritdoc cref="NetworkObject.ImpulseVelocity"/>
         public Vector3 ImpulseVelocity => node.Net().ImpulseVelocity;
 
+        /// <inheritdoc cref="NetworkObject.TryAttach"/>
+        public bool TryAttach(Node item, Node3D anchor) => node.Net().TryAttach(item.Net(), anchor);
+
+        /// <inheritdoc cref="NetworkObject.Detach"/>
+        public bool Detach(Node item) => node.Net().Detach(item.Net());
+
+        /// <inheritdoc cref="NetworkObject.Attached"/>
+        public IEnumerable<Node> Attached => node.Net().Attached;
+
+        /// <inheritdoc cref="NetworkObject.AttachedTo"/>
+        public Node? AttachedTo => node.Net().AttachedTo;
+
         /// <inheritdoc cref="NetworkObject.PlaybackState"/>
         public PlaybackState PlaybackState => node.Net().PlaybackState;
 

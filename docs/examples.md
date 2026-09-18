@@ -95,34 +95,33 @@ Walking into a crate takes it. To push it as well, set **Impulse Strength** on t
 inspector (0.6 is a gentle shove): the library pushes the rigid bodies the character slides into, on this peer's
 simulation. No code.
 
-Claim, carry and throw:
+Carry and throw. The hand is a `Marker3D` under the player (under a `BoneAttachment3D` for a bone):
 
 <!-- check: members Player -->
 ```csharp
-private RigidBody3D? _held;
+[Export] public Marker3D Hand { get; set; } = null!;
 
 private void GrabOrThrow(RigidBody3D nearest)
 {
-    if (_held is { } held)
+    if (this.Attached.FirstOrDefault() is RigidBody3D held)
     {
-        held.ReleaseClaim(-GlobalBasis.Z * 9 + Vector3.Up * 2);
-        _held = null;
+        this.Detach(held);
+        held.Impulse((-GlobalBasis.Z * 9 + Vector3.Up * 2) * held.Mass);
     }
-    else if (nearest.TryClaim())
+    else
     {
-        _held = nearest;
+        this.TryAttach(nearest, Hand);
     }
 }
 ```
 
-<!-- check: body Player -->
-```csharp
-// In _PhysicsProcess: a claimed body is frozen, so it goes where it is put
-if (_held is not null) _held.GlobalPosition = GlobalPosition - GlobalBasis.Z * 1.1f + Vector3.Up * 0.6f;
-```
+That is all: the library puts the crate in the hand on every peer, after that peer's animation, and a held crate
+passes through the world instead of shoving it. To hold something in place without an anchor (a lever), `TryClaim()`
+freezes it and `ReleaseClaim()` lets go; the game moves a claimed body itself.
 
-What you get: nobody else can take a claimed crate; a thrown one flies on the thrower's simulation and everyone sees
-that flight.
+What you get: nobody else can take a carried crate; every peer draws it in the hand, exactly where the hand is drawn
+there; a thrown one flies on the thrower's simulation and everyone sees that flight, the crate catching up from the
+hand to it without a jump.
 
 ## 4. Players and players
 

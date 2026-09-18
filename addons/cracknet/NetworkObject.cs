@@ -278,6 +278,165 @@ public partial class NetworkObject : Node
         return true;
     }
 
+    /// <summary>
+    /// Optimistically hangs <paramref name="item"/> on <paramref name="anchor"/>, a node under this object's root (a
+    /// <c>Marker3D</c>, under a <c>BoneAttachment3D</c> for a bone). While attached the item sends no transform: its
+    /// samples name the carrier and the anchor, and every peer, this one included, puts it on its own copy of the anchor
+    /// after that peer's animation, so a hand and what it holds cannot drift apart. The item is claimed, so nobody
+    /// else can take it, and its collisions are off. Other peers show the change when their playback of the item
+    /// reaches it. False only when refusal is known here: the anchor is not under this root (an error), the item is
+    /// attached already, it would carry its own carrier, or it cannot be claimed; drive game logic from
+    /// <see cref="Attached"/> and <see cref="AttachedTo"/>, as with <see cref="TryClaim"/>.
+    /// </summary>
+    public bool TryAttach(NetworkObject item, Node3D anchor)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(anchor);
+        if (Root is not Node3D root || !root.IsAncestorOf(anchor))
+        {
+            Logger.Error("{0}: the anchor {1} is not under this object's root, so its path cannot be sent. Put the anchor under {2}",
+                GetPath(), anchor.GetPath(), Root?.GetPath());
+            return false;
+        }
+        if (ReferenceEquals(item, this) || item._carrier is not null) return false;
+        for (var above = _carrier; above is not null; above = above._carrier)
+            if (ReferenceEquals(above, item)) return false;   // it would carry its own carrier
+        // ponytail: a player (not transferable) is carried in a later step of #70; until then only what can be claimed
+        if (!item.Transferable || !item.TryClaim()) return false;
+        item.Hang(this, anchor, Transform3D.Identity);
+        return true;
+    }
+
+    /// <summary>
+    /// Takes <paramref name="item"/> off this object and lets go of it: from here on it sends its own transform again,
+    /// and a physics body falls or flies. To throw it, <c>Detach</c> and then <see cref="Impulse(Vector3)"/> it. Other
+    /// peers show the change when their playback reaches it and draw the item catching up from the hand to where the
+    /// thrower has it (see <see cref="Visual"/>). False when the item is not attached here or not simulated here.
+    /// </summary>
+    public bool Detach(NetworkObject item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        if (!ReferenceEquals(item._carrier, this) || !item.IsAuthority) return false;
+        item.Unhang();
+        if (item.ClaimedBy == LocalPeer) item.ReleaseClaim();
+        return true;
+    }
+
+    /// <summary>The roots of the items hanging on this object, as this peer shows them.</summary>
+    public IEnumerable<Node> Attached => _attached.Select(item => item.Root!);
+
+    /// <summary>The root of the object this one hangs on, or null, as this peer shows it.</summary>
+    public Node? AttachedTo => _carrier?.Root;
+
+    /// <summary>Raised after this object's attachments, or its own attachment, changed here; for watching another object.</summary>
+    public event Action? AttachmentChanged;
+
+    /// <summary>What an attached item sends instead of a transform: its carrier by full name and the anchor's path under the carrier's root.</summary>
+    internal sealed record Attachment(string Carrier, string Anchor);
+
+    /// <summary>What this item sends about its attachment, or null when it is free.</summary>
+    internal Attachment? AttachmentState { get; private set; }
+
+    internal NetworkObject? Carrier => _carrier;
+
+    private readonly List<NetworkObject> _attached = new();
+    private NetworkObject? _carrier;
+    private Node3D? _anchor;
+    /// <summary>How the item sits on the anchor: identity when hung here, whatever the authority sends otherwise.</summary>
+    private Transform3D _anchorOffset = Transform3D.Identity;
+    private (uint Layer, uint Mask)? _collisionsBeforeAttach;
+    private string? _unresolvedAttachment;
+
+    /// <summary>Hangs this object on <paramref name="anchor"/> of <paramref name="carrier"/> on this peer: by the authority, or by playback.</summary>
+    internal void Hang(NetworkObject carrier, Node3D anchor, Transform3D offset)
+    {
+        _anchorOffset = offset;
+        if (ReferenceEquals(_carrier, carrier) && ReferenceEquals(_anchor, anchor)) return;
+        _carrier?._attached.Remove(this);
+        _carrier = carrier;
+        _anchor = anchor;
+        carrier._attached.Add(this);
+        var carrierName = Context.NetworkIdentityServer.GetIdentifierOf(carrier.Root!)?.FullName ?? "";
+        AttachmentState = new Attachment(carrierName, carrier.Root!.GetPathTo(anchor).ToString());
+        // Moved by hand into the hand's position every frame, a colliding body lands inside whatever is there and the
+        // physics engine throws that out of the world: it passes through things while attached, on every peer
+        if (_collisionsBeforeAttach is null && Root is CollisionObject3D body)
+        {
+            _collisionsBeforeAttach = (body.CollisionLayer, body.CollisionMask);
+            body.CollisionLayer = 0;
+            body.CollisionMask = 0;
+        }
+        Place();
+        NotifyAttachmentChanged(carrier);
+    }
+
+    /// <summary>Takes this object off its carrier on this peer.</summary>
+    internal void Unhang()
+    {
+        if (_carrier is not { } carrier) return;
+        carrier._attached.Remove(this);
+        _carrier = null;
+        _anchor = null;
+        AttachmentState = null;
+        _unresolvedAttachment = null;
+        if (_collisionsBeforeAttach is { } collisions && Root is CollisionObject3D body)
+        {
+            body.CollisionLayer = collisions.Layer;
+            body.CollisionMask = collisions.Mask;
+        }
+        _collisionsBeforeAttach = null;
+        // Where the item goes next is a jump from the hand: on an observer the thrower's first free sample is a
+        // playback delay ahead of its hand. Drawn catching up, as a handover is
+        _smoothing?.Opened();
+        NotifyAttachmentChanged(carrier);
+    }
+
+    private void NotifyAttachmentChanged(NetworkObject carrier)
+    {
+        if (Root is IAttachmentChanged item) item.OnAttachmentChanged();
+        if (carrier.Root is IAttachmentChanged root) root.OnAttachmentChanged();
+        AttachmentChanged?.Invoke();
+        carrier.AttachmentChanged?.Invoke();
+    }
+
+    /// <summary>Puts this attached item on its anchor, where the anchor is now. Once per frame after the animation, and at once when hung.</summary>
+    internal void Place()
+    {
+        if (_anchor is null || Root is not Node3D node || !_anchor.IsInsideTree() || !node.IsInsideTree()) return;
+        node.GlobalTransform = _anchor.GlobalTransform * _anchorOffset;
+        // The hand's motion is not a jump to smooth: the smoothing follows the body while it hangs
+        _smoothing?.Following();
+    }
+
+    /// <summary>The value property <paramref name="index"/> sends: the anchor offset instead of the transform while attached.</summary>
+    internal Variant ValueToSend(int index)
+        => index == 0 && _carrier is not null && Root is Node3D ? _anchorOffset : Properties[index].Node.GetValue(Properties[index].Property);
+
+    /// <summary>Playback reached a sample that hangs this item on <paramref name="attachment"/>: shown on this peer's own copy of the carrier.</summary>
+    internal void ShowAttached(Attachment attachment, Transform3D offset)
+    {
+        if (attachment == AttachmentState)
+        {
+            _anchorOffset = offset;
+            return;
+        }
+        var identifier = Context.NetworkIdentityServer.ResolveReference(AuthorityPeer, Core.Data.NetworkIdentityReference.OfFullName(attachment.Carrier), allowQueue: false);
+        var carrier = identifier is null ? null : Of(identifier.Subject);
+        var anchor = carrier?.Root is Node3D root ? root.GetNodeOrNull<Node3D>(attachment.Anchor) : null;
+        if (carrier is null || anchor is null)
+        {
+            // Not here yet (a late joiner still receiving the scene), or a scene that differs from the authority's
+            if (_unresolvedAttachment != attachment.Carrier)
+                Logger.Warning("{0} is attached to {1} at {2}, which this peer does not have; it stays where it is", Root!.Name, attachment.Carrier, attachment.Anchor);
+            _unresolvedAttachment = attachment.Carrier;
+            return;
+        }
+        Hang(carrier, anchor, offset);
+    }
+
+    /// <summary>Playback reached a free sample: off the carrier, if playback had hung it.</summary>
+    internal void ShowFree() => Unhang();
+
     internal bool ReturnToHost()
         => IsAuthority && ClaimedBy == 0 && LocalPeer != HostPeer
            && Request(HostPeer, 0, AuthoritySequence + 1, OwnershipSequence, null, 0, -1);
@@ -466,6 +625,8 @@ public partial class NetworkObject : Node
             // Every other peer is already showing the old authority close to that, so the handover does not jump back
             if (IsAuthority && Track.TryGetNewest(out _, out var newest)) Jump(newest);
             // Samples are stamped on the previous authority's clock; the new one sends its own, at once even at rest
+            // Whatever hung it was the previous authority's doing: the new one's samples say whether it still hangs
+            Unhang();
             Track.Clear();
             PlaybackCursor.Reset();
             PlaybackStarted = false;
@@ -476,6 +637,8 @@ public partial class NetworkObject : Node
         }
 
         ClaimedBy = owner;
+        // Let go of, or taken from this peer's hand by the host's word: an item hangs only while it is held
+        if (_carrier is not null && IsAuthority && Transferable && ClaimedBy != LocalPeer) Unhang();
         AuthoritySequence = authoritySequence;
         OwnershipSequence = ownershipSequence;
         if (transferableSequence >= TransferableSequence)
@@ -608,7 +771,7 @@ public partial class NetworkObject : Node
     public override void _Process(double delta)
     {
         if (Engine.IsEditorHint()) return;
-        _smoothing?.Process(delta);
+        if (_carrier is null) _smoothing?.Process(delta);
     }
 
     public override void _PhysicsProcess(double delta)
@@ -647,6 +810,8 @@ public partial class NetworkObject : Node
     {
         if (Engine.IsEditorHint()) return;
         _body?.Exited();
+        Unhang();
+        foreach (var item in _attached.ToArray()) item.Unhang();
         Context.NetworkObjectServer?.Deregister(this);
     }
 
@@ -724,11 +889,13 @@ public partial class NetworkObject : Node
         return false;
     }
 
-    internal sealed class Sample(Variant[] values, bool snap, bool despawned)
+    internal sealed class Sample(Variant[] values, bool snap, bool despawned, Attachment? attachment = null)
     {
         public Variant[] Values { get; } = values;
         public bool Snap { get; } = snap;
         public bool Despawned { get; } = despawned;
+        /// <summary>Where the object hangs at this tick, or null when it is free; the transform value is then relative to the anchor.</summary>
+        public Attachment? Attachment { get; } = attachment;
     }
 
     /// <summary>Who simulates a <see cref="NetworkObject"/>, and taking or returning that by hand.</summary>

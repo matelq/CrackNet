@@ -19,40 +19,11 @@ public partial class PhysicsObjectTests : HarnessSuite
         Expect.True(await WaitUntil(() => Client.Context.NetworkTime.IsInitialSyncDone(), 5), "client never synced");
     }
 
-    private static Node World(CrackNetStack stack)
-    {
-        if (stack.GetNodeOrNull("World") is { } world) return world;
-        var viewport = new SubViewport { Name = "World", OwnWorld3D = true, Size = new Vector2I(2, 2) };
-        stack.AddChild(viewport);
-        var floor = new StaticBody3D { Name = "Floor", Position = new Vector3(0, -0.5f, 0) };
-        floor.AddChild(Shapes.Collision(new BoxShape3D { Size = new Vector3(100, 1, 100) }));
-        viewport.AddChild(floor);
-        return viewport;
-    }
-
     private static RigidBody3D Crate(CrackNetStack stack, string name, Vector3 position, bool smoothed = false)
-    {
-        var crate = new RigidBody3D { Name = name, Position = position };
-        crate.SetMultiplayerAuthority(1);
-        crate.AddChild(Shapes.Collision(new BoxShape3D { Size = Vector3.One }));
-        var visual = new Node3D { Name = "Visual" };
-        crate.AddChild(visual);
-        // Longer than the default 0.15 s: a harness frame with four stacks is 30-110 ms, and a fade that fits in one
-        // frame draws as a jump of its own. The mechanism is what is checked here, not the tuning
-        crate.AddChild(new NetworkObject { Name = "NetworkObject", Visual = smoothed ? visual : null, SmoothingTime = 0.5f });
-        World(stack).AddChild(crate);
-        return crate;
-    }
+        => HarnessWorld.Crate(stack, name, position, smoothed);
 
     private static Walker Walker(CrackNetStack stack, int peer, Vector3 position, Vector3 velocity, float pushStrength = 0)
-    {
-        var walker = new Walker { Name = $"Walker{peer}", Position = position, Walk = velocity };
-        walker.SetMultiplayerAuthority(peer);
-        walker.AddChild(Shapes.Collision(new CapsuleShape3D { Radius = 0.4f, Height = 1.8f }));
-        walker.AddChild(new NetworkObject { Name = "NetworkObject", ImpulseStrength = pushStrength });
-        World(stack).AddChild(walker);
-        return walker;
-    }
+        => HarnessWorld.Walker(stack, peer, position, velocity, pushStrength);
 
     private static NetworkObject Net(Node root) => root.GetNode<NetworkObject>("NetworkObject");
 

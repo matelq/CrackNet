@@ -286,6 +286,21 @@ parent sync.
   by a frame. To verify on Godot 4.7.2.
 - **Deliberate gap: animation phase on late join.** A peer joining mid-animation starts looping animations from phase
   zero, since only parameters are replicated, not state and start tick. Accepted for now; revisit when a game shows it.
+- **Built (stage B, step 1, crates):** flag 16 in the sample, then the carrier's full name and the anchor's path
+  under its root, and the transform slot holds the item's offset from the anchor (identity when hung here). A held
+  item at rest in the hand is therefore unchanged and costs a heartbeat a second. Playback switches on the sample it
+  is coming *from*, so the switch lands at the carrier's display tick; across the switch the transform holds, since a
+  world position and an anchor offset have no line between them. Measured at 100 ms: the host's claim record landed
+  16 frames before the hand reached the crate on its screen (`AttachAndDetachSwitchAtTheCarriersDisplayTick`).
+  Placement is once per frame after everything else processed: a node with the highest process priority queues a
+  deferred call, because a skeleton applies its poses and moves its bone attachments in a deferred notification it
+  queued while it processed, and a placement queued after it runs after them whatever the tree order. The
+  authority's own peer places the same way, so the item lags the physics step by a frame in `_PhysicsProcess` there;
+  what is drawn is exact. Attach is not blended: the crate leaving the floor for the hand is the grab, and the grab
+  one-shot covers it; detach opens the handover smoothing window. Collisions: layer and mask 0 while attached, on
+  every peer, restored on detach; the case that shows it is walking into an awake pile with the crate held out
+  (`AHeldItemPassesThroughWhatItIsCarriedIntoAndCollidesAgainWhenLetGo`: top crate shoved 0.87 m without it, 0.00 with).
+  A crate can carry a crate; a cycle is refused; a player is refused until the next step.
 - **Tests first:** per frame on a remote peer during a carried walk with animation, item-to-anchor distance near zero,
   failing on today's carry before the change; attach and detach at the carrier's display tick; no jump during the
   detach blend; a third peer's carried player on its displayed carrier; a late joiner sees the item in the hand.
