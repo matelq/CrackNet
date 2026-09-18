@@ -363,7 +363,7 @@ public partial class PlaygroundSmoke : Node
             if (next <= 0) continue;
             var (fromTick, toTick) = (received[next - 1], received[next]);
             // A gap the client made on purpose - the crate at rest - has no line to follow
-            if (Enumerable.Range(fromTick, toTick - fromTick).Any(at => at % NetworkObjectServer.StateIntervalTicks == 0 && !sentAt.ContainsKey(at)))
+            if (Enumerable.Range(fromTick, toTick - fromTick).Any(at => at % NetworkObjectServer.Instance.StateIntervalTicks == 0 && !sentAt.ContainsKey(at)))
                 continue;
 
             var expected = sentAt[fromTick].Lerp(sentAt[toTick], (float)((tick - fromTick) / (toTick - fromTick)));

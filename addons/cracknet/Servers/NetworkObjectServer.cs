@@ -42,10 +42,22 @@ public partial class NetworkObjectServer : Node
     /// intervals and a margin, so one lost packet does not empty the buffer: with one interval and a half-tick margin,
     /// 30 Hz snapshots left the loss test drawing twice the jumps.
     /// </summary>
-    public double PlaybackDelayTicks { get; set; } = StateIntervalTicks * 2 + 0.5;
+    public double PlaybackDelayTicks
+    {
+        get => _playbackDelayTicks ?? StateIntervalTicks * 2 + 0.5;
+        set => _playbackDelayTicks = value;
+    }
 
-    /// <summary>State goes out every this many ticks: every tick at the default 30 Hz, 30 snapshots a second.</summary>
-    public const int StateIntervalTicks = 1;
+    private double? _playbackDelayTicks;
+
+    /// <summary>Snapshots a second, whatever the tickrate.</summary>
+    public const double SnapshotRate = 30;
+
+    /// <summary>
+    /// State goes out every this many ticks: 2 with the tick on the physics step (the default, 60 Hz), 1 on a 30 Hz
+    /// tick of its own, 30 snapshots a second either way.
+    /// </summary>
+    public int StateIntervalTicks => Math.Max(1, (int)Math.Round(Tickrate / SnapshotRate));
 
     // Times rather than ticks: the tickrate is the physics rate by default and a project may change it
     private const double MaxPlaybackDepthSeconds = 2.0 / 3;
@@ -588,7 +600,7 @@ public partial class NetworkObjectServer : Node
         }
     }
 
-    private static void KeepSample(NetworkObject obj, PlaybackClock clock, int tick, byte[] body)
+    private void KeepSample(NetworkObject obj, PlaybackClock clock, int tick, byte[] body)
     {
         var reader = new ByteReader(body);
 

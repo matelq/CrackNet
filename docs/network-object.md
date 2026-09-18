@@ -119,7 +119,7 @@ displayed positions, so the ray hits what the shooter sees.
 - velocity for a character body, linear and angular velocity for a rigid body;
 - every `[Synced]` property of the root and its descendants, down to a nested `NetworkObject`.
 
-Nothing else. State goes out every `NetworkObjectServer.StateIntervalTicks` ticks (30 Hz: the tick is the physics step by default, 60 Hz);
+Nothing else. State goes out 30 times a second (`NetworkObjectServer.SnapshotRate`), every other tick with the tick on the physics step (the default);
 an unchanged object only once a second. Every object that changed is packed into as few packets per peer as fit
 **Max Sync Packet Size** (1200 bytes by default, under the MTU of any real route).
 

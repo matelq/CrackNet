@@ -93,7 +93,7 @@ public partial class ProjectileTests : HarnessSuite
             "projectile never became visible");
 
         var now = Client.Context.NetworkTime.Tick;
-        var despawnTick = (now + 1) % NetworkObjectServer.StateIntervalTicks == 0 ? now + 1 : now + 2;
+        var despawnTick = (now + 1) % Client.Context.NetworkObjectServer.StateIntervalTicks == 0 ? now + 1 : now + 2;
         Expect.True(fired.Object.Despawn());
         Expect.False(fired.Visible, "authority should hide a despawned projectile immediately");
         Expect.Equal(PlaybackState.Ending, fired.Object.PlaybackState);

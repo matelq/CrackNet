@@ -213,7 +213,7 @@ public partial class NetworkObject : Node
         Root!.ProcessMode = ProcessModeEnum.Disabled;
 
         var graceTicks = Context.NetworkObjectServer.MaxPlaybackDepthTicks
-                         + NetworkObjectServer.StateIntervalTicks * 2;
+                         + Context.NetworkObjectServer.StateIntervalTicks * 2;
         var timer = GetTree().CreateTimer(graceTicks / Context.NetworkTime.Tickrate);
         timer.Timeout += () =>
         {

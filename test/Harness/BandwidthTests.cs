@@ -56,6 +56,8 @@ public partial class BandwidthTests : HarnessSuite
         // Object state only: the harness syncs clocks many times faster than a real session does
         var commands = Host.Context.NetworkCommandServer;
         commands.ResetSentCounts();
+        var sends = 0;
+        Host.GetNode<RigidBody3D>("World/Crate0").Net().Diagnostics.SampleSent += _ => sends++;
         var startTick = Host.Context.NetworkTime.Tick;
         await WaitUntil(() => Host.Context.NetworkTime.Tick >= startTick + 90, 10);
         var seconds = (Host.Context.NetworkTime.Tick - startTick) / (double)Host.Context.NetworkTime.Tickrate;
@@ -68,5 +70,8 @@ public partial class BandwidthTests : HarnessSuite
         GD.Print($"BANDWIDTH moving={Moving} resting={Resting} bytes/s={perSecond:F0} packets/s={packets / seconds:F1} kbit/s={perSecond * 8 / 1000:F0}");
 
         Expect.True(perSecond < BudgetBytesPerSecond, $"{perSecond:F0} bytes/s over a budget of {BudgetBytesPerSecond}");
+        // The snapshot rate is a rate, not a tick count: the tickrate follows the physics by default
+        Expect.True(Math.Abs(sends / seconds - NetworkObjectServer.SnapshotRate) < 2,
+            $"a moving crate went out {sends / seconds:F1} times a second, not {NetworkObjectServer.SnapshotRate}");
     }
 }

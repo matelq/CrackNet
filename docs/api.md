@@ -183,7 +183,8 @@ Sends the state of every `NetworkObject` this peer is authority for, once per ti
 | property | `MaxPlaybackDepthTicks` | The deepest a playback buffer grows to absorb jitter, in ticks; also what a despawn waits out. |
 | property | `PlaybackDelayTicks` | The least number of ticks behind the newest sample remote objects are shown, before jitter adds to it: two send intervals and a margin, so one lost packet does not empty the buffer: with one interval and a half-tick margin, 30 Hz snapshots left the loss test drawing twice the jumps. |
 | property | `RestHeartbeatTicks` | An object whose state has not changed is sent again only this often, in ticks. |
-| field | `StateIntervalTicks` | State goes out every this many ticks: every tick at the default 30 Hz, 30 snapshots a second. |
+| property | `StateIntervalTicks` | State goes out every this many ticks: 2 with the tick on the physics step (the default, 60 Hz), 1 on a 30 Hz tick of its own, 30 snapshots a second either way. |
+| field | `SnapshotRate` | Snapshots a second, whatever the tickrate. |
 | method | `ErasePeer(System.Int32)` | Forgets a peer's clock. On the host, also takes back every object the peer simulated or held and tells everyone: otherwise a crate carried out of the session stays with nobody for good. |
 | method | `GetDisplayTick(System.Int32)` | The display tick for objects of `peer`, or null before anything arrived from it. |
 | method | `GetPlaybackStatus(System.Int32)` | How old what `peer` is shown is, averaged over the last second, or null before any state arrived. Measured on arrival and against the clock's running time rather than against the newest tick: a resting peer sends only a heartbeat a second, and "local tick minus newest tick" then read up to a second of delay that was never there. |

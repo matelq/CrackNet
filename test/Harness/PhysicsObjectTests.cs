@@ -199,7 +199,7 @@ public partial class PhysicsObjectTests : HarnessSuite
 
         Expect.True(await WaitUntil(() => kept.Count > 10, 5), "the observer never played the striker's state");
         // The first sample after the strike is at most one send interval away
-        Expect.True(kept.Min() <= struckAt + NetworkObjectServer.StateIntervalTicks,
+        Expect.True(kept.Min() <= struckAt + Client.Context.NetworkObjectServer.StateIntervalTicks,
             $"the observer's first sample of the flight is for tick {kept.Min()}, struck at {struckAt}: its opening was dropped");
     }
 

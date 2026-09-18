@@ -21,7 +21,7 @@ public partial class NetworkObjectTests : HarnessSuite
         for (var i = 0; i < 60; i++) await NextFrame();
 
         var status = Client.Context.NetworkObjectServer.GetPlaybackStatus(1)!.Value;
-        var interval = NetworkObjectServer.StateIntervalTicks;
+        var interval = Client.Context.NetworkObjectServer.StateIntervalTicks;
 
         // Clock sync error blurs both by a couple of ticks; a readout that swapped or summed the parts, or ignored the
         // latency, falls outside
@@ -47,7 +47,7 @@ public partial class NetworkObjectTests : HarnessSuite
         for (var i = 0; i < 150; i++) await NextFrame();
 
         var status = Client.Context.NetworkObjectServer.GetPlaybackStatus(1)!.Value;
-        Expect.True(status.TotalTicks <= Client.Context.NetworkObjectServer.PlaybackDelayTicks + NetworkObjectServer.StateIntervalTicks + 3,
+        Expect.True(status.TotalTicks <= Client.Context.NetworkObjectServer.PlaybackDelayTicks + Client.Context.NetworkObjectServer.StateIntervalTicks + 3,
             $"a resting host reads {status.TotalTicks:F1} ticks behind with no latency");
     }
 
@@ -179,7 +179,7 @@ public partial class NetworkObjectTests : HarnessSuite
             {
                 moved = true;
                 var shown = Client.Context.NetworkObjectServer.Diagnostics.GetDisplayTick(1) ?? -1;
-                Expect.True(shown >= startedAt - NetworkObjectServer.StateIntervalTicks,
+                Expect.True(shown >= startedAt - Client.Context.NetworkObjectServer.StateIntervalTicks,
                     $"client started moving at display tick {shown:F1}, the host at {startedAt}");
             }
             previous = onClient.Location.X;
