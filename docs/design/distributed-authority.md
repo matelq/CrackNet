@@ -460,6 +460,17 @@ Two decisions here are made but not built, and both matter enough to keep in sig
   animation of a round trip's length), an impulse kept and applied when the carried player is freed, and the first
   free sample shown at once with playback catching up; extrapolating the flight on the thrower's screen only if that
   still bothers.
+  **Built (after the second playtest):** the impulse is not faded while the object is carried, so a throw's impulse
+  reaches the player's peer directly, waits whole and flies when the release comes through the host: 6.00 of
+  8 m/s left at the release before, 8.00 after (`AnImpulseOnACarriedPlayerIsKeptWholeUntilItIsFreed`). Measured
+  there: the thrower's own screen shows the player leave 270-525 ms after the call at 100 ms one way (a round
+  trip through the host, the player's stream back, the playback delay and the state interval); the playground's
+  throw animation starts at the call, which reads as a wind-up. Showing the first free sample at once would save
+  the playback delay's 75 ms of that at the price of a slow-motion catch-up: not built, revisit if a playtest asks.
+  Also built: a release this peer asked for stands against the player's samples from before its peer heard of it,
+  and against the host's record of the grab arriving after it, until the first free sample past the record; a
+  grab and release quicker than the round trip showed hand, free, hand, free on the carrier's screen before
+  (`AQuickGrabAndReleaseDoesNotPutThePlayerBackInTheHand`). And the playground tints its platforms by authority.
 - Extrapolating targets to the present for hit tests, in the style of Photon Fusion "Forecast". Revisit if dodges do
   not count on Casual or Realistic.
 - Sequence number overflow (review finding).

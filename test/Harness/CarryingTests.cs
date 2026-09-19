@@ -874,4 +874,72 @@ public partial class CarryingTests : HarnessSuite
         Expect.True(held.Count > 5, "too few frames measured: " + report);
         Expect.True(worst < CarryTolerance, "the crate drifted out of the hand before the throw reached the host's screen: " + report);
     }
+
+    /// <summary>
+    /// The playground's throw of a player: Detach and an impulse in one tick on the carrier. The impulse reaches the
+    /// player's own peer directly, the release through the host, a transit later; meanwhile the impulse faded at the
+    /// usual rate on a body that was not moving anyway, and the player left the hand with what was left of it. While
+    /// carried the impulse is kept whole and flies the moment the player is freed. Also measured: how long after the
+    /// carrier's call its own screen shows the player leave the hand, the delay a throw wind-up has to cover.
+    /// </summary>
+    [Test]
+    public async Task AnImpulseOnACarriedPlayerIsKeptWholeUntilItIsFreed()
+    {
+        Network.LatencyMs = 100;
+        var stacks = new[] { Host, Client, await ThirdPeer() };
+        var carriers = stacks.Select(stack => HarnessWorld.Walker(stack, 2, new Vector3(0, 1, 0), Vector3.Zero)).ToArray();
+        var carried = stacks.Select(stack => HarnessWorld.Walker(stack, 3, new Vector3(0, 1, 3), Vector3.Zero)).ToArray();
+        var hands = carriers.Select(walker => StillHand(walker)).ToArray();
+        for (var i = 0; i < 20; i++) await NextFrame();
+        Expect.True(carriers[1].TryAttach(carried[1], hands[1]));
+        Expect.True(await WaitUntil(() => carried.All(player => player.AttachedTo is not null), 4), "never carried everywhere");
+
+        var thrownAt = Time.GetTicksMsec();
+        Expect.True(carriers[1].Detach(carried[1]));
+        carried[1].Impulse(new Vector3(0, 0, -8));
+        Expect.True(await WaitUntil(() => carried[2].AttachedTo is null, 4), "the player's own peer never let go");
+        var kept = carried[2].ImpulseVelocity.Length();
+        Expect.True(await WaitUntil(() => carried[1].AttachedTo is null, 4), "the carrier's screen never showed the player leave");
+        var shownAfterMs = Time.GetTicksMsec() - thrownAt;
+        var report = $"impulse left when freed {kept:F2} of 8 m/s; the carrier's screen showed the player leave {shownAfterMs} ms after the call at 100 ms one way";
+        GD.Print("THROWN PLAYER " + report);
+        Expect.True(kept > 7.5f, "the impulse faded while the player was still carried: " + report);
+    }
+
+    /// <summary>
+    /// A grab and a release quicker than the round trip: the carrier's screen shows the player in the hand at once, free
+    /// again at the release, and then, when the player's stream from the grab reaches it, back in the hand until the
+    /// stream reaches the release. Samples older than this peer's release do not refute it: once let go, not back.
+    /// </summary>
+    [Test]
+    public async Task AQuickGrabAndReleaseDoesNotPutThePlayerBackInTheHand()
+    {
+        Network.LatencyMs = 100;
+        var stacks = new[] { Host, Client, await ThirdPeer() };
+        var carriers = stacks.Select(stack => HarnessWorld.Walker(stack, 2, new Vector3(0, 1, 0), Vector3.Zero)).ToArray();
+        var carried = stacks.Select(stack => HarnessWorld.Walker(stack, 3, new Vector3(0, 1, 3), Vector3.Zero)).ToArray();
+        var hands = carriers.Select(walker => StillHand(walker)).ToArray();
+        for (var i = 0; i < 20; i++) await NextFrame();
+
+        var states = new List<string>();
+        var drawn = new DrawnFrame();
+        AddChild(drawn);
+        drawn.Drawn += () =>
+        {
+            var state = carried[1].AttachedTo is null ? "free" : "hand";
+            if (states.Count == 0 || states[^1] != state) states.Add(state);
+        };
+        Expect.True(carriers[1].TryAttach(carried[1], hands[1]));
+        Expect.True(await WaitUntil(() => carried[1].AttachedTo is not null, 2), "the carrier's screen never showed the player in the hand");
+        Expect.True(carried[0].ClaimedBy == 0, "the grab reached the host before the release was asked, so this measures nothing");
+        Expect.True(carriers[1].Detach(carried[1]), "the carrier could not let go");
+        Expect.True(await WaitUntil(() => carried[2].AttachedTo is null && carried[2].ClaimedBy == 0 && carried[0].ClaimedBy == 0, 4), "the release never went through");
+        for (var seconds = 0.0; seconds < 1; seconds += GetProcessDeltaTime()) await NextFrame();
+        drawn.QueueFree();
+
+        var report = "the carrier's screen showed: " + string.Join(" > ", states);
+        GD.Print("QUICK GRAB AND RELEASE " + report);
+        // The first frame drawn may already be the optimistic hand
+        Expect.True(states.SkipWhile(state => state == "free").SequenceEqual(new[] { "hand", "free" }), "the player came back into the hand after the release: " + report);
+    }
 }

@@ -67,7 +67,14 @@ crate in it therefore cannot drift apart, and a held crate at rest in the hand c
   its neighbours and the engine would throw them out of the world; its collision layer and mask are 0 while attached and
   come back on `Detach`.
 - **A throw is `Detach` and then `Impulse`.** Other peers draw the item leaving their own hand along the line to the
-  thrower's first free sample, instead of jumping the difference between the two hands.
+  thrower's first free sample, instead of jumping the difference between the two hands. An impulse on a carried
+  player waits, whole, for the moment its own peer frees it: the impulse travels straight to that peer while the
+  release goes through the host, and it must not fade meanwhile. On the thrower's screen a carried player leaves the
+  hand when the player's own stream says so, a round trip through the host plus the playback delay after the call
+  (about 270 ms at 100 ms one way): start the throw animation at the call, as the playground does, and it reads as a
+  wind-up.
+- **What you let go of stays let go.** A grab and a release quicker than the round trip do not put the player back in
+  your hand when its stream from the grab reaches you; its samples from before the release are not believed about it.
 - `TryAttach` is optimistic like `TryClaim`: it applies here and the host is asked. A carrier that wants to know when
   the item is really in its hand on this peer, or is told the host gave it to someone else, implements
   `IAttachmentChanged` and reads `Attached`.

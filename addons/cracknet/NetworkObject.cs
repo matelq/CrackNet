@@ -311,6 +311,7 @@ public partial class NetworkObject : Node
             // the record names the carrier and the anchor, and when it reaches the player's own peer that peer hangs
             // the player and its stream tells everyone, so the switch lands at the player's display tick as for a crate
             if (item.ClaimedBy != 0 || item.Root is not Node3D) return false;
+            item.Released = null;
             item.ClaimAttachment = attachment;
             return item.Request(item.AuthorityPeer, LocalPeer, item.AuthoritySequence, item.OwnershipSequence + 1, null, 0, -1);
         }
@@ -345,6 +346,8 @@ public partial class NetworkObject : Node
         // A carried player is put down by the carrier or by itself, through the host: the player's peer lets go when the
         // record arrives, everyone else when the player's stream does
         if (item.ClaimedBy != LocalPeer && !item.IsAuthority) return false;
+        // Samples from before this release still say hung: they do not put it back in the hand here
+        if (!item.IsAuthority && item.AttachmentState is { } released) item.Released = (released, int.MaxValue);
         item.ClaimAttachment = null;
         return item.Request(item.AuthorityPeer, 0, item.AuthoritySequence, item.OwnershipSequence + 1, null, 0, -1);
     }
@@ -392,6 +395,13 @@ public partial class NetworkObject : Node
     internal Attachment? ClaimAttachment { get; set; }
 
     internal NetworkObject? Carrier => _carrier;
+
+    /// <summary>
+    /// The attachment this peer let go of, and from when the player's samples are believed again: the tick the
+    /// host's record of the release arrived, before which its samples may still say hung (all of them until then).
+    /// Playback would otherwise put it back in the hand until its stream reaches the release.
+    /// </summary>
+    internal (Attachment Attachment, int Tick)? Released { get; set; }
 
     /// <summary>
     /// The attachment this peer asked for on a player it does not simulate, while the claim stands: shown here at
@@ -728,6 +738,15 @@ public partial class NetworkObject : Node
 
         ClaimedBy = owner;
         ClaimAttachment = claimAttachment;
+        if (Released is { } let && let.Tick == int.MaxValue)
+        {
+            // The record of the grab, arriving after this peer already let go: not back in the hand for the round trip
+            if (ClaimedBy == LocalPeer && claimAttachment == let.Attachment) ClaimAttachment = null;
+            // The host's record of the release: the player's peer heard at about the same time, so its samples from
+            // before now may still say hung, and later ones do not. This peer's own request is applied here too, at
+            // once, and is not that word
+            else if (ClaimedBy != LocalPeer && notify) Released = (let.Attachment, Context.NetworkTime.Tick);
+        }
         if (IsAuthority)
         {
             // An item hangs only while its carrier's peer holds it: let go of, or taken from that hand by the host's word
@@ -875,8 +894,10 @@ public partial class NetworkObject : Node
     {
         if (Engine.IsEditorHint()) return;
         _body?.PhysicsProcess();
-        // After the root's own step, which is where the game read it: a child processes after its parent
-        ImpulseVelocity = ImpulseVelocity.MoveToward(Vector3.Zero, ImpulseDecay * (float)delta);
+        // After the root's own step, which is where the game read it: a child processes after its parent. Not while
+        // carried: a throw's impulse reaches the player's peer directly, the release through the host, and the push
+        // waits whole for the moment the player is freed rather than fading on a body that is not moving anyway
+        if (_carrier is null) ImpulseVelocity = ImpulseVelocity.MoveToward(Vector3.Zero, ImpulseDecay * (float)delta);
     }
 
     /// <summary>

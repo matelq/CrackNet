@@ -756,6 +756,14 @@ public partial class NetworkObjectServer : Node
         // changes in the frame the state does. Held instead, it stood for a state interval and then jumped it
         var atEnd = fraction >= 1;
         var sampled = atEnd ? to.Attachment : from.Attachment;
+        // What this peer let go of stays let go: the player's samples from before its peer heard of the release still
+        // say hung, and they do not put it back in the hand here. Believed again from the first free sample past the
+        // record of the release, since that peer heard a moment earlier or later than this one
+        if (obj.Released is { } released && obj.DisplayTick is { } shownTick)
+        {
+            if (shownTick >= released.Tick && sampled is null) obj.Released = null;
+            else if (sampled == released.Attachment) sampled = null;
+        }
         var attachment = sampled ?? obj.ClaimedHere;
         var switching = from.Attachment != to.Attachment;
         for (var i = 0; i < obj.Properties.Count; i++)
