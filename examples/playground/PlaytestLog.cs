@@ -138,8 +138,12 @@ public static class PlaytestLog
             {
                 var slid = offset.DistanceTo(was.Offset) - (player.WalkBlend * PlaygroundPlayer.Speed * delta + 0.01f);
                 var (total, since) = Sliding.TryGetValue(player, out var run) ? run : (0f, Time.GetTicksMsec());
-                if (slid > 0) total += slid;
-                else since = Time.GetTicksMsec();
+                // A leaky bucket. A drift spread over several frames still adds up to something worth a line, but a
+                // frame inside the allowance drains what was collected rather than leaving it standing: summing every
+                // frame's float noise reaches any threshold given a minute, and then reports the minute's worth as if
+                // it had happened in the last two frames
+                total = Math.Max(0, total + slid);
+                if (total <= 0) since = Time.GetTicksMsec();
                 if (total > SlideDistance)
                 {
                     Write(playground, $"SLIDE {player.Name} slid {total:F2} m along {on.Name} in {Time.GetTicksMsec() - since} ms " +
