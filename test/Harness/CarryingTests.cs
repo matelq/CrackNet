@@ -1295,6 +1295,15 @@ public partial class CarryingTests : HarnessSuite
     public async Task AStillRiderIsDrawnStillOnAMovingPlatformOnAnotherPeer() => await StillRider(owner: 2);
 
     /// <summary>
+    /// The fourth playtest, narrowed down by the report: it is the edge it happens on. A character standing there has
+    /// nothing under the middle of it, and the ray that confirms its base looks straight down from there - so it finds
+    /// the ground far below, takes the platform away, and the copy is drawn from world positions while the platform
+    /// goes on without it. The walker stands with its centre past the slider's edge, resting on the rim.
+    /// </summary>
+    [Test]
+    public async Task AStillRiderOnAPlatformsEdgeKeepsItOnAnotherPeer() => await StillRider(owner: 2, z: 2.1f);
+
+    /// <summary>
     /// The same, the way the playtest had it: the player and the platform under it are both the host's, and a guest
     /// watches. Both come from one peer and are shown at one moment there, so there should be nothing left to
     /// disagree about - and it is the case nothing had ever measured.
@@ -1302,7 +1311,7 @@ public partial class CarryingTests : HarnessSuite
     [Test]
     public async Task AStillRiderOfTheHostsIsDrawnStillOnTheHostsPlatformOnAGuest() => await StillRider(owner: 1);
 
-    private async Task StillRider(int owner)
+    private async Task StillRider(int owner, float z = 0)
     {
         // The playtest's link, not a clean one: the bad profile is 150 ms with loss, and a lost sample is what makes
         // playback fill a hole rather than follow the samples it has
@@ -1312,7 +1321,7 @@ public partial class CarryingTests : HarnessSuite
         var sliders = stacks.Select(stack => HarnessWorld.Lift(stack, "Slider", new Vector3(0, 0.25f, 0), new Vector3(40, 0.5f, 4), new Vector3(3, 0, 0))).ToArray();
         // The playtest's own case: the player and the platform under it are both the host's, and a guest watches.
         // Both come from one peer and are shown at one moment there, so nothing should be left to disagree about
-        var walkers = stacks.Select(stack => HarnessWorld.Walker(stack, owner, new Vector3(-3, 2.5f, 0), Vector3.Zero, smoothed: true)).ToArray();
+        var walkers = stacks.Select(stack => HarnessWorld.Walker(stack, owner, new Vector3(-3, z == 0 ? 2.5f : 1.5f, z), Vector3.Zero, smoothed: true)).ToArray();
         foreach (var walker in walkers)
         {
             walker.Falls = true;

@@ -378,11 +378,26 @@ internal abstract class PhysicsHandling
         /// <summary>Whether a ray from the character's origin down through its feet hits <paramref name="under"/> first.</summary>
         private static bool StandsOn(CharacterBody3D body, CollisionObject3D under)
         {
+            // Pressed a little further down, does its own shape still meet what it stands on? A ray from the middle
+            // of the character instead would miss a platform it stands on the very edge of, find the ground far
+            // below, and take the platform away: the copy is then drawn from world positions while the platform
+            // goes on without it, which is a rider sliding off the edge on every screen but its own
+            var collision = new KinematicCollision3D();
+            if (body.TestMove(body.GlobalTransform, Vector3.Down * FootProbe, collision, maxCollisions: 4))
+            {
+                for (var i = 0; i < collision.GetCollisionCount(); i++)
+                    if (collision.GetCollider(i) == under) return true;
+                return false;
+            }
+            // Margins leave a body at rest meeting nothing in so short a press. Then ask what is under the middle of
+            // it, which is the whole answer for a character standing in the middle of anything
             using var query = PhysicsRayQueryParameters3D.Create(body.GlobalPosition, body.GlobalPosition + Vector3.Down * 3, body.CollisionMask, [body.GetRid()]);
-            var hit = body.GetWorld3D().DirectSpaceState.IntersectRay(query);
-            // Nothing below within reach: in the air over it, or it is farther down than a character is tall
-            return hit.Count == 0 || hit["collider"].AsGodotObject() == under;
+            var below = body.GetWorld3D().DirectSpaceState.IntersectRay(query);
+            return below.Count == 0 || below["collider"].AsGodotObject() == under;
         }
+
+        /// <summary>How far down a character is pressed to ask what it is standing on.</summary>
+        private const float FootProbe = 0.1f;
 
         /// <summary>Whether a floor contact this frame was with something that is not a replicated object.</summary>
         private static bool FloorOfAnotherKind(CharacterBody3D body)
