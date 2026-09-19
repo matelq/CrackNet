@@ -512,6 +512,13 @@ Two decisions here are made but not built, and both matter enough to keep in sig
   first since a take says there was one a state interval before it; missing, it waits for that one up to one
   interval, or until playback reaches the last sample it has, whichever is first, so after a loss nothing stalls
   and the hole is interpolated across as before (a fixed wait of two intervals cost 0.06-0.11 m of stall in the smoke).
+  And when the first free sample is lost outright, the flag goes with it: a change between hung and free across a
+  gap now holds the state before it until an interval before the sample that changes it, flag or no flag, since
+  the change is instantaneous whether the gap was a rest or a loss; the held value is the sample before it in the
+  track, not the newest, since the one after may have come first (0.38 m of drift out of the hand before,
+  `AThrowWhoseFirstSampleIsLostDoesNotDriftTheCrateFromTheHand`; seen first as a 0.77 m flake of the smoke).
+  Seen once after it, in one full run of the suite and not in four more: the guest's crate 1.08 m off on the host's
+  platform over 170 frames; unexplained.
   Rest on a base is judged by the offset from it, averaged over 80 ms, not by the engine's velocity for the copy,
   which swings by half (3.1-4.9 m/s for 4) since playback moves it in render frames; on that velocity the return to
   the host at 3-4 m/s sometimes never came within the window. A common tick numbering is not the missing piece: ticks are already global and comparable across

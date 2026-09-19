@@ -942,4 +942,53 @@ public partial class CarryingTests : HarnessSuite
         // The first frame drawn may already be the optimistic hand
         Expect.True(states.SkipWhile(state => state == "free").SequenceEqual(new[] { "hand", "free" }), "the player came back into the hand after the release: " + report);
     }
+
+    /// <summary>
+    /// The same throw with the first free sample lost instead of late. That sample carries the resumed-after-a-rest
+    /// flag that used to make the host hold the resting value until just before it; lost, the flag was lost with it,
+    /// and the host drew the crate on its way out of the hand from the last heartbeat on. A change of state across a
+    /// gap in the samples is instantaneous whether the gap was a rest or a loss: the state before it holds until an
+    /// interval before the sample that changes it, flag or no flag.
+    /// </summary>
+    [Test]
+    public async Task AThrowWhoseFirstSampleIsLostDoesNotDriftTheCrateFromTheHand()
+    {
+        Network.LatencyMs = 150;
+        var crates = new[] { HarnessWorld.Crate(Host, "Crate", new Vector3(0, 0.5f, 3)), HarnessWorld.Crate(Client, "Crate", new Vector3(0, 0.5f, 3)) };
+        var carriers = new[] { HarnessWorld.Walker(Host, 2, new Vector3(0, 1, 0), Vector3.Zero), HarnessWorld.Walker(Client, 2, new Vector3(0, 1, 0), Vector3.Zero) };
+        var hands = carriers.Select(carrier => StillHand(carrier)).ToArray();
+        for (var i = 0; i < 10; i++) await NextFrame();
+        Expect.True(carriers[1].TryAttach(crates[1], hands[1]));
+        Expect.True(await WaitUntil(() => crates[0].AttachedTo is not null, 3), "the host never showed the crate in the hand");
+        carriers[1].Walk = new Vector3(4, 0, 0);
+        for (var seconds = 0.0; seconds < 1.2; seconds += GetProcessDeltaTime()) await NextFrame();
+
+        var frames = new List<(double Tick, float HandDistance)>();
+        var drawn = new DrawnFrame();
+        AddChild(drawn);
+        drawn.Drawn += () =>
+        {
+            if (crates[0].AttachedTo is not null && crates[0].Net().Diagnostics.DisplayTick is { } tick)
+                frames.Add((tick, crates[0].GlobalPosition.DistanceTo(hands[0].GlobalPosition)));
+        };
+
+        // The throw's samples are kept back, the first of them lost, the rest delivered at once while the host's
+        // playback of peer 2 is still well before the throw (peer 2's state goes out one packet per tick)
+        Network.HoldUnreliableFrom = 2;
+        var detachTick = Client.Context.NetworkTime.Tick + 1;
+        Expect.True(carriers[1].Detach(crates[1]));
+        crates[1].Impulse(new Vector3(0, 2, -6) * crates[1].Mass);
+        var interval = Client.Context.NetworkObjectServer.StateIntervalTicks;
+        Expect.True(await WaitUntil(() => Client.Context.NetworkTime.Tick > detachTick + 3 * interval, 2));
+        Network.ReleaseHeld(dropFirst: 1);
+        Expect.True(await WaitUntil(() => crates[0].AttachedTo is null, 3), "the host never showed the throw");
+        drawn.QueueFree();
+
+        var held = frames.Where(frame => frame.Tick <= detachTick - 2 * interval).ToList();
+        var worst = held.Count == 0 ? 0 : held.Max(frame => frame.HandDistance);
+        var report = $"worst {worst:F3} m from the hand over {held.Count} frames before the throw's display tick";
+        GD.Print("THROW WITH ITS FIRST SAMPLE LOST " + report);
+        Expect.True(held.Count > 5, "too few frames measured: " + report);
+        Expect.True(worst < CarryTolerance, "the crate drifted out of the hand before the throw reached the host's screen: " + report);
+    }
 }

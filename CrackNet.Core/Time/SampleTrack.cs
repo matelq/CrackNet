@@ -72,6 +72,22 @@ public sealed class SampleTrack<T>
         return true;
     }
 
+    /// <summary>The sample just before <paramref name="tick"/>, if any.</summary>
+    public bool TryGetBefore(int tick, out int foundTick, out T value)
+    {
+        foundTick = 0;
+        value = default!;
+        var keys = _samples.Keys;
+        for (var i = keys.Count - 1; i >= 0; i--)
+        {
+            if (keys[i] >= tick) continue;
+            foundTick = keys[i];
+            value = _samples.Values[i];
+            return true;
+        }
+        return false;
+    }
+
     /// <summary>The newest sample, if any.</summary>
     public bool TryGetNewest(out int tick, out T value)
     {

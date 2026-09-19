@@ -50,12 +50,18 @@ public sealed class LoopbackNetwork
     /// </summary>
     public int? HoldUnreliableFrom { get; set; }
 
+    /// <summary>Drops the next <see cref="DropCount"/> unreliable packets from this peer: a loss placed on purpose.</summary>
+    public int? DropUnreliableFrom { get; set; }
+
+    public int DropCount { get; set; }
+
     private readonly List<(LoopbackMultiplayerPeer To, LoopbackPacket Packet)> _held = new();
 
-    public void ReleaseHeld()
+    /// <param name="dropFirst">How many of the oldest held packets are lost instead of delivered.</param>
+    public void ReleaseHeld(int dropFirst = 0)
     {
         HoldUnreliableFrom = null;
-        for (var i = _held.Count - 1; i >= 0; i--) _held[i].To.Receive(_held[i].Packet, 0);
+        for (var i = _held.Count - 1; i >= dropFirst; i--) _held[i].To.Receive(_held[i].Packet, 0);
         _held.Clear();
     }
 
@@ -128,6 +134,11 @@ public sealed class LoopbackNetwork
             if (link.PacketLoss > 0 && _rng.NextDouble() < link.PacketLoss) continue;
             if (Bursts is { } bursts && NetworkSimulator.InLossBurst(bursts, Time.GetTicksMsec())) continue;
 
+            if (DropUnreliableFrom == from && DropCount > 0)
+            {
+                DropCount--;
+                continue;
+            }
             if (HoldUnreliableFrom == from)
             {
                 _held.Add((peer, new LoopbackPacket(from, data, mode, channel)));

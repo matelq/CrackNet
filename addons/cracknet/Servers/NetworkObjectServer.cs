@@ -686,9 +686,12 @@ public partial class NetworkObjectServer : Node
 
         // After a rest the sender skipped ticks on purpose: hold the resting value until just before this sample,
         // or playback would drift the whole way from where it came to rest. After loss it did not, and holding
-        // would freeze the object for the length of the outage and then jump.
-        if (resumed && obj.Track.TryGetNewest(out var newestTick, out var newest) && tick - newestTick > StateIntervalTicks)
-            obj.Track.Push(tick - StateIntervalTicks, new NetworkObject.Sample(newest.Values, false, false, newest.Attachment), shown);
+        // would freeze the object for the length of the outage and then jump. A change of hung or free across the
+        // gap holds either way: it is instantaneous, and the flag that says which it was may be on the lost packet.
+        // Against the sample before this one in the track, not the newest: the one after it may have come first
+        if (obj.Track.TryGetBefore(tick, out var previousTick, out var previous) && tick - previousTick > StateIntervalTicks
+            && (resumed || previous.Attachment != attachment))
+            obj.Track.Push(tick - StateIntervalTicks, new NetworkObject.Sample(previous.Values, false, false, previous.Attachment), shown);
 
         if (obj.Track.Push(tick, new NetworkObject.Sample(values, teleport, despawned, attachment), shown))
             obj.Diagnostics.RaiseSampleReceived(tick);
