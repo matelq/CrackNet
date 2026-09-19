@@ -5,8 +5,9 @@ namespace CrackNet.Examples.Playground;
 
 /// <summary>
 /// A per-window log for playtests, to read afterwards rather than watch: user://playtest/&lt;start&gt;_pid&lt;pid&gt;.log,
-/// one line per event, flushed at once so a killed window keeps it. Lines start with milliseconds since start,
-/// physics frame and this window's peer (0 before connecting).
+/// one line per event, flushed at once so a killed window keeps it. Lines start with milliseconds since start, the
+/// network tick, the physics frame and this window's peer (0 before connecting). The tick is the same number on every
+/// peer, so two windows' logs are read against each other on it; the milliseconds are each window's own.
 /// <list type="bullet">
 /// <item>ACTION: what the local player did (grab, throw, shoot, push); SHOT: a shot hit a crate.</item>
 /// <item>AUTH: a crate changed authority or holder here, with its state at that moment.</item>
@@ -19,7 +20,8 @@ namespace CrackNet.Examples.Playground;
 /// <item>RIDE: twice a second, every player standing on something, where it stands on it. The same player logged in
 /// two windows says whether every screen has it in the same place on the platform.</item>
 /// <item>SLIDE: a player drifting along what it stands on by more than <see cref="SlideDistance"/> beyond what its
-/// own walk covers - the platform carrying its copy somewhere its own peer does not have it.</item>
+/// own walk covers - the platform carrying its copy somewhere its own peer does not have it. The half second before
+/// it follows, frame by frame, for that player alone: where it was, on what, and at which display tick.</item>
 /// </list>
 /// Off unless <c>playground/playtest_log</c> is on in Project Settings, <c>-- --log</c> is on the command line, or F3
 /// is pressed in game, which also says so on screen. Never on under <c>--smoke</c>.
@@ -51,6 +53,7 @@ public static class PlaytestLog
     private static readonly Dictionary<PlaygroundCrate, ulong> ChangedAt = new();
     private static readonly Dictionary<PlaygroundPlayer, (Node3D? On, Vector3 Offset)> LastRide = new();
     private static readonly Dictionary<PlaygroundPlayer, (float Slid, ulong Since)> Sliding = new();
+    private static readonly Queue<(ulong Frame, PlaygroundPlayer Player, string Line)> Ridden = new();
     private static ulong _lastLaunch;
 
     private static FileAccess? File(Node node)
@@ -67,7 +70,7 @@ public static class PlaytestLog
     {
         if (File(node) is not { } file) return;
         var peer = node.Multiplayer.MultiplayerPeer is null or OfflineMultiplayerPeer ? 0 : node.Multiplayer.GetUniqueId();
-        file.StoreLine($"{Time.GetTicksMsec()} f{Engine.GetPhysicsFrames()} p{peer} {line}");
+        file.StoreLine($"{Time.GetTicksMsec()} t{NetworkTime.Instance.Tick} f{Engine.GetPhysicsFrames()} p{peer} {line}");
         file.Flush();
     }
 
@@ -76,6 +79,15 @@ public static class PlaytestLog
            $"holder {crate.ClaimedBy} frozen {crate.Freeze} layer {crate.CollisionLayer}";
 
     public static void Action(PlaygroundPlayer player, string what) => Write(player, $"ACTION {player.Name} {what} at {player.GlobalPosition:F2}");
+
+    /// <summary>
+    /// One player's place this frame: where it is, what it stands on and where on it, how much of that is its own
+    /// walk, and the tick its copy is being drawn at. The same player read from two windows lines up on that tick.
+    /// </summary>
+    private static string Ride(PlaygroundPlayer player, Node3D? on, Vector3 offset)
+        => $"{player.Name}@{player.Peer} {(on is null ? "free" : $"on {on.Name} at {offset:F2}")} " +
+           $"world {player.GlobalPosition:F2} drawn {player.GetNode<Node3D>("Visual").GlobalPosition:F2} " +
+           $"walk {player.WalkBlend:F2} shown {player.Net().Diagnostics.DisplayTick?.ToString("F1") ?? "own"}";
 
     public static void Note(Node node, string what) => Write(node, what);
 
@@ -121,6 +133,7 @@ public static class PlaytestLog
         {
             var on = player.Net().Diagnostics.StandingOn as Node3D;
             var offset = on is null ? player.GlobalPosition : on.GlobalTransform.AffineInverse() * player.GlobalPosition;
+            Ridden.Enqueue((frame, player, Ride(player, on, offset)));
             if (LastRide.TryGetValue(player, out var was) && ReferenceEquals(was.On, on) && on is not null)
             {
                 var slid = offset.DistanceTo(was.Offset) - (player.WalkBlend * PlaygroundPlayer.Speed * delta + 0.01f);
@@ -130,8 +143,9 @@ public static class PlaytestLog
                 if (total > SlideDistance)
                 {
                     Write(playground, $"SLIDE {player.Name} slid {total:F2} m along {on.Name} in {Time.GetTicksMsec() - since} ms " +
-                                      $"beyond its own walk (blend {player.WalkBlend:F2}), at {player.GlobalPosition:F2}, " +
-                                      $"on it at {offset:F2}, drawn {player.GetNode<Node3D>("Visual").GlobalPosition:F2}");
+                                      $"beyond its own walk (blend {player.WalkBlend:F2})");
+                    foreach (var (entryFrame, _, line) in Ridden.Where(entry => ReferenceEquals(entry.Player, player)))
+                        Write(playground, $"  f{entryFrame} {line}");
                     total = 0;
                     since = Time.GetTicksMsec();
                 }
@@ -139,13 +153,14 @@ public static class PlaytestLog
             }
             LastRide[player] = (on, offset);
         }
+        while (Ridden.Count > 0 && Ridden.Peek().Frame + FramesBefore < frame) Ridden.Dequeue();
 
-        if (frame % 30 == 0)
+        // Often enough to follow a run along a platform, and cheap: one line for everyone standing on something
+        if (frame % 6 == 0)
         {
             var riding = players.Where(player => player.Net().Diagnostics.StandingOn is Node3D)
-                .Select(player => $"{player.Name} on {player.Net().Diagnostics.StandingOn!.Name} at " +
-                                  $"{((Node3D)player.Net().Diagnostics.StandingOn!).GlobalTransform.AffineInverse() * player.GlobalPosition:F2} " +
-                                  $"walk {player.WalkBlend:F2}");
+                .Select(player => Ride(player, (Node3D)player.Net().Diagnostics.StandingOn!,
+                    ((Node3D)player.Net().Diagnostics.StandingOn!).GlobalTransform.AffineInverse() * player.GlobalPosition));
             var ride = string.Join("; ", riding);
             if (ride.Length > 0) Write(playground, $"RIDE {ride}");
         }
