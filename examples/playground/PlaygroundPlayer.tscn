@@ -1,4 +1,4 @@
-[gd_scene load_steps=13 format=3]
+[gd_scene load_steps=19 format=3]
 
 [ext_resource type="Script" path="res://examples/playground/PlaygroundPlayer.cs" id="1"]
 [ext_resource type="Script" path="res://addons/cracknet/NetworkObject.cs" id="2"]
@@ -14,25 +14,43 @@ animation = &"Idle"
 [sub_resource type="AnimationNodeAnimation" id="Node_run"]
 animation = &"Running_A"
 
-[sub_resource type="AnimationNodeAnimation" id="Node_gesture"]
-animation = &"Throw"
+[sub_resource type="AnimationNodeBlend2" id="Node_walk_blend"]
 
 [sub_resource type="AnimationNodeAnimation" id="Node_air"]
 animation = &"Jump_Idle"
 
-[sub_resource type="AnimationNodeBlend2" id="Node_walk_blend"]
-
 [sub_resource type="AnimationNodeBlend2" id="Node_air_blend"]
 
-[sub_resource type="AnimationNodeAnimation" id="Node_upper"]
+[sub_resource type="AnimationNodeAnimation" id="Node_throw_clip"]
+animation = &"Throw"
+use_custom_timeline = true
+timeline_length = 0.87
+stretch_time_scale = false
+start_offset = 0.5
+
+[sub_resource type="AnimationNodeOneShot" id="Node_throw_shot"]
+
+[sub_resource type="AnimationNodeAnimation" id="Node_pickup_clip"]
+animation = &"PickUp"
+
+[sub_resource type="AnimationNodeOneShot" id="Node_pickup_shot"]
+
+[sub_resource type="AnimationNodeAnimation" id="Node_shoot_clip"]
+animation = &"1H_Ranged_Shoot"
+
+[sub_resource type="AnimationNodeOneShot" id="Node_shoot_shot"]
+filter_enabled = true
+filters = ["Rig/Skeleton3D:chest", "Rig/Skeleton3D:elbowIK.l", "Rig/Skeleton3D:elbowIK.r", "Rig/Skeleton3D:hand.l", "Rig/Skeleton3D:hand.r", "Rig/Skeleton3D:handIK.l", "Rig/Skeleton3D:handIK.r", "Rig/Skeleton3D:handslot.l", "Rig/Skeleton3D:handslot.r", "Rig/Skeleton3D:head", "Rig/Skeleton3D:lowerarm.l", "Rig/Skeleton3D:lowerarm.r", "Rig/Skeleton3D:spine", "Rig/Skeleton3D:upperarm.l", "Rig/Skeleton3D:upperarm.r", "Rig/Skeleton3D:wrist.l", "Rig/Skeleton3D:wrist.r"]
+
+[sub_resource type="AnimationNodeAnimation" id="Node_hit_clip"]
 animation = &"Hit_A"
 
-[sub_resource type="AnimationNodeOneShot" id="Node_gesture_one_shot"]
-
-[sub_resource type="AnimationNodeOneShot" id="Node_upper_one_shot"]
+[sub_resource type="AnimationNodeOneShot" id="Node_hit_shot"]
+filter_enabled = true
+filters = ["Rig/Skeleton3D:chest", "Rig/Skeleton3D:elbowIK.l", "Rig/Skeleton3D:elbowIK.r", "Rig/Skeleton3D:hand.l", "Rig/Skeleton3D:hand.r", "Rig/Skeleton3D:handIK.l", "Rig/Skeleton3D:handIK.r", "Rig/Skeleton3D:handslot.l", "Rig/Skeleton3D:handslot.r", "Rig/Skeleton3D:head", "Rig/Skeleton3D:lowerarm.l", "Rig/Skeleton3D:lowerarm.r", "Rig/Skeleton3D:spine", "Rig/Skeleton3D:upperarm.l", "Rig/Skeleton3D:upperarm.r", "Rig/Skeleton3D:wrist.l", "Rig/Skeleton3D:wrist.r"]
 
 [sub_resource type="AnimationNodeBlendTree" id="BlendTree"]
-nodes/output/position = Vector2(1100, 100)
+nodes/output/position = Vector2(1600, 100)
 nodes/Idle/node = SubResource("Node_idle")
 nodes/Idle/position = Vector2(0, 0)
 nodes/WalkAnimation/node = SubResource("Node_run")
@@ -40,18 +58,26 @@ nodes/WalkAnimation/position = Vector2(0, 150)
 nodes/Walk/node = SubResource("Node_walk_blend")
 nodes/Walk/position = Vector2(250, 50)
 nodes/AirAnimation/node = SubResource("Node_air")
-nodes/AirAnimation/position = Vector2(250, 200)
+nodes/AirAnimation/position = Vector2(250, 250)
 nodes/Air/node = SubResource("Node_air_blend")
-nodes/Air/position = Vector2(450, 100)
-nodes/GestureAnimation/node = SubResource("Node_gesture")
-nodes/GestureAnimation/position = Vector2(450, 300)
-nodes/Gesture/node = SubResource("Node_gesture_one_shot")
-nodes/Gesture/position = Vector2(650, 100)
-nodes/UpperAnimation/node = SubResource("Node_upper")
-nodes/UpperAnimation/position = Vector2(650, 300)
-nodes/Upper/node = SubResource("Node_upper_one_shot")
-nodes/Upper/position = Vector2(900, 100)
-node_connections = [&"output", 0, &"Upper", &"Walk", 0, &"Idle", &"Walk", 1, &"WalkAnimation", &"Air", 0, &"Walk", &"Air", 1, &"AirAnimation", &"Gesture", 0, &"Air", &"Gesture", 1, &"GestureAnimation", &"Upper", 0, &"Gesture", &"Upper", 1, &"UpperAnimation"]
+nodes/Air/position = Vector2(500, 100)
+nodes/ThrowAnimation/node = SubResource("Node_throw_clip")
+nodes/ThrowAnimation/position = Vector2(500, 350)
+nodes/Throw/node = SubResource("Node_throw_shot")
+nodes/Throw/position = Vector2(750, 100)
+nodes/PickUpAnimation/node = SubResource("Node_pickup_clip")
+nodes/PickUpAnimation/position = Vector2(750, 350)
+nodes/PickUp/node = SubResource("Node_pickup_shot")
+nodes/PickUp/position = Vector2(1000, 100)
+nodes/ShootAnimation/node = SubResource("Node_shoot_clip")
+nodes/ShootAnimation/position = Vector2(1000, 350)
+nodes/Shoot/node = SubResource("Node_shoot_shot")
+nodes/Shoot/position = Vector2(1250, 100)
+nodes/HitAnimation/node = SubResource("Node_hit_clip")
+nodes/HitAnimation/position = Vector2(1250, 350)
+nodes/Hit/node = SubResource("Node_hit_shot")
+nodes/Hit/position = Vector2(1450, 100)
+node_connections = [&"output", 0, &"Hit", &"Walk", 0, &"Idle", &"Walk", 1, &"WalkAnimation", &"Air", 0, &"Walk", &"Air", 1, &"AirAnimation", &"Throw", 0, &"Air", &"Throw", 1, &"ThrowAnimation", &"PickUp", 0, &"Throw", &"PickUp", 1, &"PickUpAnimation", &"Shoot", 0, &"PickUp", &"Shoot", 1, &"ShootAnimation", &"Hit", 0, &"Shoot", &"Hit", 1, &"HitAnimation"]
 
 [node name="Player" type="CharacterBody3D"]
 collision_layer = 2
@@ -77,12 +103,18 @@ tree_root = SubResource("BlendTree")
 anim_player = NodePath("../Visual/Knight/AnimationPlayer")
 parameters/Walk/blend_amount = 0.0
 parameters/Air/blend_amount = 0.0
-parameters/Gesture/active = false
-parameters/Gesture/internal_active = false
-parameters/Gesture/request = 0
-parameters/Upper/active = false
-parameters/Upper/internal_active = false
-parameters/Upper/request = 0
+parameters/Throw/active = false
+parameters/Throw/internal_active = false
+parameters/Throw/request = 0
+parameters/PickUp/active = false
+parameters/PickUp/internal_active = false
+parameters/PickUp/request = 0
+parameters/Shoot/active = false
+parameters/Shoot/internal_active = false
+parameters/Shoot/request = 0
+parameters/Hit/active = false
+parameters/Hit/internal_active = false
+parameters/Hit/request = 0
 
 [node name="NetworkObject" type="Node" parent="." node_paths=PackedStringArray("Visual")]
 script = ExtResource("2")
