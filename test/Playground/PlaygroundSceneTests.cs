@@ -70,6 +70,46 @@ public partial class PlaygroundSceneTests : TestSuite
     }
 
     /// <summary>
+    /// Aiming is a synced point and a <c>LookAtModifier3D</c> on the spine: the upper body turns to the point, and the
+    /// hand a crate is carried in - a marker under a bone attachment below that bone - comes with it. Two knights, the
+    /// second of them stepping across the first's line of sight so the first's aim locks on to it: what the first aims
+    /// at is the point it decided on, not the other knight, and its hand has moved by the frame this reads it.
+    /// </summary>
+    [Test]
+    public async Task TheUpperBodyAndTheHandTurnToTheAimedPoint()
+    {
+        var scene = GD.Load<PackedScene>("res://examples/playground/PlaygroundPlayer.tscn");
+        var knights = new[] { scene.Instantiate<Examples.Playground.PlaygroundPlayer>(), scene.Instantiate<Examples.Playground.PlaygroundPlayer>() };
+        foreach (var knight in knights) AddChild(knight);
+        // In front of the first knight, which faces -Z: near enough and central enough for its aim to lock on
+        knights[1].GlobalPosition = new Vector3(0, 0, -2);
+        for (var i = 0; i < 20; i++) await NextFrame();
+        var (ahead, aheadHand) = Aim(knights[0]);
+
+        knights[1].GlobalPosition = new Vector3(1.2f, 0, -2);
+        for (var i = 0; i < 20; i++) await NextFrame();
+        var (across, acrossHand) = Aim(knights[0]);
+        var aimed = knights[0].AimAt;
+        var other = knights[1].GlobalPosition;
+        foreach (var knight in knights) knight.QueueFree();
+
+        var turned = Mathf.RadToDeg(Mathf.Atan2(across.X, -across.Z) - Mathf.Atan2(ahead.X, -ahead.Z));
+        var report = $"the aim is {aimed} and the other knight at {other}; the body turned {turned:F0} degrees and the hand moved {aheadHand.DistanceTo(acrossHand):F2} m";
+        GD.Print("AIM " + report);
+        Expect.True((aimed with { Y = 0 }).DistanceTo(other with { Y = 0 }) < 0.01f, "the aim did not lock on to the knight in front, so this measures nothing: " + report);
+        Expect.True(turned > 15, "the modifier did not turn the upper body to the aim: " + report);
+        Expect.True(aheadHand.DistanceTo(acrossHand) > 0.2f, "the carrying hand did not come with the upper body: " + report);
+
+        // The flat reach from the spine to the carrying hand, and where that hand is: both after the modifier ran
+        static (Vector3 Reach, Vector3 Hand) Aim(Examples.Playground.PlaygroundPlayer knight)
+        {
+            var skeleton = knight.GetNode<Skeleton3D>("Visual/Knight/Rig/Skeleton3D");
+            var spine = skeleton.GlobalTransform * skeleton.GetBoneGlobalPose(skeleton.FindBone("spine")).Origin;
+            return ((knight.Hand.GlobalPosition - spine) with { Y = 0 }, knight.Hand.GlobalPosition);
+        }
+    }
+
+    /// <summary>
     /// The throw starts at the swing, not at the wind-up before it: the clip spends its first half second pulling the
     /// arm back, and playing that first put half a second between the key and the crate leaving the hand, which reads
     /// as the item waiting for the animation to end. Counted in frames from the gesture to the arm being out front.

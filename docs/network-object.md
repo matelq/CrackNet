@@ -143,15 +143,22 @@ public float WalkBlend
 - **An item on a bone** goes on a `Marker3D` under a `BoneAttachment3D` and is placed after that peer's animation
   and the skeleton's own deferred pass, so it does not lag the hand by a frame. This is what the playground's crate
   rides, and what the smoke measures as the distance from the hand it should be in.
+- **A hand moved by a `SkeletonModifier3D`** - `LookAtModifier3D`, two-bone IK - needs nothing extra: the modifier
+  changes the pose in the skeleton's own modification pass, and the placement is queued behind that pass too. The
+  harness carries a crate in a hand a `LookAtModifier3D` sweeps 2.8 m and finds it 0.000 m from the hand on both
+  peers, where a placement that is not deferred leaves it 0.028 m behind. The playground's knight aims with one.
 - **Aim at synced state**, a `[Synced] Vector3` or the anchor of a carried item, rather than at where this peer
-  happens to draw another player: the two are a playback delay apart.
+  happens to draw another player: the two are a playback delay apart. The playground's `AimAt` is the worked example.
+  Its authority picks the point from the players as it draws them, and the *point* is what travels: every peer turns
+  that knight's spine to the same place and the shot leaves along it, where each peer aiming at its own copy of the
+  target would pose the knight a playback delay away from the shot that arrives.
 - **Not covered here yet**, because nothing in the repo exercises them and this guide does not teach what has not
-  been run: root motion (#75), a hand moved by a `SkeletonModifier3D` (#76), and `AnimationNodeStateMachine`, whose
-  state is an object rather than a parameter and so needs a pattern of its own (#77).
+  been run: root motion (#75) and `AnimationNodeStateMachine`, whose state is an object rather than a parameter and
+  so needs a pattern of its own (#77).
 - **Not in: animation phase on late join.** A peer joining mid-loop starts it from phase zero.
 
-The playground's player is the worked example: `WalkBlend` and `Gesture` in `PlaygroundPlayer.cs`, the tree in
-`PlaygroundPlayer.tscn`. Its flinch shows where a one-shot comes from when the action happened elsewhere: the shove
+The playground's player is the worked example: `WalkBlend`, `Gesture` and `AimAt` in `PlaygroundPlayer.cs`, the tree
+and the `LookAtModifier3D` on the spine in `PlaygroundPlayer.tscn`. Its flinch shows where a one-shot comes from when the action happened elsewhere: the shove
 arrives as a push, `IImpulsed.OnImpulsed` fires on the pushed player's own peer, and the gesture it bumps there travels
 back out like any other state.
 
