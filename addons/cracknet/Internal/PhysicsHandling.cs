@@ -347,9 +347,10 @@ internal abstract class PhysicsHandling
                 else Object.Spread(other);
             }
             // Carried up by a rising platform, or snapped to the floor, the engine reports on-floor without a slide
-            // collision at all: the base then stays what it was. A floor of another kind (the ground) ends it
-            if (!body.IsOnFloor()) Object.Base = null;
-            else if (floorSeen || Object.Base is null) Object.Base = floor ?? (FloorOfAnotherKind(body) ? null : Object.Base);
+            // collision at all: the base then stays what it was. So does a jump: in the air the player is still on the
+            // lift in every sense that matters to the screens that show it against the lift, and a world position
+            // meanwhile put it into a lift shown at another moment. A floor of another kind (the ground) ends it
+            if (body.IsOnFloor() && (floorSeen || Object.Base is null)) Object.Base = floor ?? (FloorOfAnotherKind(body) ? null : Object.Base);
         }
 
         /// <summary>Whether a floor contact this frame was with something that is not a replicated object.</summary>

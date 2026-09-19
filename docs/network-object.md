@@ -102,9 +102,11 @@ Either the carrier or the carried player may `Detach`; a carrier leaving the ses
 **Standing on a moving body** uses the same mechanism without a call. A character whose floor, as the engine reports
 it after `MoveAndSlide`, is another object's body sends its position relative to that body, and every other peer puts
 it on its own copy of the body: a player riding a crate or a lift is drawn on it everywhere rather than a playback
-delay behind it. Nothing is claimed, collisions stay on and `Attached` does not list riders. The game opts out per
-layer through the character's `platform_floor_layers`, as for the platform's velocity. Not in yet: on the rider's own
-peer a copy of a moving body is a frozen static and does not carry the character standing on it.
+delay behind it. Nothing is claimed, collisions stay on and `Attached` does not list riders. A jump does not end the
+ride: the character stays relative to the body through the air until it lands on something else, so a jump on a
+lift lands where its own peer had it on every screen. The game opts out per layer through the character's
+`platform_floor_layers`, as for the platform's velocity. Not in yet: on the rider's own peer a copy of a moving
+body is a frozen static and does not carry the character standing on it.
 
 ## Animation
 

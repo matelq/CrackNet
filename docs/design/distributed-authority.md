@@ -526,6 +526,14 @@ Two decisions here are made but not built, and both matter enough to keep in sig
   `AThrowWhoseFirstSampleIsLostDoesNotDriftTheCrateFromTheHand`; seen first as a 0.77 m flake of the smoke).
   Seen once after it, in one full run of the suite and not in four more: the guest's crate 1.08 m off on the host's
   platform over 170 frames; unexplained.
+- **A jump does not end the ride (third playtest).** In the air the player sent world positions again, and an
+  observer whose links to the host and to the player differ shows the lift and the player at different depths,
+  so the flight sank into the rising lift or hung over it and snapped onto it at the landing. The base is kept
+  until another floor is touched: 0.275 m off against the lift on a peer 30 ms from the host and 150 ms from the
+  player, 0.000 with it (`AJumpOnARisingLiftIsDrawnOnItOnAPeerWithUnevenLinks`). What remains is the step at a
+  landing on another floor, the platform's speed times the depth difference, and the same step when a walker
+  steps onto a moving platform from the ground: only a common display time removes it; until then the Visual
+  smoothing is where it belongs.
   Rest on a base is judged by the offset from it, averaged over 80 ms, not by the engine's velocity for the copy,
   which swings by half (3.1-4.9 m/s for 4) since playback moves it in render frames; on that velocity the return to
   the host at 3-4 m/s sometimes never came within the window. A common tick numbering is not the missing piece: ticks are already global and comparable across

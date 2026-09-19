@@ -1022,4 +1022,73 @@ public partial class CarryingTests : HarnessSuite
         Expect.True(held.Count > 5, "too few frames measured: " + report);
         Expect.True(worst < CarryTolerance, "the crate drifted out of the hand before the throw reached the host's screen: " + report);
     }
+
+    /// <summary>
+    /// The playtest's lift: peer 2's player jumps on the host's rising lift, a third peer watches over links of
+    /// different length (30 ms to the host, 150 ms to peer 2), so it shows the lift and the player at different
+    /// depths. In the air the player used to send world positions again, and against the lift shown at another
+    /// moment it sank into it or hung over it, then snapped onto it at the landing. A jump does not end the ride: the
+    /// base is kept through the air until another floor is touched, so the flight is sent relative to the lift and
+    /// lands where the player's own peer had it.
+    /// </summary>
+    [Test]
+    public async Task AJumpOnARisingLiftIsDrawnOnItOnAPeerWithUnevenLinks()
+    {
+        var stacks = new[] { Host, Client, await ThirdPeer() };
+        Network.SetLink(1, 3, 30);
+        Network.SetLink(2, 3, 150);
+        Network.SetLink(1, 2, 60);
+        var lifts = stacks.Select(stack => HarnessWorld.Lift(stack, "Lift", new Vector3(0, 0.25f, 0), new Vector3(4, 0.5f, 4), Vector3.Zero)).ToArray();
+        var riders = stacks.Select(stack => HarnessWorld.Walker(stack, 2, new Vector3(0, 1.4f, 0), Vector3.Zero)).ToArray();
+        foreach (var rider in riders)
+        {
+            rider.Falls = true;
+            rider.SafeMargin = 0.05f;
+        }
+        for (var i = 0; i < 30; i++) await NextFrame();
+        Expect.True(riders[1].IsOnFloor() && riders[1].GlobalPosition.Y > 1.3f, $"the rider is not standing on the lift: {riders[1].GlobalPosition}");
+        lifts[0].Velocity = new Vector3(0, 1, 0);
+
+        var sent = new SortedList<int, Vector3>();
+        riders[1].Net().Diagnostics.SampleSent += tick => sent[tick] = riders[1].GlobalPosition - lifts[1].GlobalPosition;
+        var shown = new List<(double Tick, Vector3 Offset)>();
+        var drawn = new DrawnFrame();
+        AddChild(drawn);
+        drawn.Drawn += () =>
+        {
+            if (riders[2].Net().Diagnostics.DisplayTick is { } tick) shown.Add((tick, riders[2].GlobalPosition - lifts[2].GlobalPosition));
+        };
+        var jumps = 0;
+        var airFrames = 0;
+        for (var seconds = 0.0; seconds < 3; seconds += GetProcessDeltaTime())
+        {
+            await NextFrame();
+            if (!riders[1].IsOnFloor()) airFrames++;
+            else if (jumps < 3 && seconds > 0.3 * (jumps + 1))
+            {
+                riders[1].Velocity = new Vector3(0, 4, 0);   // a jump: straight up, lands back on the lift
+                riders[1].Falls = true;
+                jumps++;
+            }
+        }
+        drawn.QueueFree();
+
+        var interval = Client.Context.NetworkObjectServer.StateIntervalTicks;
+        var ticks = sent.Keys.ToList();
+        var worst = 0f;
+        var compared = 0;
+        foreach (var (tick, offset) in shown)
+        {
+            var next = ticks.FindIndex(at => at >= tick);
+            if (next <= 0 || ticks[next] - ticks[next - 1] > interval * 2) continue;
+            var expected = sent.Values[next - 1].Lerp(sent.Values[next], (float)((tick - ticks[next - 1]) / (ticks[next] - ticks[next - 1])));
+            worst = Mathf.Max(worst, expected.DistanceTo(offset));
+            compared++;
+        }
+        var report = $"worst {worst:F3} m over {compared} frames, {airFrames} of them in the air over {jumps} jumps; the lift rose {lifts[0].GlobalPosition.Y - 0.25f:F2} m";
+        GD.Print("JUMP ON A LIFT " + report);
+        Expect.True(jumps == 3 && airFrames > 20, "the rider did not jump: " + report);
+        Expect.True(compared > 40, "too few frames compared: " + report);
+        Expect.True(worst < 0.05f, "the observer draws the jumping rider elsewhere against the lift than its peer has it: " + report);
+    }
 }
