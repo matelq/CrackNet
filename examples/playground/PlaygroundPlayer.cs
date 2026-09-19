@@ -19,11 +19,33 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>, IImp
 {
     private const float Speed = 6, JumpSpeed = 5, Gravity = 14, PushStrength = 4, ThrowSpeed = 9, ShotSpeed = 18;
 
-    /// <summary>Seconds into the Throw clip at which the hand is furthest forward and lets go: the swing before it is the wind-up.</summary>
+    /// <summary>
+    /// Seconds into the Throw clip at which the hand is fastest forward and lets go. The clip's first half second is
+    /// the wind-up, which <see cref="OneShots"/> starts past: waiting it out put half a second between the key and
+    /// the crate, and the throw read as the item waiting for the animation to finish rather than leaving the hand.
+    /// </summary>
     private const double ThrowRelease = 0.72;
 
-    /// <summary>The clips the one-shot slot can play, in the order <see cref="Gesture"/> indexes them.</summary>
-    private static readonly string[] OneShots = ["Throw", "PickUp", "1H_Ranged_Shoot", "Hit_A"];
+    /// <summary>
+    /// The clips the one-shot slots can play, in the order <see cref="Gesture"/> indexes them: where in the clip to
+    /// start, and whether it plays on the upper body alone. A shot or a flinch leaves the legs to the walk, so they
+    /// do not stop mid-stride for a second; a throw or a pick-up is the whole body.
+    /// </summary>
+    private static readonly (string Clip, float Start, bool UpperBody)[] OneShots =
+    [
+        ("Throw", (float)ThrowRelease - 0.22f, false),
+        ("PickUp", 0, false),
+        ("1H_Ranged_Shoot", 0, true),
+        ("Hit_A", 0, true),
+    ];
+
+    /// <summary>The bones an upper-body one-shot is allowed to move; the rest stay with whatever the legs are doing.</summary>
+    private static readonly string[] UpperBody =
+    [
+        "spine", "chest", "head", "upperarm.l", "lowerarm.l", "wrist.l", "hand.l", "handslot.l",
+        "upperarm.r", "lowerarm.r", "wrist.r", "hand.r", "handslot.r",
+        "elbowIK.l", "handIK.l", "elbowIK.r", "handIK.r",
+    ];
 
     public int Peer { get; private set; }
     public int Slot { get; private set; }
@@ -33,7 +55,8 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>, IImp
     private Node? _throwing;
     private Marker3D _hand = null!;
     private AnimationTree _animation = null!;
-    private AnimationNodeAnimation? _gestureClip;
+    private AnimationNodeAnimation? _gestureClip, _upperClip;
+    private AnimationPlayer _clips = null!;
 
     /// <summary>Where a carried crate goes: the right hand, moved by the skeleton.</summary>
     public Marker3D Hand => _hand;
@@ -86,8 +109,16 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>, IImp
         {
             if (_gestureKnown && value.Y != field.Y && value.X >= 0 && value.X < OneShots.Length && _gestureClip is not null)
             {
-                _gestureClip.Animation = OneShots[value.X];
-                _animation.Set("parameters/Gesture/request", (int)AnimationNodeOneShot.OneShotRequest.Fire);
+                var (clip, start, upperBody) = OneShots[value.X];
+                var slot = upperBody ? _upperClip! : _gestureClip;
+                slot.Animation = clip;
+                // A start offset is only read off a custom timeline, and the timeline is what is left of the clip:
+                // stretching it would play the swing slower the more of the wind-up is cut
+                slot.UseCustomTimeline = start > 0;
+                slot.StretchTimeScale = false;
+                slot.StartOffset = start;
+                slot.TimelineLength = Mathf.Max(0.01f, _clips.GetAnimation(clip).Length - start);
+                _animation.Set(upperBody ? "parameters/Upper/request" : "parameters/Gesture/request", (int)AnimationNodeOneShot.OneShotRequest.Fire);
             }
             _gestureKnown = true;
             field = value;
@@ -95,7 +126,7 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>, IImp
     }
 
     /// <summary>Plays <paramref name="clip"/> once, here and on every screen this player is drawn on.</summary>
-    private void Play(string clip) => Gesture = new Vector2I(Array.IndexOf(OneShots, clip), Gesture.Y + 1);
+    private void Play(string clip) => Gesture = new Vector2I(Array.FindIndex(OneShots, one => one.Clip == clip), Gesture.Y + 1);
 
     /// <summary>A push delivered to this player - a shove, a shot, a throw - arrives on its own peer: it flinches.</summary>
     public void OnImpulsed(Vector3 impulse) => Play("Hit_A");
@@ -132,12 +163,18 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>, IImp
         // Every player instanced from the scene shares its blend tree: a copy of its own lets this one point the
         // slot at its own clip, as the tint above gives it materials of its own
         _animation.TreeRoot = (AnimationRootNode)_animation.TreeRoot.Duplicate(true);
-        _gestureClip = ((AnimationNodeBlendTree)_animation.TreeRoot).GetNode("GestureAnimation") as AnimationNodeAnimation;
+        var tree = (AnimationNodeBlendTree)_animation.TreeRoot;
+        _gestureClip = tree.GetNode("GestureAnimation") as AnimationNodeAnimation;
+        _upperClip = tree.GetNode("UpperAnimation") as AnimationNodeAnimation;
+        // The upper slot is told which bones it may move; everything left out keeps what the walk below it does
+        var upper = (AnimationNodeOneShot)tree.GetNode("Upper");
+        upper.FilterEnabled = true;
+        foreach (var bone in UpperBody) upper.SetFilterPath($"Rig/Skeleton3D:{bone}", true);
         // The clips come out of the glb as one-shots; the cycles loop. The library is shared by every knight, so this
         // is done once and holds for all
-        var clips = GetNode<AnimationPlayer>("Visual/Knight/AnimationPlayer");
+        _clips = GetNode<AnimationPlayer>("Visual/Knight/AnimationPlayer");
         foreach (var cycle in new[] { "Idle", "Running_A", "Jump_Idle" })
-            clips.GetAnimation(cycle).LoopMode = Animation.LoopModeEnum.Linear;
+            _clips.GetAnimation(cycle).LoopMode = Animation.LoopModeEnum.Linear;
         // This peer's own gestures start from zero; another peer's count is history until its first sample has landed
         _gestureKnown = this.Authority.IsLocal;
         if (this.Authority.IsLocal) AddToGroup("local_player");
@@ -199,7 +236,7 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>, IImp
         PlaytestLog.Action(this, $"throw {item.Name}");
         Play("Throw");
         _throwing = item;
-        _throwDue = Time.GetTicksMsec() / 1000.0 + ThrowRelease;
+        _throwDue = Time.GetTicksMsec() / 1000.0 + ThrowRelease - OneShots[0].Start;
     }
 
     private void Release()

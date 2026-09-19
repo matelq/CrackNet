@@ -24,10 +24,15 @@ animation = &"Jump_Idle"
 
 [sub_resource type="AnimationNodeBlend2" id="Node_air_blend"]
 
+[sub_resource type="AnimationNodeAnimation" id="Node_upper"]
+animation = &"Hit_A"
+
 [sub_resource type="AnimationNodeOneShot" id="Node_gesture_one_shot"]
 
+[sub_resource type="AnimationNodeOneShot" id="Node_upper_one_shot"]
+
 [sub_resource type="AnimationNodeBlendTree" id="BlendTree"]
-nodes/output/position = Vector2(750, 100)
+nodes/output/position = Vector2(1100, 100)
 nodes/Idle/node = SubResource("Node_idle")
 nodes/Idle/position = Vector2(0, 0)
 nodes/WalkAnimation/node = SubResource("Node_run")
@@ -42,7 +47,11 @@ nodes/GestureAnimation/node = SubResource("Node_gesture")
 nodes/GestureAnimation/position = Vector2(450, 300)
 nodes/Gesture/node = SubResource("Node_gesture_one_shot")
 nodes/Gesture/position = Vector2(650, 100)
-node_connections = [&"output", 0, &"Gesture", &"Walk", 0, &"Idle", &"Walk", 1, &"WalkAnimation", &"Air", 0, &"Walk", &"Air", 1, &"AirAnimation", &"Gesture", 0, &"Air", &"Gesture", 1, &"GestureAnimation"]
+nodes/UpperAnimation/node = SubResource("Node_upper")
+nodes/UpperAnimation/position = Vector2(650, 300)
+nodes/Upper/node = SubResource("Node_upper_one_shot")
+nodes/Upper/position = Vector2(900, 100)
+node_connections = [&"output", 0, &"Upper", &"Walk", 0, &"Idle", &"Walk", 1, &"WalkAnimation", &"Air", 0, &"Walk", &"Air", 1, &"AirAnimation", &"Gesture", 0, &"Air", &"Gesture", 1, &"GestureAnimation", &"Upper", 0, &"Gesture", &"Upper", 1, &"UpperAnimation"]
 
 [node name="Player" type="CharacterBody3D"]
 collision_layer = 2
@@ -71,6 +80,9 @@ parameters/Air/blend_amount = 0.0
 parameters/Gesture/active = false
 parameters/Gesture/internal_active = false
 parameters/Gesture/request = 0
+parameters/Upper/active = false
+parameters/Upper/internal_active = false
+parameters/Upper/request = 0
 
 [node name="NetworkObject" type="Node" parent="." node_paths=PackedStringArray("Visual")]
 script = ExtResource("2")
