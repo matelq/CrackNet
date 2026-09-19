@@ -108,6 +108,14 @@ lift lands where its own peer had it on every screen. The game opts out per laye
 `platform_floor_layers`, as for the platform's velocity. Not in yet: on the rider's own peer a copy of a moving
 body is a frozen static and does not carry the character standing on it.
 
+**A moving platform with players on it is not first class**, and riding one has a cost worth knowing before you
+build a level on it. A rider measures its place against its own copy of the platform, which trails the platform's
+peer by the depth of that link, while every screen puts it on the platform as they draw it. The two are apart by
+what the platform travels in that time - a metre at 150 ms and 3 m/s - and the difference appears either as a step
+where the rider gets on and off, or as a drift along the platform while it rides. Which one you get is a choice,
+not a defect to fix: the metres are conserved unless the rider and the platform are simulated on the same peer.
+Slow platforms, or ones whose riders come from the peer that drives them, stay inside the noise.
+
 ## Animation
 
 Animation is not sent. Every peer runs its own AnimationTree, and what travels is its inputs, marked `[Synced]` like
