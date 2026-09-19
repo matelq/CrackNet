@@ -19,6 +19,8 @@ namespace CrackNet.Examples.Playground;
 /// every frame, for the crates and players within four metres.</item>
 /// <item>RIDE: twice a second, every player standing on something, where it stands on it. The same player logged in
 /// two windows says whether every screen has it in the same place on the platform.</item>
+/// <item>BASE: a player took something to stand on, or stopped standing on it. A copy that stops riding is drawn
+/// from world positions while the platform goes on without it, which looks exactly like sliding along it.</item>
 /// <item>SLIDE: a player drifting along what it stands on by more than <see cref="SlideDistance"/> beyond what its
 /// own walk covers - the platform carrying its copy somewhere its own peer does not have it. The half second before
 /// it follows, frame by frame, for that player alone: where it was, on what, and at which display tick.</item>
@@ -87,7 +89,9 @@ public static class PlaytestLog
     private static string Ride(PlaygroundPlayer player, Node3D? on, Vector3 offset)
         => $"{player.Name}@{player.Peer} {(on is null ? "free" : $"on {on.Name} at {offset:F2}")} " +
            $"world {player.GlobalPosition:F2} drawn {player.GetNode<Node3D>("Visual").GlobalPosition:F2} " +
-           $"walk {player.WalkBlend:F2} shown {player.Net().Diagnostics.DisplayTick?.ToString("F1") ?? "own"}";
+           $"walk {player.WalkBlend:F2} shown {player.Net().Diagnostics.DisplayTick?.ToString("F1") ?? "own"}" +
+           // The base is drawn at a moment of its own: a rider placed on it at another one is placed wrong
+           (on is null ? "" : $" base shown {on.Net().Diagnostics.DisplayTick?.ToString("F1") ?? "own"}");
 
     public static void Note(Node node, string what) => Write(node, what);
 
@@ -134,6 +138,11 @@ public static class PlaytestLog
             var on = player.Net().Diagnostics.StandingOn as Node3D;
             var offset = on is null ? player.GlobalPosition : on.GlobalTransform.AffineInverse() * player.GlobalPosition;
             Ridden.Enqueue((frame, player, Ride(player, on, offset)));
+            // A rider is put on its base every frame, so a copy still riding cannot drift along it: a drift means it
+            // stopped riding and is being drawn from world positions while the platform goes on without it
+            if (LastRide.TryGetValue(player, out var had) && !ReferenceEquals(had.On, on))
+                Write(playground, $"BASE {player.Name} {(on is null ? $"let go of {had.On!.Name}, last on it at {had.Offset:F2}" : $"took {on.Name}")}, " +
+                                  Ride(player, on, offset));
             if (LastRide.TryGetValue(player, out var was) && ReferenceEquals(was.On, on) && on is not null)
             {
                 var slid = offset.DistanceTo(was.Offset) - (player.WalkBlend * PlaygroundPlayer.Speed * delta + 0.01f);
