@@ -214,7 +214,6 @@ public partial class NetworkObjectServer : Node
     internal void ResetSession()
     {
         _clocks.Clear();
-        _commonTick = double.NegativeInfinity;
         _ages.Clear();
         _pendingAuthority.Clear();
         _pendingSamples.Clear();
@@ -231,28 +230,13 @@ public partial class NetworkObjectServer : Node
     internal double? GetDisplayTick(int peer) => _clocks.TryGetValue(peer, out var clock) ? ShownOf(clock) : null;
 
     /// <summary>
-    /// The one time this screen shows every remote object at: the deepest of its live links' clocks, never running
-    /// back. Each peer's clock still trails that peer's own link by its own depth, but shown each at its own depth a
-    /// platform from the host and a player from a guest were places at two moments, and the player stepping onto it
-    /// slid along it by the platform's speed times the difference (a metre on a link 120 ms deeper than the host's).
-    /// A peer whose clock has stopped, its samples overdue by more than the lead, does not hold the others back.
+    /// Where this peer's objects are shown: its own clock, at its own link's depth. A screen therefore holds as many
+    /// moments as it has peers, and two objects from different peers that touch - a player and the platform under it
+    /// - are places at two moments, which is the limitation written up in #74 and on the parked/common-display-time
+    /// branch. The one time per screen that removed it charged every player on the screen the depth of the worst live
+    /// link: 117 ms became 695 ms with one 300 ms guest present, and the screen held still 415 ms as it joined.
     /// </summary>
-    private double _commonTick = double.NegativeInfinity;
-
-    private void AdvanceCommonTick()
-    {
-        double? deepest = null;
-        foreach (var clock in _clocks.Values)
-            if (clock.IsLive && clock.Time is { } time && (deepest is null || time < deepest)) deepest = time;
-        if (deepest is { } tick && tick > _commonTick) _commonTick = tick;
-    }
-
-    /// <summary>Where this peer's objects are shown: the common time, but never past what the peer has sent.</summary>
-    private double? ShownOf(PlaybackClock clock)
-    {
-        if (clock.Tick is not { } own) return null;
-        return double.IsNegativeInfinity(_commonTick) ? own : Math.Min(_commonTick, clock.Newest);
-    }
+    private static double? ShownOf(PlaybackClock clock) => clock.Tick;
 
     /// <summary>
     /// How old what <paramref name="peer"/> is shown is, averaged over the last second, or null before any state arrived.
@@ -725,6 +709,11 @@ public partial class NetworkObjectServer : Node
                 shown = obj.PlaybackCursor.Start(carried, shared);
             else
             {
+                // The carried tick leads nowhere from here: later than this sample, so the two are out of order on
+                // one track, or far enough apart to be a relocation. Playback starts clean at this sample and the
+                // body slides to it, where it used to be put there in one frame - two peers ten times apart in link
+                // depth hand a crate back and forth and every screen showed the step as a teleport (#80)
+                obj.CrossFadeFromHere();
                 obj.Track.Clear();
                 shown = obj.PlaybackCursor.Start(tick, shared);
             }
@@ -758,8 +747,6 @@ public partial class NetworkObjectServer : Node
             clock.Advance(elapsedTicks);
             if (clock.Time is { } time) AddAge(AgesOf(peer).Total, Math.Max(0, LocalTick - time));
         }
-        AdvanceCommonTick();
-
         if (_pendingSamples.Count > 0) ApplyPendingSamples();
 
         var now = Time.GetTicksMsec();
@@ -769,8 +756,7 @@ public partial class NetworkObjectServer : Node
             if (obj.Authority.IsLocal) continue;
             if (!_clocks.TryGetValue(obj.Root!.GetMultiplayerAuthority(), out var clock) || ShownOf(clock) is not { } shown) continue;
             var objectTick = obj.PlaybackStarted ? obj.PlaybackCursor.Advance(shown, elapsedTicks) : shown;
-            // Never back: a deeper link joining pulls the common time behind what a shallower peer's objects already
-            // show, and they wait for it rather than rewind
+            // Never back: an object's display tick only ever moves forward, whatever its clock does
             if (obj.DisplayTick is { } before && objectTick < before) objectTick = before;
             // Held samples are played once the wait is over, or sooner if playback has reached the last sample it has:
             // after a loss, a stall there would be worse than the interpolation across the hole the wait is against
@@ -780,6 +766,7 @@ public partial class NetworkObjectServer : Node
             if (!obj.Track.TrySample(objectTick, out var from, out var to, out var fraction)) continue;
             obj.DisplayTick = objectTick;
             Apply(obj, from, to, fraction);
+            obj.CrossFade(delta);
         }
     }
 
