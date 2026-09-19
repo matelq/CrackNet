@@ -1239,4 +1239,42 @@ public partial class CarryingTests : HarnessSuite
         Expect.True(drawnExcess < 0.8f * bodyExcess, "the drawn walker slides along the platform as it lands on the observer's screen: " + report);
         Expect.True(settled < 0.05f, "the drawn walker never caught up with the body: " + report);
     }
+
+    /// <summary>
+    /// The third playtest, after the ride was kept through the air: a player who had stepped off a moving platform
+    /// onto the ground stood there on its own screen and rode along with the platform on everyone else's. Standing
+    /// still, the engine reports the player on the floor without a floor collision, so the ground was never seen as
+    /// another floor and the platform stayed its base. A base that a ray under the feet does not find is dropped.
+    /// Peer 2 jumps off the host's slider onto the ground and stands; the host's copy must stand too.
+    /// </summary>
+    [Test]
+    public async Task APlayerWhoSteppedOffAMovingPlatformOntoTheGroundStandsStillOnOtherScreens()
+    {
+        Network.LatencyMs = 100;
+        var stacks = new[] { Host, Client };
+        var sliders = stacks.Select(stack => HarnessWorld.Lift(stack, "Slider", new Vector3(0, 0.25f, 0), new Vector3(40, 0.5f, 3), new Vector3(3, 0, 0))).ToArray();
+        var walkers = stacks.Select(stack => HarnessWorld.Walker(stack, 2, new Vector3(0, 1.4f, 0), Vector3.Zero)).ToArray();
+        foreach (var walker in walkers)
+        {
+            walker.Falls = true;
+            walker.SafeMargin = 0.05f;
+        }
+        for (var i = 0; i < 30; i++) await NextFrame();
+        Expect.True(walkers[1].IsOnFloor() && walkers[1].GlobalPosition.Y > 1.3f, $"the walker is not standing on the slider: {walkers[1].GlobalPosition}");
+
+        // Off the side: a hop and a step in z, then stand on the ground
+        walkers[1].Walk = new Vector3(0, 0, 3);
+        walkers[1].Velocity = new Vector3(0, 4, 3);
+        Expect.True(await WaitUntil(() => walkers[1].IsOnFloor() && walkers[1].GlobalPosition.Y < 1.1f && walkers[1].GlobalPosition.Z > 2, 3), $"the walker never landed on the ground: {walkers[1].GlobalPosition}");
+        walkers[1].Walk = Vector3.Zero;
+        for (var i = 0; i < 30; i++) await NextFrame();
+
+        var stoodAt = walkers[1].GlobalPosition;
+        var shownAt = walkers[0].GlobalPosition;
+        for (var seconds = 0.0; seconds < 1.5; seconds += GetProcessDeltaTime()) await NextFrame();
+        var report = $"in 1.5 s standing on the ground the walker moved {walkers[1].GlobalPosition.DistanceTo(stoodAt):F2} m on its own peer and {walkers[0].GlobalPosition.DistanceTo(shownAt):F2} m on the host's screen; the slider went {sliders[0].GlobalPosition.X:F1} m";
+        GD.Print("STANDING BESIDE A SLIDER " + report);
+        Expect.True(walkers[1].GlobalPosition.DistanceTo(stoodAt) < 0.1f, "the walker did not stand still on its own peer, so this measures nothing: " + report);
+        Expect.True(walkers[0].GlobalPosition.DistanceTo(shownAt) < 0.2f, "the host draws the standing walker riding along with the slider: " + report);
+    }
 }

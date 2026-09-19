@@ -362,10 +362,26 @@ internal abstract class PhysicsHandling
                 else Object.Spread(other);
             }
             // Carried up by a rising platform, or snapped to the floor, the engine reports on-floor without a slide
-            // collision at all: the base then stays what it was. So does a jump: in the air the player is still on the
-            // lift in every sense that matters to the screens that show it against the lift, and a world position
-            // meanwhile put it into a lift shown at another moment. A floor of another kind (the ground) ends it
-            if (body.IsOnFloor() && (floorSeen || Object.Base is null)) Object.Base = floor ?? (FloorOfAnotherKind(body) ? null : Object.Base);
+            // collision at all: the base then stays what it was, if it is still under the feet. So does a jump: in
+            // the air the player is still on the lift in every sense that matters to the screens that show it against
+            // the lift, and a world position meanwhile put it into a lift shown at another moment. A floor of another
+            // kind (the ground) ends it, seen as a collision or, standing still, by a ray under the feet: a player who
+            // had stepped off a platform onto the ground rode along with it on every other screen
+            if (!body.IsOnFloor()) return;
+            var standing = floorSeen || Object.Base is null ? floor ?? (FloorOfAnotherKind(body) ? null : Object.Base) : Object.Base;
+            // The base is what is under the feet, whatever the contacts said: a platform brushing past a player on the
+            // ground touches it at an edge, with a normal that passes for a floor
+            if (standing is { Root: CollisionObject3D beneath } && !StandsOn(body, beneath)) standing = null;
+            Object.Base = standing;
+        }
+
+        /// <summary>Whether a ray from the character's origin down through its feet hits <paramref name="under"/> first.</summary>
+        private static bool StandsOn(CharacterBody3D body, CollisionObject3D under)
+        {
+            using var query = PhysicsRayQueryParameters3D.Create(body.GlobalPosition, body.GlobalPosition + Vector3.Down * 3, body.CollisionMask, [body.GetRid()]);
+            var hit = body.GetWorld3D().DirectSpaceState.IntersectRay(query);
+            // Nothing below within reach: in the air over it, or it is farther down than a character is tall
+            return hit.Count == 0 || hit["collider"].AsGodotObject() == under;
         }
 
         /// <summary>Whether a floor contact this frame was with something that is not a replicated object.</summary>

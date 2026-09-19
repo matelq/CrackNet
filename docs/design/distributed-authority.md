@@ -542,7 +542,11 @@ Two decisions here are made but not built, and both matter enough to keep in sig
   until another floor is touched: 0.275 m off against the lift on a peer 30 ms from the host and 150 ms from the
   player, 0.000 with it (`AJumpOnARisingLiftIsDrawnOnItOnAPeerWithUnevenLinks`). What remains is the step at a
   landing on another floor, the platform's speed times the depth difference, and the same step when a walker
-  steps onto a moving platform from the ground.
+  steps onto a moving platform from the ground. Seen right after: a player standing on the ground beside a
+  platform rode along with it on other screens. Standing still the engine reports no floor collision, so the
+  ground was never seen as another floor, and a platform brushing past touches the capsule at an edge with a
+  normal that passes for a floor; the base is now what a ray under the feet finds, whatever the contacts said
+  (`APlayerWhoSteppedOffAMovingPlatformOntoTheGroundStandsStillOnOtherScreens` covers the standing case).
 - **A common display time, and the slide that is left (third playtest).** Built: a screen shows every remote
   object at one time, the deepest of its live links' clocks (a clock whose samples are overdue by more than its
   lead does not count), never running back; a shallower peer's objects wait for it rather than rewind when a
