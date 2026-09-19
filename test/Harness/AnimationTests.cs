@@ -173,6 +173,71 @@ public partial class AnimationTests : HarnessSuite
         Expect.True(compared > 15 && error < 0.1f, "the copy strays from the samples: " + report);
     }
 
+    /// <summary>
+    /// A state machine's state is an object, not a parameter: what travels is the state's index and the setter
+    /// travels to it. Every observer is then in the state the samples say at the tick it is displaying, the same
+    /// test the transform gets, and a state that is not sent leaves the observer where it started.
+    /// </summary>
+    [Test]
+    public async Task AStateMachineTravelsToTheSameStateAtTheSameDisplayTick()
+    {
+        Network.LatencyMs = 80;
+        var walkers = new[]
+        {
+            HarnessWorld.StateMachineWalker(Host, 2, "Stater", new Vector3(0, 1, 0)),
+            HarnessWorld.StateMachineWalker(Client, 2, "Stater", new Vector3(0, 1, 0)),
+        };
+        // The first sample carries the state the walker starts in; recording before it lands would see the state
+        // machine's own Start node, which is no one's state
+        Expect.True(await WaitUntil(() => walkers[0].Playback!.GetCurrentNode() == Walker.AnimationStates[0], 5), "the observer never got the starting state");
+        for (var i = 0; i < 20; i++) await NextFrame();
+
+        var sent = new SortedList<int, int>();
+        walkers[1].Net().Diagnostics.SampleSent += tick => sent[tick] = walkers[1].AnimationState;
+        var shown = new List<(double Tick, string State)>();
+        var drawn = new DrawnFrame();
+        AddChild(drawn);
+        drawn.Drawn += () =>
+        {
+            if (walkers[0].Net().Diagnostics.DisplayTick is { } tick) shown.Add((tick, walkers[0].Playback!.GetCurrentNode()));
+        };
+
+        // Walk the authority through the states, each held long enough to cover several samples
+        var travelled = new List<int>();
+        foreach (var state in new[] { 1, 2, 0, 1 })
+        {
+            walkers[1].AnimationState = state;
+            travelled.Add(state);
+            for (var seconds = 0.0; seconds < 0.5; seconds += GetProcessDeltaTime()) await NextFrame();
+        }
+        drawn.QueueFree();
+
+        // The observer's own transitions: the first frame it shows each new state, and the tick it was displaying
+        var entered = new List<(string State, double Tick)>();
+        foreach (var (tick, state) in shown)
+            if (entered.Count == 0 || entered[^1].State != state)
+                entered.Add((state, tick));
+
+        // The authority's: the tick stamped on the sample that first carried each new state
+        var changes = new List<(string State, int Tick)>();
+        foreach (var (tick, state) in sent)
+            if (changes.Count == 0 || changes[^1].State != Walker.AnimationStates[state])
+                changes.Add((Walker.AnimationStates[state], tick));
+
+        var expected = travelled.Select(state => Walker.AnimationStates[state]).Prepend("idle").ToList();
+        var late = entered.Skip(1).Zip(changes).Select(pair => pair.First.Tick - pair.Second.Tick).ToList();
+        var report = $"the observer entered {string.Join("/", entered.Select(e => $"{e.State}@{e.Tick:F1}"))}, "
+                     + $"sent {string.Join("/", changes.Select(c => $"{c.State}@{c.Tick}"))} over {shown.Count} frames";
+        GD.Print("STATE MACHINE " + report);
+        Expect.True(walkers[1].Playback!.GetCurrentNode() == Walker.AnimationStates[travelled[^1]], "the authority itself did not travel: " + report);
+        Expect.SequenceEqual(expected, entered.Select(e => e.State).ToList(), "the observer did not follow the authority through the states: " + report);
+        Expect.SequenceEqual(expected.Skip(1).ToList(), changes.Select(c => c.State).ToList(), "the states did not go out one sample each: " + report);
+        // Each state is entered at the tick the sample carrying it is stamped with, not when the packet arrived: a
+        // frame is a tick or two of display time wide, and 80 ms of latency is five ticks
+        Expect.True(late.Count == changes.Count && late.All(delta => Math.Abs(delta) <= 2),
+            "the observer entered a state at a different tick than the sample says: " + string.Join(", ", late.Select(d => $"{d:F1}")) + "; " + report);
+    }
+
     /// <summary>The worst distance between what was drawn at a display tick and the line between the samples sent around it.</summary>
     private static (float Worst, int Compared) Compare(SortedList<int, Vector3> sent, List<(double Tick, Vector3 At)> shown, int interval)
     {
