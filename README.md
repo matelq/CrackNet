@@ -76,25 +76,31 @@ public partial class Player : CharacterBody3D
 ## Try the sample
 
 From a fresh clone. You need [Godot 4.7.2 .NET](https://godotengine.org/download/archive/) - exactly
-this version, older editors downgrade the SDK in `CrackNet.csproj` - the [.NET 10 SDK](https://dotnet.microsoft.com/download),
-and for the script `sh`, `curl` and `python` (on Windows, Git Bash has the first two).
+this version, older editors downgrade the SDK in `CrackNet.csproj` - and the
+[.NET 10 SDK](https://dotnet.microsoft.com/download). Nothing else: the project runs on **Jolt**, which is built into
+Godot.
 
 ```
 git clone https://github.com/matelq/CrackNet.git
 cd CrackNet
-sh tools/install-extensions.sh all      # Rapier (required: the crates are Rapier bodies) and GodotSteam
 dotnet build CrackNet.csproj
 godot --path . res://examples/playground/playground.tscn
 ```
 
-Both extensions are native binaries and are not in the repository; the script pins their versions. `steam` alone
-installs only GodotSteam, `rapier` only Rapier. Restart the editor after installing: extensions load at startup.
+Two optional native extensions live behind `tools/install-extensions.sh` (it needs `sh`, `curl` and `python`; on
+Windows, Git Bash has the first two). Neither is in the repository; the script pins their versions, and the editor has
+to be restarted afterwards, because extensions load at startup.
 
-Rapier is pinned to **v0.35.1** on purpose. From v0.35.2 the extension panics whenever it is called from a thread other
-than the main one ([appsinacup/godot-rapier-physics#614](https://github.com/appsinacup/godot-rapier-physics/issues/614)),
-and a C# project always has one: the .NET finalizer releases Godot objects on its own thread. The physics world is
-left broken after such a panic. Stay on v0.35.1 until that issue is resolved; the library itself works on any engine,
-and CI also runs it on Jolt, which is built into Godot.
+```
+sh tools/install-extensions.sh steam                     # GodotSteam, for the Steam sample below
+sh tools/install-extensions.sh rapier --enable-rapier    # Rapier instead of Jolt, for the whole project
+```
+
+The library names no engine and CI runs the whole suite on both. If you do pick Rapier, it is pinned to **v0.35.1** on
+purpose: from v0.35.2 the extension panics whenever it is called from a thread other than the main one
+([appsinacup/godot-rapier-physics#614](https://github.com/appsinacup/godot-rapier-physics/issues/614)), and a C#
+project always has one - the .NET finalizer releases Godot objects on its own thread - leaving the physics world
+broken. Stay on v0.35.1 until that issue is resolved.
 
 **On one machine:** press Host in one window and Join (`127.0.0.1`) in the others, or turn on autoconnect - see
 [Testing on a real network](docs/real-networks.md). **Over LAN or with an open port:** Host, and the others Join the

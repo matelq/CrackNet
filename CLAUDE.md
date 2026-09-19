@@ -14,10 +14,11 @@ parity checks) are gone with it; the last commit that kept them is the tag `arch
 - `CrackNetContext`: servers register into `CrackNetContext.Default`; a `CrackNetContextRoot` node gives its subtree a second stack. Nodes resolve `Context` in `_EnterTree`; `Instance` still points at the default stack.
 - `examples/playground/` — the co-op sample (its smoke lives in `test/Playground/`); `examples/steam/` — GodotSteam bootstrap under `#if GODOTSTEAM`.
 - Repo root is the Godot project. Godot 4.7.2 mono binary: `.tools/godot/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64_console.exe` (gitignored). Use exactly this version: older editors downgrade the SDK in CrackNet.csproj.
-- **Rapier-first** (#52): `project.godot` asks for `Rapier3D`, and the extension is gitignored, so a fresh clone
-  needs `sh tools/install-extensions.sh rapier` before anything with a physics body runs (`steam` installs GodotSteam).
-  The addon itself names no engine. Rapier is pinned to v0.35.1: later ones panic on calls from any thread but the
-  main one, which the .NET finalizer makes (appsinacup/godot-rapier-physics#614); CI also runs the suite on Jolt.
+- **Jolt-first** (#81, the inverse of #52): `project.godot` asks for `Jolt Physics`, which is built into Godot, so a
+  fresh clone runs with no extension at all. The addon names no engine and CI runs the suite on both. Rapier is still
+  installable - `sh tools/install-extensions.sh rapier --enable-rapier` (`steam` installs GodotSteam) - and pinned to
+  v0.35.1 for whoever opts in: later ones panic on calls from any thread but the main one, which the .NET finalizer
+  makes (appsinacup/godot-rapier-physics#614, #67). That pin is off the default path now.
 
 ## Commands
 
@@ -51,9 +52,16 @@ required by the analyzer project: C# 14 extension members are what it looks for.
 
 Rapier keeps a body's last kinematic target and returns to it on the next freeze: re-set the transform after
 switching `Freeze` (`PhysicsHandling.SetFrozen`), or a crate handed back after a throw jumps to where it was held.
+Jolt does not need the re-set (measured on #81 - `CrateFreezeTests` passes on Jolt with it removed), but it is
+harmless there and the Rapier path still depends on it, so it stays.
 
-Two-process checks: give the host a longer head start than feels necessary. The Rapier GDExtension loads slower than
-stock Godot, and a client that starts first simply never connects.
+Jolt, the other way round, does not wake a sleeping body when the one under it is frozen or teleported away by
+playback: the crate on top of a stack a guest pulled apart hung in the air on the host. `PhysicsHandling` wakes what
+touches a body on every authority change; the playground smoke's `stackHangingFrames` is what fails on it (175 on
+Jolt without the wake, 0 with it and on Rapier either way).
+
+Two-process checks: give the host a longer head start than feels necessary. On Rapier the GDExtension loads slower
+than stock Godot and a client that starts first simply never connects; on Jolt the margin is smaller but still real.
 
 ## Driving the editor and a running game (godot-mcp)
 
