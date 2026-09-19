@@ -608,9 +608,6 @@ public partial class NetworkObjectServer : Node
     }
 
     private const ulong EarlySampleAgeMs = 1_000;
-    /// <summary>Seconds a rider takes to cross from where it stood in the world to where it sits on what it stands on.</summary>
-    private const double BaseBlendSeconds = 0.5;
-
     /// <summary>Eased at both ends, so the crossing starts and stops without a step in the drawn speed.</summary>
     private static float Eased(double part) => (float)(part * part * (3 - 2 * part));
 
@@ -861,7 +858,7 @@ public partial class NetworkObjectServer : Node
         // Both places a rider can be drawn are known here. Where it sits on this peer's copy of what it stands on is
         // the offset it sent; where it stood in the world is that same offset on the copy as the rider had it, and
         // the sample says how many ticks behind that was. The two are apart by what the base travelled in between,
-        // so stepping on or off steps across that gap. Crossed over BaseBlendSeconds instead, eased at both ends
+        // so stepping on or off steps across that gap. Crossed over BaseCrossingTime instead, eased at both ends
         var ridingFrom = from.Attachment is { Riding: true };
         var ridingTo = to.Attachment is { Riding: true };
         var dated = ridingTo ? to : ridingFrom ? from : null;
@@ -874,7 +871,7 @@ public partial class NetworkObjectServer : Node
         // left of it, a free one carries what was still owed when the object stepped off
         var shiftFrom = (ridingFrom ? gap : obj.LeftBaseBy) * Eased(obj.BaseBlend);
         var edge = ridingFrom != ridingTo;
-        if (edge && !obj.Crossing)
+        if (edge && !obj.Crossing && obj.BaseCrossingTime > 0 && gap.Length() <= obj.MaxSmoothingDistance)
         {
             obj.LeftBaseBy = ridingFrom ? gap * (Eased(obj.BaseBlend) - 1) : Vector3.Zero;
             obj.BaseBlend = 1;
@@ -940,7 +937,9 @@ public partial class NetworkObjectServer : Node
         // Held at the full gap for as long as the switch is being played, then given up
         if (!edge && obj.BaseBlend > 0)
         {
-            obj.BaseBlend = Math.Max(0, obj.BaseBlend - obj.Root!.GetProcessDeltaTime() / BaseBlendSeconds);
+            obj.BaseBlend = obj.BaseCrossingTime > 0
+                ? Math.Max(0, obj.BaseBlend - obj.Root!.GetProcessDeltaTime() / obj.BaseCrossingTime)
+                : 0;
             if (obj.BaseBlend == 0) obj.LeftBaseBy = Vector3.Zero;
         }
         if (attachment is null) obj.ShowFree();

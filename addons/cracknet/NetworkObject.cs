@@ -120,6 +120,14 @@ public partial class NetworkObject : Node
     /// <summary>How long the drawing takes to catch up with the body after the object changed hands.</summary>
     [Export(PropertyHint.Range, "0,1,0.01,suffix:s")] public float SmoothingTime { get; set; } = 0.15f;
 
+    /// <summary>
+    /// How long a rider takes to cross between where it stood in the world and its place on what it stands on, when
+    /// it steps onto or off a moving body. The two are apart by what the body travelled during the depth of the
+    /// rider's link to it, so the switch is a step of that much; crossing spreads it, eased at both ends. Zero draws
+    /// the step as the step it is. A gap wider than <see cref="MaxSmoothingDistance"/> is never crossed.
+    /// </summary>
+    [Export(PropertyHint.Range, "0,2,0.01,suffix:s")] public float BaseCrossingTime { get; set; } = 0.5f;
+
     /// <summary>A handover that moves the object further than this is drawn at once: it is a move, not a lag.</summary>
     [Export(PropertyHint.Range, "0,20,0.1,or_greater,suffix:m")] public float MaxSmoothingDistance { get; set; } = 2;
 
