@@ -12,7 +12,8 @@ namespace CrackNet.Examples.Playground;
 /// every peer, after that peer's animation and the skeleton's deferred update. Animation is parameters:
 /// <see cref="WalkBlend"/> drives the AnimationTree's idle-to-run blend everywhere, and <see cref="Gesture"/> is the
 /// one-shot pattern: a clip and a counter bumped in the tick of the action, which fire the clip wherever the sample
-/// lands.
+/// lands. <see cref="AimAt"/> is the third kind: a point, turned into a pose by the scene's <c>LookAtModifier3D</c>,
+/// which moves the spine - and with it the hand the crate hangs in - in the skeleton's own modification pass.
 /// </para>
 /// </summary>
 public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>, IImpulsed
@@ -21,6 +22,9 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>, IImp
     public const float Speed = 6;
 
     private const float JumpSpeed = 5, Gravity = 14, PushStrength = 4, ThrowSpeed = 9, ShotSpeed = 18;
+
+    /// <summary>How far ahead the aim point sits when nobody is in front, and how near another player has to be to take it.</summary>
+    private const float AimRange = 10, AimLockRange = 4;
 
     /// <summary>
     /// Seconds from the start of the throw's swing to the hand letting go. The clip's first half second is the arm
@@ -44,6 +48,7 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>, IImp
     private double _throwDue = -1;
     private Node? _throwing;
     private Marker3D _hand = null!;
+    private Marker3D _aimTarget = null!;
     private AnimationTree _animation = null!;
 
     /// <summary>Where a carried crate goes: the right hand, moved by the skeleton.</summary>
@@ -81,6 +86,15 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>, IImp
             _animation?.Set("parameters/Air/blend_amount", value);
         }
     }
+
+    /// <summary>
+    /// The world point this player aims at: the upper body is turned to it by the <c>LookAtModifier3D</c> in the
+    /// scene, on every peer, and a shot leaves along it. It is a point, not the player it was picked from: the
+    /// authority chooses the target from what it sees, and what travels is where it decided to aim. An observer
+    /// turning its copy towards where *it* draws the other player instead would aim a playback delay away from the
+    /// shot that arrives, and no two screens would agree.
+    /// </summary>
+    [Synced] public Vector3 AimAt { get; set; }
 
     /// <summary>
     /// The one-shot slot: which of <see cref="OneShots"/> played last, and how many have played. The clip and the
@@ -136,7 +150,10 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>, IImp
     public override void _Ready()
     {
         _hand = GetNode<Marker3D>("Visual/Knight/Rig/Skeleton3D/handslot_r/Hand");
+        _aimTarget = GetNode<Marker3D>("AimTarget");
         _animation = GetNode<AnimationTree>("AnimationTree");
+        AimAt = GlobalPosition + Forward * AimRange;   // until the first sample of another player's aim lands
+        _aimTarget.GlobalPosition = AimAt;
         // The clips come out of the glb as one-shots; the cycles loop. The library is shared by every knight, so this
         // is done once and holds for all
         var clips = GetNode<AnimationPlayer>("Visual/Knight/AnimationPlayer");
@@ -147,9 +164,32 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>, IImp
         if (this.Authority.IsLocal) AddToGroup("local_player");
     }
 
+    /// <summary>
+    /// Puts the modifier's target where the aim says, before the skeleton runs its modification pass: every peer
+    /// poses this knight from the same number, and the item in its hand is placed after the modifier moved it.
+    /// </summary>
+    public override void _Process(double delta) => _aimTarget.GlobalPosition = AimAt;
+
+    /// <summary>
+    /// Where this player aims: the nearest other player within <see cref="AimLockRange"/> and roughly in front, or
+    /// else a point straight ahead. Read on the authority only, from the players as this peer draws them; the result
+    /// is what travels.
+    /// </summary>
+    private Vector3 AimPoint()
+    {
+        var ahead = GlobalPosition + Forward * AimRange;
+        var locked = GetParent().GetChildren().OfType<PlaygroundPlayer>()
+            .Where(other => other != this && other.AttachedTo != this
+                            && other.GlobalPosition.DistanceTo(GlobalPosition) < AimLockRange
+                            && (other.GlobalPosition - GlobalPosition).Normalized().Dot(Forward) > 0.7f)
+            .MinBy(other => other.GlobalPosition.DistanceTo(GlobalPosition));
+        return locked?.GlobalPosition ?? ahead;
+    }
+
     public override void _PhysicsProcess(double delta)
     {
         if (!this.Authority.IsLocal) return;
+        AimAt = AimPoint();
         // Carried by another player: the library places this body, so no movement of its own; G wriggles free
         if (this.AttachedTo is PlaygroundPlayer carrier)
         {
@@ -283,11 +323,13 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>, IImp
 
     private void Shoot()
     {
+        // Along the aim, the same value every peer turned this knight with, so the shot leaves where the body points
+        var along = (AimAt - GlobalPosition).Normalized();
         // Chest height, so a shot can hit a crate on the floor as well as another player
-        var at = new Transform3D(GlobalBasis, GlobalPosition + Forward * 0.8f);
+        var at = new Transform3D(GlobalBasis, GlobalPosition + along * 0.8f);
         PlaytestLog.Action(this, "shoot");
         Play("Shoot");
-        PlaygroundShot.Spawn(at, Forward * ShotSpeed, parent: GetParent().GetParent<Playground>().Shots);
+        PlaygroundShot.Spawn(at, along * ShotSpeed, parent: GetParent().GetParent<Playground>().Shots);
     }
 
     /// <summary>The crate this player holds lets go when the player leaves.</summary>

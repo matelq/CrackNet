@@ -322,7 +322,8 @@ parent sync.
 - **Animation, built (stage B, step 6):** `AnimationTests`. A synced walk blend changes on the observer in the frame
   the body starts moving. The one-shot counter plays the difference per sample: once per bump, twice for two bumps in
   one snapshot (the observer sees 0, 1, 3), and a late joiner plays its first value zero times. An item in a hand
-  aimed by `LookAtModifier3D` (the hand swept 2.8 m) is exact on both peers. Root motion on the authority travels as
+  aimed by `LookAtModifier3D` (the hand swept 2.8 m) is exact on both peers; undeferred, the same case leaves the
+  crate 0.028 m behind the hand, which is what says the modification pass is what the deferral clears. Root motion on the authority travels as
   the transform (the copy is 0.000 m off the samples over 420 frames); applying it on an observer too showed no drift
   on screen, since playback rewrites the copy every frame, so the rule stays for the physics step, not the picture.
   The playground's player is KayKit's knight (CC0, `examples/playground/assets/kaykit`, chosen over Quaternius'
@@ -331,7 +332,12 @@ parent sync.
   and fires Throw, the slot colour tints the knight's texture, the cycle clips are set to loop at start (the glb
   brings them as one-shots, and the third playtest saw them freeze on their last frame), Jump_Idle blends in
   while airborne, and the throw lets go 0.72 s into the clip, where the hand is furthest forward, so the item
-  leaves the hand on the swing rather than before it; Q puts down what is carried. Before it, the player carried the crate at a
+  leaves the hand on the swing rather than before it; Q puts down what is carried. Aiming is the third kind of
+  animation state beside the blend and the one-shot: `AimAt`, a `[Synced] Vector3` the authority picks from the
+  players as it draws them, turned into a pose everywhere by a `LookAtModifier3D` on the spine, with the shot leaving
+  along it - so the hand the crate hangs in is one a modifier moves in the sample too, and the smoke's `handError`
+  stays 0.000 with it in the chain. The scene case is `TheUpperBodyAndTheHandTurnToTheAimedPoint`: a knight stepping
+  across another's line of sight turns its torso 26 degrees and carries the hand 0.56 m with it. Before it, the player carried the crate at a
   `Hand` marker bobbed by an AnimationTree walk blend and fired a throw one-shot from a counter, on a capsule with
   no skeleton.
 - **Tests first:** per frame on a remote peer during a carried walk with animation, item-to-anchor distance near zero,
