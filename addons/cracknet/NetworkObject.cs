@@ -137,6 +137,13 @@ public partial class NetworkObject : Node
         Quick,
         /// <summary>Eased at both ends: no step in speed anywhere, at the price of half a window barely moving.</summary>
         Smooth,
+
+        /// <summary>
+        /// Never given up: the rider is drawn where it actually stood, against the base as it was in its own time.
+        /// Nothing steps at a switch, and in exchange its place on the base is wrong by the base's travel over the
+        /// depth of its link the whole time it rides - at the edge of a platform, hanging off it.
+        /// </summary>
+        Hold,
     }
 
     /// <summary>The shape of the crossing: what the drawn speed does while the gap is given up.</summary>

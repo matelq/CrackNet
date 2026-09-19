@@ -613,6 +613,7 @@ public partial class NetworkObjectServer : Node
     {
         NetworkObject.Crossing.Even => (float)part,
         NetworkObject.Crossing.Quick => (float)(part * part),
+        NetworkObject.Crossing.Hold => 1,
         _ => (float)(part * part * (3 - 2 * part)),
     };
 
@@ -940,7 +941,7 @@ public partial class NetworkObjectServer : Node
             else node.SetValue(property, value);
         }
         // Held at the full gap for as long as the switch is being played, then given up
-        if (!edge && obj.BaseBlend > 0)
+        if (!edge && obj.BaseBlend > 0 && obj.BaseCrossingShape != NetworkObject.Crossing.Hold)
         {
             obj.BaseBlend = obj.BaseCrossingTime > 0
                 ? Math.Max(0, obj.BaseBlend - obj.Root!.GetProcessDeltaTime() / obj.BaseCrossingTime)
