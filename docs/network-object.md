@@ -66,8 +66,8 @@ crate in it therefore cannot drift apart, and a held crate at rest in the hand c
 - **A held item passes through the world.** Moved by hand into wherever the hand is, a colliding body would land inside
   its neighbours and the engine would throw them out of the world; its collision layer and mask are 0 while attached and
   come back on `Detach`.
-- **A throw is `Detach` and then `Impulse`.** Other peers draw the item catching up from their hand to the thrower's
-  first free sample, through the same smoothing as a handover (`Visual`), instead of jumping.
+- **A throw is `Detach` and then `Impulse`.** Other peers draw the item leaving their own hand along the line to the
+  thrower's first free sample, instead of jumping the difference between the two hands.
 - `TryAttach` is optimistic like `TryClaim`: it applies here and the host is asked. A carrier that wants to know when
   the item is really in its hand on this peer, or is told the host gave it to someone else, implements
   `IAttachmentChanged` and reads `Attached`.

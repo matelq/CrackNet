@@ -75,6 +75,7 @@ public partial class PlaygroundSmoke : Node
     /// <summary>While the crate is in a hand: frames measured at the end of the frame, and how far the drawn crate got from the drawn hand.</summary>
     private int _carriedFrames;
     private double _handError;
+    private readonly List<(double Tick, bool Attached, double HandDistance)> _carried = new();
 
     private readonly List<(int Tick, Vector3 Position, bool Attached)> _sent = new();
     private readonly List<(double Tick, Vector3 Position)> _displayed = new();
@@ -227,9 +228,28 @@ public partial class PlaygroundSmoke : Node
     /// <summary>What is drawn this frame: the carried crate against the hand of whoever carries it, on this peer's copies.</summary>
     private void MeasureDrawn()
     {
-        if (!IsInsideTree() || _crate.AttachedTo is not PlaygroundPlayer carrier) return;
-        _carriedFrames++;
-        _handError = Math.Max(_handError, _crate.GlobalPosition.DistanceTo(carrier.GetNode<Node3D>("Hand").GlobalPosition));
+        if (!IsInsideTree()) return;
+        var tick = _crate.Net().Diagnostics.DisplayTick ?? NetworkTime.Instance.Tick;   // the carrier plays nothing back
+        var distance = _crate.AttachedTo is PlaygroundPlayer carrier ? _crate.GlobalPosition.DistanceTo(carrier.GetNode<Node3D>("Hand").GlobalPosition) : -1;
+        _carried.Add((tick, distance >= 0, distance));
+    }
+
+    /// <summary>
+    /// The carried frames and the worst distance from the hand among them, leaving out the state interval before each
+    /// detach: there the crate is already drawn on its way from this peer's hand to the thrower's first free sample.
+    /// The first free frame can be up to an interval past the free sample, so two intervals before it are left out.
+    /// </summary>
+    private void SummarizeCarry()
+    {
+        var interval = NetworkObjectServer.Instance.StateIntervalTicks;
+        for (var i = 0; i < _carried.Count; i++)
+        {
+            if (!_carried[i].Attached) continue;
+            var next = _carried.FindIndex(i, frame => !frame.Attached);
+            if (next >= 0 && _carried[i].Tick > _carried[next].Tick - 2 * interval) continue;
+            _carriedFrames++;
+            _handError = Math.Max(_handError, _carried[i].HandDistance);
+        }
     }
 
     public override void _Process(double delta)
@@ -313,6 +333,7 @@ public partial class PlaygroundSmoke : Node
     private void Finish()
     {
         SetProcess(false);
+        SummarizeCarry();
         var backToHost = _crate.Authority.Peer == 1;
         bool ok;
         string detail;
@@ -384,8 +405,8 @@ public partial class PlaygroundSmoke : Node
             // A gap the client made on purpose - the crate at rest - has no line to follow
             if (Enumerable.Range(fromTick, toTick - fromTick).Any(at => at % NetworkObjectServer.Instance.StateIntervalTicks == 0 && !sentAt.ContainsKey(at)))
                 continue;
-            // Into or out of the hand there is no line to follow: playback holds until the switch, by design. While in
-            // the hand the crate is measured against the drawn hand instead (handError)
+            // Into or out of the hand the line runs from this peer's hand, not between the samples. While in the hand
+            // the crate is measured against the drawn hand instead (handError)
             if (attachedAt[fromTick] || attachedAt[toTick]) continue;
 
             var expected = sentAt[fromTick].Lerp(sentAt[toTick], (float)((tick - fromTick) / (toTick - fromTick)));

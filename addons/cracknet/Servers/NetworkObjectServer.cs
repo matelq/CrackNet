@@ -711,8 +711,10 @@ public partial class NetworkObjectServer : Node
         // Hung or free as of the sample playback is coming from, and as of the one it reached once the fraction is 1:
         // the clock holds exactly on the newest sample of a resting object, so that pair is a steady state, not a
         // moment. The switch happens when playback reaches the sample that made it, at the carrier's display tick, not
-        // when the host's record of the claim arrived. Across the switch the transform holds: a world position and an
-        // anchor offset have no line between them
+        // when the host's record of the claim arrived. Across the switch a world position and an anchor offset have no
+        // line between them as sent, but both are places in this peer's world: the object is drawn along the line
+        // between those, in the state it came from, so a gesture counter bumped in the tick of the change still
+        // changes in the frame the state does. Held instead, it stood for a state interval and then jumped it
         var atEnd = fraction >= 1;
         var sampled = atEnd ? to.Attachment : from.Attachment;
         var attachment = sampled ?? obj.ClaimedHere;
@@ -725,6 +727,14 @@ public partial class NetworkObjectServer : Node
             var interpolator = Interpolators.FindInterpolatorFor(a);
             var isTransform = i == 0 && obj.Root is Node3D;
 
+            if (isTransform && switching && !atEnd && interpolate && !to.Snap && attachment == from.Attachment
+                && obj.WorldOf(from.Attachment, a.AsTransform3D()) is { } fromWorld && obj.WorldOf(to.Attachment, b.AsTransform3D()) is { } toWorld)
+            {
+                var world = fromWorld.InterpolateWith(toWorld, (float)fraction);
+                if (attachment is null) node.SetValue(property, world);
+                else obj.ShowAttached(attachment, obj.OffsetOf(attachment, world) ?? a.AsTransform3D());
+                continue;
+            }
             var value = interpolate && !to.Snap && !(switching && isTransform) && !ReferenceEquals(interpolator, Interpolators.DefaultInterpolator)
                 ? interpolator.Apply(a, b, fraction)
                 : atEnd ? b : a;

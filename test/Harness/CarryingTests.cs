@@ -274,8 +274,9 @@ public partial class CarryingTests : HarnessSuite
     /// <summary>
     /// On an observer the thrower's first free sample is not where the observer's own hand is: its hand animation
     /// runs on its own clock, so its hand is elsewhere in the swing. Here the observer's hand sits 0.6 m from the
-    /// thrower's. The body jumps that gap at the detach tick; what is drawn (Visual) catches up instead, as on a
-    /// handover, and the thrower's impulse right after Detach flies on the thrower's own simulation at once.
+    /// thrower's. Held across the switch, the body jumped that gap at the detach tick (0.59 m); drawn along the line
+    /// from the hand to the first free sample, neither the body nor the Visual jumps, and the thrower's impulse right
+    /// after Detach flies on the thrower's own simulation at once.
     /// </summary>
     [Test]
     public async Task ADetachedItemIsDrawnWithoutAJump()
@@ -327,7 +328,7 @@ public partial class CarryingTests : HarnessSuite
         var settled = frames[^1].Drawn.DistanceTo(frames[^1].Body);
         var report = $"body jumped {bodyJump:F2} m, drawn {drawnJump:F2} m, drawn {settled:F3} m from the body 2.5 s later";
         GD.Print("DETACH JUMPS " + report);
-        Expect.True(bodyJump > 0.4f, "the body did not jump the gap, so this measures nothing: " + report);
+        Expect.True(bodyJump < 0.25f, "the thrown crate's body jumps from the observer's hand to the thrower's first free sample: " + report);
         Expect.True(drawnJump < 0.25f, "the thrown crate jumps on the observer's screen: " + report);
         Expect.True(settled < 0.05f, "the drawn crate never caught up with the body: " + report);
     }
@@ -700,5 +701,64 @@ public partial class CarryingTests : HarnessSuite
         // Lifted away: the top crate falls here at once, it does not hang waiting for the host
         hands[1].Position = new Vector3(0, 1.5f, 1);
         Expect.True(await WaitUntil(() => top[1].GlobalPosition.Y < 0.7f, 2), $"the crate did not fall when its support was lifted away: at {top[1].GlobalPosition}, authority {top[1].Authority.Peer}");
+    }
+
+    /// <summary>
+    /// The playground's third report: a player jumping onto a platform, or walking off it, skipped a step on the
+    /// other screens. Peer 2's walker drops onto a slab and walks off its far edge; the host draws it against the
+    /// line between the world positions peer 2 sent. Held across the switch between a world sample and a slab-relative
+    /// one, the copy stood for a state interval and then jumped it (0.13 m at 4 m/s); the two ends are one line in
+    /// world space on the observer, and it is drawn along it.
+    /// </summary>
+    [Test]
+    public async Task AWalkerSteppingOnAndOffAPlatformIsDrawnWithoutAJump()
+    {
+        Network.LatencyMs = 100;
+        var stacks = new[] { Host, Client };
+        var slabs = stacks.Select(stack => HarnessWorld.Lift(stack, "Slab", new Vector3(0, 0.25f, 0), new Vector3(4, 0.5f, 4), Vector3.Zero)).ToArray();
+        var walkers = stacks.Select(stack => HarnessWorld.Walker(stack, 2, new Vector3(-3, 2.5f, 0), Vector3.Zero)).ToArray();
+        foreach (var walker in walkers)
+        {
+            walker.Falls = true;
+            walker.SafeMargin = 0.05f;
+        }
+        for (var i = 0; i < 5; i++) await NextFrame();
+
+        var sent = new SortedList<int, Vector3>();
+        walkers[1].Net().Diagnostics.SampleSent += tick => sent[tick] = walkers[1].GlobalPosition;
+        var shown = new List<(double Tick, Vector3 Position)>();
+        var drawn = new DrawnFrame();
+        AddChild(drawn);
+        drawn.Drawn += () =>
+        {
+            if (walkers[0].Net().Diagnostics.DisplayTick is { } tick) shown.Add((tick, walkers[0].GlobalPosition));
+        };
+        walkers[1].Walk = new Vector3(4, 0, 0);
+        var rode = false;
+        for (var seconds = 0.0; seconds < 2.5; seconds += GetProcessDeltaTime())
+        {
+            await NextFrame();
+            rode |= walkers[1].IsOnFloor() && walkers[1].GlobalPosition.Y > 1.3f;
+        }
+        drawn.QueueFree();
+        Expect.True(rode, $"the walker never stood on the slab: at {walkers[1].GlobalPosition}");
+        Expect.True(walkers[1].GlobalPosition.Y < 1.2f, $"the walker never left the slab: at {walkers[1].GlobalPosition}");
+
+        var interval = Client.Context.NetworkObjectServer.StateIntervalTicks;
+        var ticks = sent.Keys.ToList();
+        var worst = 0f;
+        var compared = 0;
+        foreach (var (tick, position) in shown)
+        {
+            var next = ticks.FindIndex(at => at >= tick);
+            if (next <= 0 || ticks[next] - ticks[next - 1] > interval * 2) continue;
+            var expected = sent.Values[next - 1].Lerp(sent.Values[next], (float)((tick - ticks[next - 1]) / (ticks[next] - ticks[next - 1])));
+            worst = Mathf.Max(worst, expected.DistanceTo(position));
+            compared++;
+        }
+        var report = $"worst {worst:F3} m over {compared} frames";
+        GD.Print("ON AND OFF A PLATFORM " + report);
+        Expect.True(compared > 40, "too few frames compared: " + report);
+        Expect.True(worst < 0.05f, "the host draws the walker off the line its peer sent, stepping on or off the slab: " + report);
     }
 }

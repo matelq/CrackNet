@@ -295,8 +295,12 @@ parent sync.
 - **Built (stage B, step 1, crates):** flag 16 in the sample, then the carrier's full name and the anchor's path
   under its root, and the transform slot holds the item's offset from the anchor (identity when hung here). A held
   item at rest in the hand is therefore unchanged and costs a heartbeat a second. Playback switches on the sample it
-  is coming *from*, so the switch lands at the carrier's display tick; across the switch the transform holds, since a
-  world position and an anchor offset have no line between them. Measured at 100 ms: the host's claim record landed
+  is coming *from*, so the switch lands at the carrier's display tick. Across the switch the object is drawn along
+  the line between the two ends placed in the observer's own world (the anchor offset on its copy of the anchor, the
+  world position as is), in the state it came from; the transform used to hold, since a world position and an anchor
+  offset have no line between them as sent, and a walker stepping onto a slab stood on the host's screen for a state
+  interval and then jumped it, 0.152 m at 4 m/s, 0.000 along the line
+  (`AWalkerSteppingOnAndOffAPlatformIsDrawnWithoutAJump`). Measured at 100 ms: the host's claim record landed
   16 frames before the hand reached the crate on its screen (`AttachAndDetachSwitchAtTheCarriersDisplayTick`).
   Placement is once per frame after everything else processed: a node with the highest process priority queues a
   deferred call, because a skeleton applies its poses and moves its bone attachments in a deferred notification it
@@ -311,9 +315,10 @@ parent sync.
   a `Marker3D` moved by an `AnimationPlayer` is final by the time the highest-priority process runs, and an item
   placed there is exact; a `Marker3D` under a `BoneAttachment3D` is 0.017 m off at that point and exact only when the
   placement is deferred behind the skeleton's own deferred update. Detach on an observer whose hand is 0.6 m from the
-  thrower's: the body jumps 0.59 m, the drawn crate 0.01 m and is within 1 mm of the body 2.5 s later; without the
-  smoothing window it jumps the whole 0.56 m. The impulse applied in the same frame as `Detach` is not lost on the
-  thrower: 3 physics steps later the crate flies at the thrown speed.
+  thrower's: held across the switch, the body jumped 0.59 m and the drawn crate 0.01 m through the smoothing window;
+  drawn along the line to the first free sample, the body itself moves 0.05 m beyond its speed and the Visual has
+  nothing to hide. The impulse applied in the same frame as `Detach` is not lost on the thrower: 3 physics steps later
+  the crate flies at the thrown speed.
 - **Animation, built (stage B, step 6):** `AnimationTests`. A synced walk blend changes on the observer in the frame
   the body starts moving. The one-shot counter plays the difference per sample: once per bump, twice for two bumps in
   one snapshot (the observer sees 0, 1, 3), and a late joiner plays its first value zero times. An item in a hand

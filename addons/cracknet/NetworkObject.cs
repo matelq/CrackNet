@@ -488,10 +488,7 @@ public partial class NetworkObject : Node
             _anchorOffset = offset;
             return;
         }
-        var identifier = Context.NetworkIdentityServer.ResolveReference(AuthorityPeer, Core.Data.NetworkIdentityReference.OfFullName(attachment.Carrier), allowQueue: false);
-        var carrier = identifier is null ? null : Of(identifier.Subject);
-        var anchor = carrier?.Root is Node3D root ? root.GetNodeOrNull<Node3D>(attachment.Anchor) : null;
-        if (carrier is null || anchor is null)
+        if (ResolveAnchor(attachment) is not var (carrier, anchor))
         {
             // Not here yet (a late joiner still receiving the scene), or a scene that differs from the authority's
             if (_unresolvedAttachment != attachment.Carrier)
@@ -500,6 +497,26 @@ public partial class NetworkObject : Node
             return;
         }
         Hang(carrier, anchor, offset, attachment.Riding);
+    }
+
+    /// <summary>Where a sampled value is in this peer's world: the anchor offset placed on this peer's copy of the anchor, or the world transform itself.</summary>
+    internal Transform3D? WorldOf(Attachment? attachment, Transform3D value)
+    {
+        if (attachment is null) return value;
+        return ResolveAnchor(attachment) is var (_, anchor) ? anchor.GlobalTransform * value : null;
+    }
+
+    /// <summary>The offset that puts this object at <paramref name="world"/> on this peer's copy of the anchor.</summary>
+    internal Transform3D? OffsetOf(Attachment attachment, Transform3D world)
+        => ResolveAnchor(attachment) is var (_, anchor) ? anchor.GlobalTransform.AffineInverse() * world : null;
+
+    private (NetworkObject Carrier, Node3D Anchor)? ResolveAnchor(Attachment attachment)
+    {
+        if (attachment == AttachmentState && _carrier is not null && _anchor is not null) return (_carrier, _anchor);
+        var identifier = Context.NetworkIdentityServer.ResolveReference(AuthorityPeer, Core.Data.NetworkIdentityReference.OfFullName(attachment.Carrier), allowQueue: false);
+        var carrier = identifier is null ? null : Of(identifier.Subject);
+        var anchor = carrier?.Root is Node3D root ? root.GetNodeOrNull<Node3D>(attachment.Anchor) : null;
+        return carrier is null || anchor is null ? null : (carrier, anchor);
     }
 
     /// <summary>Playback reached a free sample: off the carrier, if playback had hung it.</summary>
