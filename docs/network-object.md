@@ -140,12 +140,14 @@ public float WalkBlend
   in *one* value (`Vector2I`): two properties would arrive in no fixed order, and the counter would fire before the
   clip beside it had been applied. This is what Unity's `NetworkAnimator` calls a trigger, and for the same reason:
   a state that is true for an instant does not survive being sampled.
-- **Root motion** runs on the authority only: the animation's displacement moves the body there and travels as the
-  transform. An observer's copy is placed from the samples every frame, so applying root motion there does not show,
-  but it walks a kinematic copy into the world between frames: skip it when `Authority.IsLocal` is false.
-- **IK and bones.** An item in a hand moved by a `SkeletonModifier3D` (`LookAtModifier3D`, two-bone IK) or on a
-  `BoneAttachment3D` is placed after the skeleton's own pass, so it does not lag the hand by a frame. Aim an IK target
-  at something synced (a `[Synced] Vector3`, or the anchor of a carried item), not at what a peer happens to display.
+- **An item on a bone** goes on a `Marker3D` under a `BoneAttachment3D` and is placed after that peer's animation
+  and the skeleton's own deferred pass, so it does not lag the hand by a frame. This is what the playground's crate
+  rides, and what the smoke measures as the distance from the hand it should be in.
+- **Aim at synced state**, a `[Synced] Vector3` or the anchor of a carried item, rather than at where this peer
+  happens to draw another player: the two are a playback delay apart.
+- **Not covered here yet**, because nothing in the repo exercises them and this guide does not teach what has not
+  been run: root motion (#75), a hand moved by a `SkeletonModifier3D` (#76), and `AnimationNodeStateMachine`, whose
+  state is an object rather than a parameter and so needs a pattern of its own (#77).
 - **Not in: animation phase on late join.** A peer joining mid-loop starts it from phase zero.
 
 The playground's player is the worked example: `WalkBlend` and `Gesture` in `PlaygroundPlayer.cs`, the tree in

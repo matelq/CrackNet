@@ -72,6 +72,11 @@ your own eyes: the NPC had a collision shape and no mesh, and the after-screensh
 
 ## Docs
 
+**Documentation follows the code, never the other way round.** A guide says what is built and what a check covers;
+a paragraph teaching a pattern that nothing in the repo exercises is an assertion wearing a guide's clothes, and
+three of them sat here unnoticed until someone asked (#75 root motion, #76 skeleton modifiers, #77 state machines).
+Write the code and the check, then the line about it.
+
 `docs/` holds the guides, written for C# users of the library rather than for this repo. `docs/api.md` is generated:
 `dotnet build CrackNet.csproj` then `python docs/generate-api.py`. Regenerate it when public API or its XML comments
 change. Both projects have `GenerateDocumentationFile` on with CS1591 suppressed, so the XML exists without demanding
