@@ -887,13 +887,24 @@ public partial class CarryingTests : HarnessSuite
     {
         Network.LatencyMs = 100;
         var stacks = new[] { Host, Client, await ThirdPeer() };
-        var carriers = stacks.Select(stack => HarnessWorld.Walker(stack, 2, new Vector3(0, 1, 0), Vector3.Zero)).ToArray();
-        var carried = stacks.Select(stack => HarnessWorld.Walker(stack, 3, new Vector3(0, 1, 3), Vector3.Zero)).ToArray();
+        var carriers = stacks.Select(stack => HarnessWorld.Walker(stack, 2, new Vector3(10, 1, 10), Vector3.Zero)).ToArray();
+        var carried = stacks.Select(stack => HarnessWorld.Walker(stack, 3, new Vector3(10, 1, 13), Vector3.Zero)).ToArray();
         var hands = carriers.Select(walker => StillHand(walker)).ToArray();
         for (var i = 0; i < 20; i++) await NextFrame();
         Expect.True(carriers[1].TryAttach(carried[1], hands[1]));
         Expect.True(await WaitUntil(() => carried.All(player => player.AttachedTo is not null), 4), "never carried everywhere");
 
+        var maxStep = 0f;
+        Vector3? last = null;
+        var drawn = new DrawnFrame();
+        AddChild(drawn);
+        drawn.Drawn += () =>
+        {
+            var at = carried[1].GlobalPosition;
+            if (last is { } before) maxStep = Mathf.Max(maxStep, at.DistanceTo(before));
+            last = at;
+        };
+        var handAt = hands[1].GlobalPosition;
         var thrownAt = Time.GetTicksMsec();
         Expect.True(carriers[1].Detach(carried[1]));
         carried[1].Impulse(new Vector3(0, 0, -8));
@@ -901,9 +912,15 @@ public partial class CarryingTests : HarnessSuite
         var kept = carried[2].ImpulseVelocity.Length();
         Expect.True(await WaitUntil(() => carried[1].AttachedTo is null, 4), "the carrier's screen never showed the player leave");
         var shownAfterMs = Time.GetTicksMsec() - thrownAt;
-        var report = $"impulse left when freed {kept:F2} of 8 m/s; the carrier's screen showed the player leave {shownAfterMs} ms after the call at 100 ms one way";
+        for (var seconds = 0.0; seconds < 1; seconds += GetProcessDeltaTime()) await NextFrame();
+        drawn.QueueFree();
+        var flown = carried[1].GlobalPosition.DistanceTo(handAt);
+        var report = $"impulse left when freed {kept:F2} of 8 m/s; the carrier's screen showed the player leave {shownAfterMs} ms after the call at 100 ms one way, "
+                     + $"largest step {maxStep:F2} m, {flown:F1} m from the hand a second later";
         GD.Print("THROWN PLAYER " + report);
         Expect.True(kept > 7.5f, "the impulse faded while the player was still carried: " + report);
+        Expect.True(maxStep < 1, "the thrown player leapt on the thrower's screen: " + report);
+        Expect.True(flown > 1, "the thrown player did not fly on the thrower's screen: " + report);
     }
 
     /// <summary>
@@ -916,31 +933,45 @@ public partial class CarryingTests : HarnessSuite
     {
         Network.LatencyMs = 100;
         var stacks = new[] { Host, Client, await ThirdPeer() };
-        var carriers = stacks.Select(stack => HarnessWorld.Walker(stack, 2, new Vector3(0, 1, 0), Vector3.Zero)).ToArray();
-        var carried = stacks.Select(stack => HarnessWorld.Walker(stack, 3, new Vector3(0, 1, 3), Vector3.Zero)).ToArray();
+        var carriers = stacks.Select(stack => HarnessWorld.Walker(stack, 2, new Vector3(10, 1, 10), Vector3.Zero)).ToArray();
+        var carried = stacks.Select(stack => HarnessWorld.Walker(stack, 3, new Vector3(10, 1, 13), Vector3.Zero)).ToArray();
         var hands = carriers.Select(walker => StillHand(walker)).ToArray();
         for (var i = 0; i < 20; i++) await NextFrame();
 
         var states = new List<string>();
+        var maxStep = 0f;
+        var farthest = 0f;
+        Vector3? last = null;
+        var measuring = false;
         var drawn = new DrawnFrame();
         AddChild(drawn);
         drawn.Drawn += () =>
         {
             var state = carried[1].AttachedTo is null ? "free" : "hand";
             if (states.Count == 0 || states[^1] != state) states.Add(state);
+            // The copy on the carrier's screen, from the moment it is in the hand (the grab itself is a jump by
+            // design): no leap, and never far from the hand until it is let go
+            if (!measuring) return;
+            var at = carried[1].GlobalPosition;
+            if (last is { } before) maxStep = Mathf.Max(maxStep, at.DistanceTo(before));
+            farthest = Mathf.Max(farthest, at.DistanceTo(hands[1].GlobalPosition));
+            last = at;
         };
         Expect.True(carriers[1].TryAttach(carried[1], hands[1]));
         Expect.True(await WaitUntil(() => carried[1].AttachedTo is not null, 2), "the carrier's screen never showed the player in the hand");
+        measuring = true;
         Expect.True(carried[0].ClaimedBy == 0, "the grab reached the host before the release was asked, so this measures nothing");
         Expect.True(carriers[1].Detach(carried[1]), "the carrier could not let go");
         Expect.True(await WaitUntil(() => carried[2].AttachedTo is null && carried[2].ClaimedBy == 0 && carried[0].ClaimedBy == 0, 4), "the release never went through");
         for (var seconds = 0.0; seconds < 1; seconds += GetProcessDeltaTime()) await NextFrame();
         drawn.QueueFree();
 
-        var report = "the carrier's screen showed: " + string.Join(" > ", states);
+        var report = $"the carrier's screen showed: {string.Join(" > ", states)}; largest step {maxStep:F2} m, farthest from the hand {farthest:F2} m";
         GD.Print("QUICK GRAB AND RELEASE " + report);
         // The first frame drawn may already be the optimistic hand
         Expect.True(states.SkipWhile(state => state == "free").SequenceEqual(new[] { "hand", "free" }), "the player came back into the hand after the release: " + report);
+        // A hung sample holds an offset from the hand, not a place: applied as one, the player showed at the origin
+        Expect.True(maxStep < 1 && farthest < 4, "the player leapt on the carrier's screen: " + report);
     }
 
     /// <summary>

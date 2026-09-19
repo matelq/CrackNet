@@ -470,7 +470,14 @@ Two decisions here are made but not built, and both matter enough to keep in sig
   Also built: a release this peer asked for stands against the player's samples from before its peer heard of it,
   and against the host's record of the grab arriving after it, until the first free sample past the record; a
   grab and release quicker than the round trip showed hand, free, hand, free on the carrier's screen before
-  (`AQuickGrabAndReleaseDoesNotPutThePlayerBackInTheHand`). And the playground tints its platforms by authority.
+  (`AQuickGrabAndReleaseDoesNotPutThePlayerBackInTheHand`). The third playtest showed what that first cut got
+  wrong: it dropped the hung state of the suppressed samples but applied their values, which are offsets from the
+  hand, as places, so the thrower saw the player at the world's origin, then at the spot it stood on before the
+  grab (the pair leading into the hand, played after the release), then flying. While a release of this peer's
+  stands, the copy is shown free where it is, whatever the pair says, and moves only from the hand to the first
+  free sample; a free pair past the record of the release ends it. Measured on the thrower's screen: largest step
+  13.7 m before, 0.07 m after, and the copy flies 1.8 m in the second after. And the playground tints its
+  platforms by authority.
 - Extrapolating targets to the present for hit tests, in the style of Photon Fusion "Forecast". Revisit if dodges do
   not count on Casual or Realistic.
 - Sequence number overflow (review finding).

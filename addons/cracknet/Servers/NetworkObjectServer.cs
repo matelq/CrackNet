@@ -762,10 +762,18 @@ public partial class NetworkObjectServer : Node
         // What this peer let go of stays let go: the player's samples from before its peer heard of the release still
         // say hung, and they do not put it back in the hand here. Believed again from the first free sample past the
         // record of the release, since that peer heard a moment earlier or later than this one
+        // Let go of here, and its stream has not caught up: the samples still stand where it was before the grab,
+        // lead into the hand, or hang from it. Shown free where it is until a free sample past the record of the
+        // release is reached
+        var letGo = false;
         if (obj.Released is { } released && obj.DisplayTick is { } shownTick)
         {
-            if (shownTick >= released.Tick && sampled is null) obj.Released = null;
-            else if (sampled == released.Attachment) sampled = null;
+            if (from.Attachment is null && to.Attachment is null && shownTick >= released.Tick) obj.Released = null;
+            else
+            {
+                sampled = null;
+                letGo = true;
+            }
         }
         var attachment = sampled ?? obj.ClaimedHere;
         var switching = from.Attachment != to.Attachment;
@@ -777,6 +785,15 @@ public partial class NetworkObjectServer : Node
             var interpolator = Interpolators.FindInterpolatorFor(a);
             var isTransform = i == 0 && obj.Root is Node3D;
 
+            // A hung transform is an offset from the hand, not a place, and the way into the hand was shown already:
+            // the copy stays where it is until the free sample is in sight, then goes from the hand to it
+            if (isTransform && letGo)
+            {
+                if (switching && from.Attachment is not null && to.Attachment is null && !atEnd
+                    && obj.WorldOf(from.Attachment, a.AsTransform3D()) is { } hand && obj.WorldOf(null, b.AsTransform3D()) is { } free)
+                    node.SetValue(property, hand.InterpolateWith(free, (float)fraction));
+                continue;
+            }
             if (isTransform && switching && !atEnd && interpolate && !to.Snap && attachment == from.Attachment
                 && obj.WorldOf(from.Attachment, a.AsTransform3D()) is { } fromWorld && obj.WorldOf(to.Attachment, b.AsTransform3D()) is { } toWorld)
             {

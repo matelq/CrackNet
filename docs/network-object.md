@@ -74,7 +74,8 @@ crate in it therefore cannot drift apart, and a held crate at rest in the hand c
   (about 270 ms at 100 ms one way): start the throw animation at the call, as the playground does, and it reads as a
   wind-up.
 - **What you let go of stays let go.** A grab and a release quicker than the round trip do not put the player back in
-  your hand when its stream from the grab reaches you; its samples from before the release are not believed about it.
+  your hand when its stream from the grab reaches you: until its stream is past your release, the player is shown
+  free where it is on your screen, and then leaves the hand for its first free sample.
 - `TryAttach` is optimistic like `TryClaim`: it applies here and the host is asked. A carrier that wants to know when
   the item is really in its hand on this peer, or is told the host gave it to someone else, implements
   `IAttachmentChanged` and reads `Attached`.
