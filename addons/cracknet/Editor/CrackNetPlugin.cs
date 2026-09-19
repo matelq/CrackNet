@@ -17,25 +17,23 @@ public partial class CrackNetPlugin : EditorPlugin
 
     private static readonly Setting[] Settings =
     [
-        // Setting this to false makes CrackNet keep its settings when disabling the plugin
-        new("cracknet/general/clear_settings", true, Variant.Type.Bool),
         new("cracknet/general/use_raw_commands", false, Variant.Type.Bool),
         // Under the path MTU with room for IP, UDP and transport headers: the limit Steam uses and Gaffer on Games
         // recommends, so a state packet is never fragmented
-        new("cracknet/general/max_sync_packet_size", 1200, Variant.Type.Int),
-        new("cracknet/general/supress_identity_peer_disconnected_warning", false, Variant.Type.Bool),
+        new("cracknet/general/max_sync_packet_size", 1200, Variant.Type.Int, PropertyHint.Range, "64,1400,or_greater"),
+        new("cracknet/general/suppress_identity_peer_disconnected_warning", false, Variant.Type.Bool),
 
         LogLevelSetting("cracknet/logging/log_level"),
         LogLevelSetting("cracknet/logging/cracknet_log_level"),
         LogLevelSetting("cracknet/logging/cracknet_extras_log_level"),
 
-        new("cracknet/time/tickrate", 30, Variant.Type.Int),
-        new("cracknet/time/max_ticks_per_frame", 8, Variant.Type.Int),
-        new("cracknet/time/recalibrate_threshold", 8.0, Variant.Type.Float),
-        new("cracknet/time/stall_threshold", 1.0, Variant.Type.Float),
+        new("cracknet/time/tickrate", 30, Variant.Type.Int, PropertyHint.Range, "1,120,or_greater"),
+        new("cracknet/time/max_ticks_per_frame", 8, Variant.Type.Int, PropertyHint.Range, "1,32,or_greater"),
+        new("cracknet/time/recalibrate_threshold", 8.0, Variant.Type.Float, PropertyHint.Range, "0.5,30,0.5,or_greater"),
+        new("cracknet/time/stall_threshold", 1.0, Variant.Type.Float, PropertyHint.Range, "0.1,10,0.1,or_greater"),
         new("cracknet/time/sync_interval", 0.25, Variant.Type.Float, PropertyHint.Range, $"{NetworkTimeSynchronizer.MinSyncInterval},2,or_greater"),
-        new("cracknet/time/sync_samples", 8, Variant.Type.Int),
-        new("cracknet/time/sync_adjust_steps", 8, Variant.Type.Int),
+        new("cracknet/time/sync_samples", 8, Variant.Type.Int, PropertyHint.Range, "1,64,or_greater"),
+        new("cracknet/time/sync_adjust_steps", 8, Variant.Type.Int, PropertyHint.Range, "1,64,or_greater"),
         new("cracknet/time/sync_to_physics", true, Variant.Type.Bool),
         new("cracknet/time/max_time_stretch", 1.25, Variant.Type.Float, PropertyHint.Range, "1,2,0.05,or_greater"),
         new("cracknet/time/tickrate_mismatch_action", (int)TickrateMismatchAction.Warn, Variant.Type.Int, PropertyHint.Enum, "Warn,Disconnect,Adjust,Signal"),
@@ -45,8 +43,8 @@ public partial class CrackNetPlugin : EditorPlugin
 
         // Extras: window tiler
         new("cracknet/extras/auto_tile_windows", false, Variant.Type.Bool),
-        new("cracknet/extras/screen", 0, Variant.Type.Int),
-        new("cracknet/extras/borderless", false, Variant.Type.Bool),
+        new("cracknet/extras/tile_screen", 0, Variant.Type.Int, PropertyHint.Range, "0,3,or_greater"),
+        new("cracknet/extras/tile_borderless", false, Variant.Type.Bool),
 
         // Extras: autoconnect / network simulator
         new("cracknet/autoconnect/enabled", false, Variant.Type.Bool),
@@ -141,10 +139,7 @@ public partial class CrackNetPlugin : EditorPlugin
         if (ProjectSettings.Singleton.IsConnected(ProjectSettings.SignalName.SettingsChanged, _syncProfileFields))
             ProjectSettings.Singleton.Disconnect(ProjectSettings.SignalName.SettingsChanged, _syncProfileFields);
 
-        if (ProjectSettings.GetSetting("cracknet/general/clear_settings", false).AsBool())
-            foreach (var setting in Settings)
-                RemoveSetting(setting);
-
+        // The settings stay in project.godot: disabling the plugin for one run used to wipe every value a user had set
         foreach (var (name, _) in Autoloads)
             if (HasAutoload(name)) RemoveAutoloadSingleton(name);
     }
@@ -162,12 +157,6 @@ public partial class CrackNetPlugin : EditorPlugin
             ["hint"] = (int)setting.Hint,
             ["hint_string"] = setting.HintString,
         });
-    }
-
-    private static void RemoveSetting(Setting setting)
-    {
-        if (ProjectSettings.HasSetting(setting.Name))
-            ProjectSettings.Clear(setting.Name);
     }
 
     private static bool HasAutoload(string name) => ProjectSettings.HasSetting("autoload/" + name);

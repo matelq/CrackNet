@@ -42,16 +42,11 @@ custom_bind_ip=""
 port_override_enabled=false
 port_override=6550
 
-[cracknet]
-
-general/clear_settings=false
-events/enabled=true
-
-[playground]
-
-playtest_log=false
-
 [physics]
 
 3d/physics_engine="Rapier3D"
 rapier/solver/normalized_max_corrective_velocity=2.0
+
+[playground]
+
+playtest_log=false

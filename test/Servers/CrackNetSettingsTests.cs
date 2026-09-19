@@ -13,10 +13,7 @@ public partial class CrackNetSettingsTests : TestSuite
         Expect.Equal(30, settings.Tickrate);
         Expect.Equal("127.0.0.1", settings.AutoconnectHost);
         Expect.True(settings.EventsEnabled);
-
-        // Upstream reads cracknet/time/recalibrate_threshold with two different fallbacks; they only differ while it is unset.
         Expect.Equal(8.0, settings.RecalibrateThreshold);
-        Expect.Equal(2.0, settings.SyncPanicThreshold);
     }
 
     [Test]

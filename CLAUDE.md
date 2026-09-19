@@ -85,14 +85,15 @@ a comment on every member.
 
 Editor playtests use autoconnect (Project Settings > CrackNet > Autoconnect > Enabled, plus Debug > Customize Run
 Instances). That setting lands in project.godot: never commit it, and run headless checks locally with
-`CRACKNET_NO_AUTOCONNECT=1` while it is on, or they connect to each other.
+`CRACKNET_NO_AUTOCONNECT=1` while it is on, or they connect to each other. `tools/check-settings.py` fails on a
+`project.godot` that carries one, and on a setting the plugin registers but `CrackNetSettings` does not read.
 
 ## Before committing
 
 Warnings are errors in every project (`Directory.Build.props`). Fix the cause; do not suppress.
 
 Run the whole CI set locally, not a subset: `dotnet format CrackNet.slnx --verify-no-changes`, `dotnet test CrackNet.slnx`,
-`dotnet build CrackNet.csproj`, `python tools/check-doc-examples.py`, then the Godot runner. `docs/examples.md` is how
+`dotnet build CrackNet.csproj`, `python tools/check-doc-examples.py`, `python tools/check-settings.py`, then the Godot runner. `docs/examples.md` is how
 the API is judged: keep every block marked and compiling. Building only the project you touched once let a broken
 `CrackNet.csproj` through, because the Godot project compiles everything under the repo root that is not excluded.
 

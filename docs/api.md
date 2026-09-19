@@ -44,9 +44,38 @@ Every `cracknet/*` project setting, read once into one mutable object. Upstream 
 
 | | Member | Summary |
 |---|---|---|
+| property | `AutoTileWindows` | Arrange the windows of the running instances side by side, so several peers are visible at once. |
+| property | `AutoconnectEnabled` | The first instance hosts and the rest join it on start, with no menu. |
+| property | `AutoconnectHost` | Address the joining instances connect to. |
+| property | `AutoconnectPort` | Port autoconnect hosts and joins on. |
+| property | `CrackNetExtrasLogLevel` | Lowest level the extras (window tiler, network simulator) print. |
+| property | `CrackNetLogLevel` | Lowest level the addon's own loggers print. |
+| property | `EventsEnabled` | Emit the `NetworkEvents` signals at all. |
 | property | `Instance` | The settings the autoloads use. Replace before they enter the tree; mutating it later only affects re-reads. |
+| property | `LogLevel` | Lowest level any logger prints. |
+| property | `MaxSyncPacketSize` | Bytes a state packet may reach before it is split. 1200 stays under the path MTU with room for IP, UDP and transport headers. |
+| property | `MaxTicksPerFrame` | Ticks a single frame may run before the clock gives up catching up. |
+| property | `MaxTimeStretch` | Fastest the clock may run while catching up, as a multiple of real time. |
+| property | `RecalibrateThreshold` | Seconds of clock error after which the local clock is snapped to the remote one instead of stretched towards it. |
+| property | `SimulatedBurstIntervalSeconds` | Seconds between simulated outages. Zero means none. |
+| property | `SimulatedBurstLossMs` | Length of a simulated outage, in milliseconds. |
+| property | `SimulatedJitterMs` | Random variation added to the simulated latency, in milliseconds. |
+| property | `SimulatedLatencyMs` | One-way delay the simulator adds, in milliseconds. |
+| property | `SimulatedPacketLossChance` | Share of packets the simulator drops, 0 to 1. |
 | property | `SimulatedProfile` | A named NetworkSimulator profile, or "Custom" for the latency, loss, jitter and burst settings. |
-| property | `SyncPanicThreshold` | Same `cracknet/time/recalibrate_threshold` key as `RecalibrateThreshold`, but with the fallback upstream uses in the time synchronizer (`network-time-synchronizer.gd:105`). The two differ only when the setting is absent. |
+| property | `StallThreshold` | Seconds a frame may take before it counts as a stall and its time is discarded rather than ticked through. |
+| property | `SuppressIdentityPeerDisconnectedWarning` | Drop the warning the identity server logs when a peer disconnects without an identity. |
+| property | `SuppressOfflinePeerWarning` | Drop the warning logged when the clock is asked about a peer that is no longer connected. |
+| property | `SyncAdjustSteps` | Ticks over which a measured offset is applied, so the clock eases rather than jumps. |
+| property | `SyncInterval` | Seconds between clock sync exchanges. |
+| property | `SyncSamples` | Round trips averaged into one clock offset estimate. |
+| property | `SyncToPhysics` | Drive ticks from `_PhysicsProcess` instead of `_Process`. |
+| property | `Tickrate` | Network ticks per second. Every peer must agree; see `TickrateMismatchAction`. |
+| property | `TickrateMismatchAction` | What a peer does when another peer reports a different tickrate. |
+| property | `TileBorderless` | Give the tiled windows no title bar, so more of each one is game. |
+| property | `TileScreen` | Index of the screen the tiler lays the windows out on. |
+| property | `UseCompression` | Compress the autoconnect peer's traffic. |
+| property | `UseRawCommands` | Send commands as raw packets instead of RPCs. Cheaper per command, but invisible to Godot's RPC tooling. |
 | method | `Load` | Reads every setting from `ProjectSettings`, falling back to the defaults the plugin registers. |
 
 ### IAttachmentChanged
@@ -149,6 +178,7 @@ One replicated object. While its root is this peer's multiplayer authority it se
 | property | `AttachmentState` | What this item is hung on here, or null when it is free. |
 | property | `Authority` | Who simulates the object and sends its state, and taking or returning that by hand. |
 | property | `Base` | The object whose body the engine reports as this character's floor, set by its physics handling every physics frame on the authority: its position goes out relative to that body, and every peer puts it on its own copy. |
+| property | `CarriedTick` | The tick of the sample playback carried over the last change of hands: what this peer showed of the old authority, at the tick it showed it, for the new authority's first sample to be reached from. Null once that sample has come. |
 | property | `ClaimAttachment` | The attachment that rides on this object's claim record: where the claimant wants it hung. A carried player's own peer hangs the player from it when the host's record arrives; for a crate the claimant hangs it itself. |
 | property | `ClaimedBy` | The peer holding the object, or 0 when nobody does. |
 | property | `ClaimedHere` | The attachment this peer asked for on a player it does not simulate, while the claim stands: shown here at once, optimistically, rather than a round trip and a playback delay later when the player's own stream says so. |
@@ -156,6 +186,7 @@ One replicated object. While its root is this peer's multiplayer authority it se
 | property | `Diagnostics` | Sequences, display tick and sample events: for checks and diagnostics, not for game logic. |
 | property | `EarlySamples` | State from a peer that is not the authority here yet, kept for when the host's word arrives. |
 | property | `Hanging` | Everything placed relative to this object here: attached items and riders, for the placer. |
+| property | `HeldSamples` | Samples that arrived before the one they follow: kept until it lands, or a little while, see the server. |
 | property | `ImpulseDecay` | How fast `ImpulseVelocity` fades, in metres per second per second. |
 | property | `ImpulseStrength` | How hard a character body pushes the rigid bodies it slides into, along the contact normal; 0 is off. The library takes the body and pushes it on this peer's simulation. |
 | property | `ImpulseVelocity` | The velocity the pushes received give a root that is not a rigid body, fading by `ImpulseDecay` each physics frame. A character adds it where it composes its `Velocity`, next to gravity, every frame: a controller writes its horizontal velocity from input each frame, so a push added once would last one frame. |
@@ -165,6 +196,7 @@ One replicated object. While its root is this peer's multiplayer authority it se
 | property | `MaxSpreadDepth` | Maximum contacts from the source of a spread chain, or -1 for unlimited. |
 | property | `PendingRequest` | The id of this guest's latest authority request the host has not answered yet, or 0. |
 | property | `PlaybackState` | Where this object is in its own timeline on this peer: `Pending` until playback reaches its first sample, `Ending` once it despawned. The authority is always past pending. Read this instead of `Visible` to tell whether a projectile can hit yet. |
+| property | `Released` | The attachment this peer let go of, and from when the player's samples are believed again: the tick the host's record of the release arrived, before which its samples may still say hung (all of them until then). Playback would otherwise put it back in the hand until its stream reaches the release. |
 | property | `ResolvedKind` | `Kind` with `Auto` resolved from the root's type. |
 | property | `RestFrames` | Physics frames a simulated body has been at rest, counted by its physics handling. |
 | property | `Root` | The node that is the object: authority, identity and the synced subtree. The parent by default. |
@@ -186,6 +218,7 @@ One replicated object. While its root is this peer's multiplayer authority it se
 | method | `IsNewer(System.Int32,System.Int32)` | True when ( `ownershipSequence`, `authoritySequence`) is newer than what this object has. |
 | method | `KindFor(Godot.Node)` | What `Auto` resolves to for a root of this type. |
 | method | `Of(Godot.Node)` | The object whose root is `root`, or null when it is not a registered object. |
+| method | `OffsetOf(CrackNet.NetworkObject.Attachment,Godot.Transform3D)` | The offset that puts this object at `world` on this peer's copy of the anchor. |
 | method | `Place` | Puts this attached item on its anchor, where the anchor is now. Once per frame after the animation, and at once when hung. |
 | method | `ReleaseClaim` | Lets go of a held object. This peer keeps simulating it until someone else touches it. |
 | method | `ReleaseClaim(Godot.Vector3)` | Lets go of a held object with `velocity`: the throw flies on this peer's simulation. |
@@ -195,13 +228,16 @@ One replicated object. While its root is this peer's multiplayer authority it se
 | method | `ShowFree` | Playback reached a free sample: off the carrier, if playback had hung it. |
 | method | `Snap` | The next state this peer sends applies without interpolation on the others: a respawn, not a flight. |
 | method | `SnapApplied` | A snap sample was applied here: it is to be seen, not smoothed. |
+| method | `Snapshot` | The state this peer shows now, as the sample it would send: hung or riding, with the offset in the transform slot. |
 | method | `Spread(CrackNet.NetworkObject)` | Passes this object's authority to `other` after contact. Physics bodies call it themselves; call it for contact the physics engine does not report. The source's depth limit follows the whole chain; the host verifies this object as the cause and arbitrates opposing requests. |
+| method | `Switching` | Playback is between a world position and an anchor: the step between them is the smoothing's to spread. |
 | method | `TryAttach(CrackNet.NetworkObject,Godot.Node3D)` | Optimistically hangs `item` on `anchor`, a node under this object's root (a `Marker3D`, under a `BoneAttachment3D` for a bone). While attached the item sends no transform: its samples name the carrier and the anchor, and every peer, this one included, puts it on its own copy of the anchor after that peer's animation, so a hand and what it holds cannot drift apart. The item is claimed, so nobody else can take it, and its collisions are off. Other peers show the change when their playback of the item reaches it. False only when refusal is known here: the anchor is not under this root (an error), the item is attached already, it would carry its own carrier, or it cannot be claimed; drive game logic from `Attached` and `AttachedTo`, as with `TryClaim`. |
 | method | `TryClaim` | Optimistically makes the object this peer's: authority and ownership, so nobody else can take it until it is released. It applies here at once and the host is asked; two peers grabbing within a ping both see it in hand until the host's answer takes it from one of them, through `IAuthorityChanged`. So drive game logic from `ClaimedBy` rather than from the return value. A physics body is frozen while claimed; the game moves it. False only when refusal is known here: someone else holds it, it is not transferable, or this peer is not connected. |
 | method | `Unhang` | Takes this object off its carrier on this peer. |
 | method | `UnsupportedReason(Godot.Node)` | Why a root of this type cannot be replicated, or null when it can. |
 | method | `ValueToSend(System.Int32)` | The value property `index` sends: the anchor offset instead of the transform while attached. |
 | method | `VisualProblem(Godot.Node,Godot.Node3D)` | What is wrong with `Visual`, or null: it has to be under the root, never the root itself. |
+| method | `WorldOf(CrackNet.NetworkObject.Attachment,Godot.Transform3D)` | Where a sampled value is in this peer's world: the anchor offset placed on this peer's copy of the anchor, or the world transform itself. |
 | event | `AttachmentChanged` | Raised after this object's attachments, or its own attachment, changed here; for watching another object. |
 | event | `AuthorityChanged` | Raised after the authority or the holder changed, on every peer. |
 | event | `Impulsed` | Raised on the authority of a root that is not a rigid body, exactly once per push: the impulse, for watching another object. The node itself implements `IImpulsed`. The push is also added to `ImpulseVelocity`. A rigid body takes the impulse itself. |
@@ -219,15 +255,20 @@ Sends the state of every `NetworkObject` this peer is authority for, once per ti
 | property | `PlaybackDelayTicks` | The least number of ticks behind the newest sample remote objects are shown, before jitter adds to it: two send intervals and a margin, so one lost packet does not empty the buffer: with one interval and a half-tick margin, 30 Hz snapshots left the loss test drawing twice the jumps. |
 | property | `RestHeartbeatTicks` | An object whose state has not changed is sent again only this often, in ticks. |
 | property | `StateIntervalTicks` | State goes out every this many ticks: 2 with the tick on the physics step (the default, 60 Hz), 1 on a 30 Hz tick of its own, 30 snapshots a second either way. |
+| field | `ReorderWaitIntervals` | How long a sample waits for the one before it at most, in state intervals: packets swap places by a few milliseconds. |
 | field | `SnapshotRate` | Snapshots a second, whatever the tickrate. |
+| field | `_commonTick` | The one time this screen shows every remote object at: the deepest of its live links' clocks, never running back. Each peer's clock still trails that peer's own link by its own depth, but shown each at its own depth a platform from the host and a player from a guest were places at two moments, and the player stepping onto it slid along it by the platform's speed times the difference (a metre on a link 120 ms deeper than the host's). A peer whose clock has stopped, its samples overdue by more than the lead, does not hold the others back. |
+| method | `ApartBy(CrackNet.NetworkObject,CrackNet.NetworkObject.Sample,Godot.Variant[],CrackNet.NetworkObject.Attachment)` | How far apart two samples put the body in this peer's world; null when an anchor is not here, or the root is not a physics body, and then the state is not carried: a body's motion is the line to draw, other state (a synced position of the game's own, say) is the new authority's to say from its first sample on. |
 | method | `ErasePeer(System.Int32)` | Forgets a peer's clock. On the host, also takes back every object the peer simulated or held and tells everyone: otherwise a crate carried out of the session stays with nobody for good. |
 | method | `GetDisplayTick(System.Int32)` | The display tick for objects of `peer`, or null before anything arrived from it. |
 | method | `GetPlaybackStatus(System.Int32)` | How old what `peer` is shown is, averaged over the last second, or null before any state arrived. Measured on arrival and against the clock's running time rather than against the newest tick: a resting peer sends only a heartbeat a second, and "local tick minus newest tick" then read up to a second of delay that was never there. |
 | method | `HandleAuthority(System.Int32,System.Byte[])` | On the host: accepts a guest's change when it is newer and the object is free or already the guest's, and tells everyone; otherwise tells the guest what stands. On a guest: whatever the host says stands. |
 | method | `HandleEvent(System.Int32,System.Byte[])` | Raises an event on its object if this peer is the authority, and passes it on to the authority otherwise. |
 | method | `PlaceAttached` | Puts every attached item on its anchor, carriers before what hangs on them. Once per frame after everything else has processed, from `AttachmentPlacer`. |
+| method | `ReleaseHeld(CrackNet.NetworkObject,CrackNet.Core.Time.PlaybackClock,System.Boolean)` | Plays the held samples whose predecessor has landed, in order; all of them when the wait is over. |
 | method | `ReplayEarlySamples(CrackNet.NetworkObject)` | `obj` just changed authority here: the new authority's samples that came first are played from the start of its flight; anyone else's are dropped, since the host did not give it to them. |
 | method | `SendAllAuthorityTo(System.Int32)` | On the host: tells a peer that just joined who has authority over and who holds every object. |
+| method | `ShownOf(CrackNet.Core.Time.PlaybackClock)` | Where this peer's objects are shown: the common time, but never past what the peer has sent. |
 | method | `SubmitAuthority(CrackNet.NetworkObject)` | Sends an authority change this peer just applied: a guest asks the host, the host tells everyone. |
 
 ### NetworkTickrateHandshake
@@ -431,6 +472,7 @@ The display tick for everything one remote peer sends. One clock per peer, not p
 |---|---|---|
 | property | `Depth` | How far behind the newest tick the clock aims to run now: the minimum plus this link's recent jitter. |
 | property | `Holds` | Advances where the clock started holding at the newest tick; a measure of underruns. |
+| property | `IsLive` | Whether the peer has been heard from within the lead the clock's time may run past its newest tick: past that the time stands still, and a clock standing still must not hold back the screen's common display time. |
 | property | `Newest` | The newest tick heard from the peer. |
 | property | `Tick` | The tick to display, or null until the peer has sent anything. |
 | property | `Time` | The clock's own time, which keeps running while nothing arrives. How far this is behind the local tick is the peer's playback age; `Tick` can sit still at the newest sample while a peer rests. |
@@ -444,6 +486,7 @@ Tick-stamped samples of one object, read at a display tick from its peer's `Play
 | | Member | Summary |
 |---|---|---|
 | method | `Push(System.Int32,`0,System.Nullable{System.Double})` | Adds a sample unless it lands before `shownTick`: a late packet inside the interval already on screen would bend the viewer's past. Returns whether it was kept. |
+| method | `TryGetBefore(System.Int32,System.Int32@,`0@)` | The sample just before `tick`, if any. |
 | method | `TryGetNewest(System.Int32@,`0@)` | The newest sample, if any. |
 | method | `TrySample(System.Double,`0@,`0@,System.Double@)` | The samples around `tick` and how far between them it is; false before the first sample, and both the newest after the last. Drops samples that no later tick can need. |
 

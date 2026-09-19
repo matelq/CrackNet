@@ -29,8 +29,13 @@ next to it (latency, packet loss chance, jitter, burst length and interval).
 4. Run `examples/playground/playground.tscn`. The first instance becomes the host, the others join, and each player gets
    a colour by joining order.
 
-Autoconnect lands in `project.godot`. Do not commit it, and while it is on run headless checks with
-`CRACKNET_NO_AUTOCONNECT=1`, or they connect to your editor instances.
+Autoconnect lands in `project.godot`. Do not commit it - `python tools/check-settings.py` fails on a `project.godot`
+that carries one of these - and while it is on run headless checks with `CRACKNET_NO_AUTOCONNECT=1`, or they connect
+to your editor instances.
+
+Every `cracknet/*` setting is one property of `CrackNetSettings`, documented there and in `docs/api.md`. A game can
+set them in code instead: assign a `CrackNetSettings` to `CrackNetSettings.Instance` before the autoloads enter the
+tree.
 
 Playground controls: WASD to move, Space to jump, F to grab and throw a crate, E to push a player in front of you, left
 mouse or Enter to shoot. A crate is tinted with the colour of the peer simulating it right now.
