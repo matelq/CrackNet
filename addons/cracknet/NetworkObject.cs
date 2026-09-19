@@ -384,6 +384,28 @@ public partial class NetworkObject : Node
     /// <summary>What this item is hung on here, or null when it is free.</summary>
     internal Attachment? AttachmentState { get; private set; }
 
+    /// <summary>Where this peer drew this object over the last frames: what a rider standing on it measured against.</summary>
+    internal Internal.DrawnHistory Drawn { get; } = new();
+
+    /// <summary>
+    /// How far behind <paramref name="tick"/> this peer's copy of the base stood when this object's offset was
+    /// measured against it: the depth of the link to whoever drives the base. Capped so it stays one byte.
+    /// </summary>
+    internal int BaseAge(int tick)
+        => Base is { } floor && floor.DisplayTick is { } shown ? Math.Clamp(tick - (int)Math.Round(shown), 0, 255) : 0;
+
+    /// <summary>How much of the gap between the rider's world line and its place on the base is still shown, 1 to 0.</summary>
+    internal double BaseBlend { get; set; }
+
+    /// <summary>The gap in world metres, frozen when the object left its base and given up over the blend.</summary>
+    internal Vector3 LeftBaseBy { get; set; }
+
+    /// <summary>Whether a switch on or off a base is being played right now, so its gap is seeded only once.</summary>
+    internal bool Crossing { get; set; }
+
+    /// <summary>This peer's copy of what <paramref name="attachment"/> names, when it has one.</summary>
+    internal NetworkObject? CarrierOf(Attachment attachment) => ResolveAnchor(attachment)?.Carrier;
+
     /// <summary>
     /// The object whose body the engine reports as this character's floor, set by its physics handling every physics
     /// frame on the authority: its position goes out relative to that body, and every peer puts it on its own copy.
@@ -1051,13 +1073,19 @@ public partial class NetworkObject : Node
         return false;
     }
 
-    internal sealed class Sample(Variant[] values, bool snap, bool despawned, Attachment? attachment = null)
+    internal sealed class Sample(Variant[] values, bool snap, bool despawned, Attachment? attachment = null, int anchorAge = 0)
     {
         public Variant[] Values { get; } = values;
         public bool Snap { get; } = snap;
         public bool Despawned { get; } = despawned;
         /// <summary>Where the object hangs at this tick, or null when it is free; the transform value is then relative to the anchor.</summary>
         public Attachment? Attachment { get; } = attachment;
+        /// <summary>
+        /// Ticks behind this sample that the sender's copy of what it stands on was, when the offset was measured
+        /// against it. Zero unless the sample rides something. Every peer's copy of that base followed the same
+        /// samples, so this says which of its own past places to measure the rider's world position from.
+        /// </summary>
+        public int AnchorAge { get; } = anchorAge;
     }
 
     /// <summary>Who simulates a <see cref="NetworkObject"/>, and taking or returning that by hand.</summary>

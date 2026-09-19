@@ -498,6 +498,11 @@ public partial class NetworkObjectServer : Node
             writer.PutU8((byte)((obj.SnapPending ? 1 : 0) | (resumed ? 2 : 0) | (obj.DespawnRequested ? 4 : 0)
                                 | (obj.LastSentBody is null ? FirstSinceTaken : 0) | (attachment is null ? 0 : Attached)
                                 | (attachment is { Riding: true } ? Riding : 0)));
+            // Riding: how far behind this peer's copy of the base was when the offset was measured against it, so a
+            // peer whose copy is at another moment can work out where this object actually stood. One byte, right
+            // after the flags, because it drifts by a tick with the link's jitter while nothing else changes, and a
+            // rider at rest on a platform would then send a full sample instead of a heartbeat
+            if (attachment is { Riding: true }) writer.PutU8((byte)obj.BaseAge(stateTick));
             if (attachment is not null)
             {
                 writer.PutUtf8String(attachment.Carrier);
@@ -508,7 +513,11 @@ public partial class NetworkObjectServer : Node
             var body = writer.ToArray();
 
             // At rest: nothing new to say, apart from a heartbeat for peers that joined since or lost the last one
-            var unchanged = obj.LastSentBody is { } last && last.AsSpan(1).SequenceEqual(body.AsSpan(1));
+            // Past the flags, which carry a resumed bit that differs on exactly the sample after a rest, and past
+            // the age byte when there is one: a resting object has to keep saying nothing new
+            var skip = 1 + (attachment is { Riding: true } ? 1 : 0);
+            var unchanged = obj.LastSentBody is { } last
+                            && last.AsSpan(1 + ((last[0] & Riding) != 0 ? 1 : 0)).SequenceEqual(body.AsSpan(skip));
             if (!obj.DespawnRequested && unchanged && stateTick - obj.LastSentTick < RestHeartbeatTicks) continue;
 
             if (body.Length > _maxPacketSize && !obj.WarnedOversized)
@@ -599,6 +608,12 @@ public partial class NetworkObjectServer : Node
     }
 
     private const ulong EarlySampleAgeMs = 1_000;
+    /// <summary>Seconds a rider takes to cross from where it stood in the world to where it sits on what it stands on.</summary>
+    private const double BaseBlendSeconds = 0.5;
+
+    /// <summary>Eased at both ends, so the crossing starts and stops without a step in the drawn speed.</summary>
+    private static float Eased(double part) => (float)(part * part * (3 - 2 * part));
+
     private const byte Resumed = 2;
     private const byte FirstSinceTaken = 8;
     private const byte Attached = 16;
@@ -708,6 +723,7 @@ public partial class NetworkObjectServer : Node
         var teleport = (flags & 1) != 0;
         var resumed = (flags & Resumed) != 0;
         var despawned = (flags & 4) != 0;
+        var anchorAge = (flags & Riding) != 0 ? reader.GetU8() : 0;
         var attachment = (flags & Attached) != 0
             ? new NetworkObject.Attachment(reader.GetUtf8String(), reader.GetUtf8String(), (flags & Riding) != 0)
             : null;
@@ -744,9 +760,9 @@ public partial class NetworkObjectServer : Node
         // Against the sample before this one in the track, not the newest: the one after it may have come first
         if (obj.Track.TryGetBefore(tick, out var previousTick, out var previous) && tick - previousTick > StateIntervalTicks
             && (resumed || previous.Attachment != attachment))
-            obj.Track.Push(tick - StateIntervalTicks, new NetworkObject.Sample(previous.Values, false, false, previous.Attachment), shown);
+            obj.Track.Push(tick - StateIntervalTicks, new NetworkObject.Sample(previous.Values, false, false, previous.Attachment, previous.AnchorAge), shown);
 
-        if (obj.Track.Push(tick, new NetworkObject.Sample(values, teleport, despawned, attachment), shown))
+        if (obj.Track.Push(tick, new NetworkObject.Sample(values, teleport, despawned, attachment, anchorAge), shown))
             obj.Diagnostics.RaiseSampleReceived(tick);
     }
 
@@ -766,7 +782,13 @@ public partial class NetworkObjectServer : Node
         var waitMs = (ulong)(1000.0 * ReorderWaitIntervals * StateIntervalTicks / Context.NetworkTime.Tickrate);
         foreach (var obj in _objects)
         {
-            if (obj.Authority.IsLocal) continue;
+            // A base of this peer's own is drawn at the present, and a rider elsewhere measured its offset against a
+            // copy of it a link's depth back: this peer's own history says where that copy stood
+            if (obj.Authority.IsLocal)
+            {
+                if (obj.Root is Node3D here) obj.Drawn.Record(LocalTick, here.GlobalTransform);
+                continue;
+            }
             if (!_clocks.TryGetValue(obj.Root!.GetMultiplayerAuthority(), out var clock) || ShownOf(clock) is not { } shown) continue;
             var objectTick = obj.PlaybackStarted ? obj.PlaybackCursor.Advance(shown, elapsedTicks) : shown;
             // Never back: a deeper link joining pulls the common time behind what a shallower peer's objects already
@@ -780,6 +802,8 @@ public partial class NetworkObjectServer : Node
             if (!obj.Track.TrySample(objectTick, out var from, out var to, out var fraction)) continue;
             obj.DisplayTick = objectTick;
             Apply(obj, from, to, fraction);
+            // What a rider standing on this copy measured its offset against, a link's depth ago
+            if (obj.Root is Node3D drawn) obj.Drawn.Record(objectTick, drawn.GlobalTransform);
         }
     }
 
@@ -834,6 +858,29 @@ public partial class NetworkObjectServer : Node
         }
         var attachment = sampled ?? obj.ClaimedHere;
         var switching = from.Attachment != to.Attachment;
+        // Both places a rider can be drawn are known here. Where it sits on this peer's copy of what it stands on is
+        // the offset it sent; where it stood in the world is that same offset on the copy as the rider had it, and
+        // the sample says how many ticks behind that was. The two are apart by what the base travelled in between,
+        // so stepping on or off steps across that gap. Crossed over BaseBlendSeconds instead, eased at both ends
+        var ridingFrom = from.Attachment is { Riding: true };
+        var ridingTo = to.Attachment is { Riding: true };
+        var dated = ridingTo ? to : ridingFrom ? from : null;
+        var gap = Vector3.Zero;
+        if (dated is { Attachment: { } ride, AnchorAge: > 0 and var age } && obj.DisplayTick is { } drawnAt
+            && obj.CarrierOf(ride) is { } standingOn && standingOn.Drawn.At(drawnAt - age) is { } stoodAt
+            && obj.WorldOf(ride, Transform3D.Identity) is { } standsAt)
+            gap = stoodAt.Origin - standsAt.Origin;
+        // The gap belonging to each side of the pair being interpolated: a sample on the base carries whatever is
+        // left of it, a free one carries what was still owed when the object stepped off
+        var shiftFrom = (ridingFrom ? gap : obj.LeftBaseBy) * Eased(obj.BaseBlend);
+        var edge = ridingFrom != ridingTo;
+        if (edge && !obj.Crossing)
+        {
+            obj.LeftBaseBy = ridingFrom ? gap * (Eased(obj.BaseBlend) - 1) : Vector3.Zero;
+            obj.BaseBlend = 1;
+        }
+        obj.Crossing = edge;
+        var shiftTo = (ridingTo ? gap : obj.LeftBaseBy) * Eased(obj.BaseBlend);
         // A world position and an anchor offset are places at two moments: the platform shown at the host's depth,
         // the player at its own. The line between them is a slide of that gap over two ticks; the Visual smoothing
         // spreads it over its own time instead
@@ -858,6 +905,8 @@ public partial class NetworkObjectServer : Node
             if (isTransform && switching && !atEnd && interpolate && !to.Snap && attachment == from.Attachment
                 && obj.WorldOf(from.Attachment, a.AsTransform3D()) is { } fromWorld && obj.WorldOf(to.Attachment, b.AsTransform3D()) is { } toWorld)
             {
+                fromWorld.Origin += shiftFrom;
+                toWorld.Origin += shiftTo;
                 var world = fromWorld.InterpolateWith(toWorld, (float)fraction);
                 if (attachment is null) node.SetValue(property, world);
                 else obj.ShowAttached(attachment, obj.OffsetOf(attachment, world) ?? a.AsTransform3D());
@@ -866,10 +915,33 @@ public partial class NetworkObjectServer : Node
             var value = interpolate && !to.Snap && !(switching && isTransform) && !ReferenceEquals(interpolator, Interpolators.DefaultInterpolator)
                 ? interpolator.Apply(a, b, fraction)
                 : atEnd ? b : a;
+            var shift = isTransform ? shiftFrom.Lerp(shiftTo, (float)fraction) : Vector3.Zero;
+
             // A player this peer asked to carry is put in the hand before its own stream says so: its samples still
             // carry a world position, which is not an offset
-            if (isTransform && attachment is not null) obj.ShowAttached(attachment, sampled is null ? Transform3D.Identity : value.AsTransform3D());
+            if (isTransform && attachment is not null)
+            {
+                var offset = sampled is null ? Transform3D.Identity : value.AsTransform3D();
+                if (shift != Vector3.Zero && obj.WorldOf(attachment, offset) is { } placed)
+                {
+                    placed.Origin += shift;
+                    offset = obj.OffsetOf(attachment, placed) ?? offset;
+                }
+                obj.ShowAttached(attachment, offset);
+            }
+            else if (isTransform && shift != Vector3.Zero)
+            {
+                var free = value.AsTransform3D();
+                free.Origin += shift;
+                node.SetValue(property, free);
+            }
             else node.SetValue(property, value);
+        }
+        // Held at the full gap for as long as the switch is being played, then given up
+        if (!edge && obj.BaseBlend > 0)
+        {
+            obj.BaseBlend = Math.Max(0, obj.BaseBlend - obj.Root!.GetProcessDeltaTime() / BaseBlendSeconds);
+            if (obj.BaseBlend == 0) obj.LeftBaseBy = Vector3.Zero;
         }
         if (attachment is null) obj.ShowFree();
         // The frame the snap lands in: reaching the snap sample, or already past it

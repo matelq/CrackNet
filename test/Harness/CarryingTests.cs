@@ -1278,4 +1278,68 @@ public partial class CarryingTests : HarnessSuite
         Expect.True(walkers[1].GlobalPosition.DistanceTo(stoodAt) < 0.1f, "the walker did not stand still on its own peer, so this measures nothing: " + report);
         Expect.True(walkers[0].GlobalPosition.DistanceTo(shownAt) < 0.2f, "the host draws the standing walker riding along with the slider: " + report);
     }
+
+    /// <summary>
+    /// The fourth playtest, on a bad link: a player stepping onto or off a horizontal platform is drawn teleporting
+    /// on every other screen. The rider stands on its own delayed copy of the platform, so the offset it sends is
+    /// against the platform as it was a link's depth ago, while every screen places it against the platform at the
+    /// display time they share. The moment the base is taken on, the drawn player jumps by the platform's speed
+    /// times the rider's own depth to the platform's authority - a metre at 150 ms and 3 m/s - and back again when
+    /// it steps off. Peer 2, 150 ms from the host, drops onto the host's slider; the host watches its own copy.
+    /// </summary>
+    [Test]
+    public async Task AWalkerSteppingOntoAMovingPlatformIsNotJumpedAlongItOnTheHostsScreen()
+    {
+        Network.LatencyMs = 150;
+        var stacks = new[] { Host, Client };
+        var sliders = stacks.Select(stack => HarnessWorld.Lift(stack, "Slider", new Vector3(0, 0.25f, 0), new Vector3(40, 0.5f, 4), new Vector3(3, 0, 0))).ToArray();
+        var walkers = stacks.Select(stack => HarnessWorld.Walker(stack, 2, new Vector3(-3, 2.5f, 0), Vector3.Zero, smoothed: true)).ToArray();
+        foreach (var walker in walkers)
+        {
+            walker.Falls = true;
+            walker.SafeMargin = 0.05f;
+        }
+        var visual = walkers[0].GetNode<Node3D>("Visual");
+        for (var i = 0; i < 5; i++) await NextFrame();
+
+        // Judged against the display time each frame covers, as the landing test does: headless, playback advances
+        // in bursts and a frame covering two frames' worth of ticks is not a jump
+        var frames = new List<(Vector3 Body, Vector3 Drawn, bool Riding, double Delta)>();
+        var tickrate = stacks[0].Context.NetworkTime.Tickrate;
+        double? lastShown = null;
+        var drawn = new DrawnFrame();
+        AddChild(drawn);
+        drawn.Drawn += () =>
+        {
+            var shown = walkers[0].Net().Diagnostics.DisplayTick;
+            var covered = shown is { } now && lastShown is { } before ? (now - before) / tickrate : double.NaN;
+            lastShown = shown;
+            frames.Add((walkers[0].GlobalPosition, visual.GlobalPosition, walkers[0].GlobalPosition.Y < 1.5f, covered));
+        };
+        var rode = false;
+        for (var seconds = 0.0; seconds < 2.5; seconds += GetProcessDeltaTime())
+        {
+            await NextFrame();
+            rode |= walkers[1].IsOnFloor() && walkers[1].GlobalPosition.Y > 1.3f;
+        }
+        drawn.QueueFree();
+        Expect.True(rode, $"the walker never stood on the slider: at {walkers[1].GlobalPosition}");
+
+        // Around the frame the host's copy comes down onto the slider: everything the slider carries it by is
+        // expected, the step beyond the walker's own speed in one frame is the teleport
+        var taken = frames.FindIndex(1, frame => frame.Riding);
+        Expect.True(taken > 0, $"the host's copy never came down onto the slider over {frames.Count} frames");
+        float bodyStep = 0, drawnStep = 0;
+        for (var i = taken; i < Math.Min(frames.Count, taken + 8); i++)
+        {
+            if (double.IsNaN(frames[i].Delta)) continue;
+            var allowed = 7 * (float)frames[i].Delta + 0.01f;
+            bodyStep = Mathf.Max(bodyStep, frames[i].Body.DistanceTo(frames[i - 1].Body) - allowed);
+            drawnStep = Mathf.Max(drawnStep, frames[i].Drawn.DistanceTo(frames[i - 1].Drawn) - allowed);
+        }
+        var report = $"taking the slider on jumped the host's copy {bodyStep:F3} m beyond its own speed, the drawn walker {drawnStep:F3} m, after {taken} frames";
+        GD.Print("STEPPING ONTO A SLIDER " + report);
+        Expect.True(bodyStep < 0.1f, "the host's copy is teleported along the slider as it takes it on: " + report);
+        Expect.True(drawnStep < 0.1f, "the drawn walker is teleported along the slider as it takes it on: " + report);
+    }
 }
