@@ -128,6 +128,20 @@ public partial class NetworkObject : Node
     /// </summary>
     [Export(PropertyHint.Range, "0,2,0.01,suffix:s")] public float BaseCrossingTime { get; set; } = 0.5f;
 
+    /// <summary>How the gap is given up over <see cref="BaseCrossingTime"/>.</summary>
+    public enum Crossing
+    {
+        /// <summary>At one speed from start to finish: the drift is even, and begins and ends on a step in speed.</summary>
+        Even,
+        /// <summary>Most of it at once, tapering to nothing: nearest to where the object belongs, soonest.</summary>
+        Quick,
+        /// <summary>Eased at both ends: no step in speed anywhere, at the price of half a window barely moving.</summary>
+        Smooth,
+    }
+
+    /// <summary>The shape of the crossing: what the drawn speed does while the gap is given up.</summary>
+    [Export] public Crossing BaseCrossingShape { get; set; } = Crossing.Even;
+
     /// <summary>A handover that moves the object further than this is drawn at once: it is a move, not a lag.</summary>
     [Export(PropertyHint.Range, "0,20,0.1,or_greater,suffix:m")] public float MaxSmoothingDistance { get; set; } = 2;
 
@@ -409,7 +423,7 @@ public partial class NetworkObject : Node
     internal Vector3 LeftBaseBy { get; set; }
 
     /// <summary>Whether a switch on or off a base is being played right now, so its gap is seeded only once.</summary>
-    internal bool Crossing { get; set; }
+    internal bool SwitchingBase { get; set; }
 
     /// <summary>This peer's copy of what <paramref name="attachment"/> names, when it has one.</summary>
     internal NetworkObject? CarrierOf(Attachment attachment) => ResolveAnchor(attachment)?.Carrier;

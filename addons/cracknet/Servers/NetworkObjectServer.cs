@@ -608,8 +608,13 @@ public partial class NetworkObjectServer : Node
     }
 
     private const ulong EarlySampleAgeMs = 1_000;
-    /// <summary>Eased at both ends, so the crossing starts and stops without a step in the drawn speed.</summary>
-    private static float Eased(double part) => (float)(part * part * (3 - 2 * part));
+    /// <summary>How much of the gap is still shown, from the part of the crossing left to run.</summary>
+    private static float Eased(NetworkObject obj, double part) => obj.BaseCrossingShape switch
+    {
+        NetworkObject.Crossing.Even => (float)part,
+        NetworkObject.Crossing.Quick => (float)(part * part),
+        _ => (float)(part * part * (3 - 2 * part)),
+    };
 
     private const byte Resumed = 2;
     private const byte FirstSinceTaken = 8;
@@ -869,15 +874,15 @@ public partial class NetworkObjectServer : Node
             gap = stoodAt.Origin - standsAt.Origin;
         // The gap belonging to each side of the pair being interpolated: a sample on the base carries whatever is
         // left of it, a free one carries what was still owed when the object stepped off
-        var shiftFrom = (ridingFrom ? gap : obj.LeftBaseBy) * Eased(obj.BaseBlend);
+        var shiftFrom = (ridingFrom ? gap : obj.LeftBaseBy) * Eased(obj, obj.BaseBlend);
         var edge = ridingFrom != ridingTo;
-        if (edge && !obj.Crossing && obj.BaseCrossingTime > 0 && gap.Length() <= obj.MaxSmoothingDistance)
+        if (edge && !obj.SwitchingBase && obj.BaseCrossingTime > 0 && gap.Length() <= obj.MaxSmoothingDistance)
         {
-            obj.LeftBaseBy = ridingFrom ? gap * (Eased(obj.BaseBlend) - 1) : Vector3.Zero;
+            obj.LeftBaseBy = ridingFrom ? gap * (Eased(obj, obj.BaseBlend) - 1) : Vector3.Zero;
             obj.BaseBlend = 1;
         }
-        obj.Crossing = edge;
-        var shiftTo = (ridingTo ? gap : obj.LeftBaseBy) * Eased(obj.BaseBlend);
+        obj.SwitchingBase = edge;
+        var shiftTo = (ridingTo ? gap : obj.LeftBaseBy) * Eased(obj, obj.BaseBlend);
         // A world position and an anchor offset are places at two moments: the platform shown at the host's depth,
         // the player at its own. The line between them is a slide of that gap over two ticks; the Visual smoothing
         // spreads it over its own time instead
