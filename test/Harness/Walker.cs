@@ -38,6 +38,27 @@ public partial class Walker : CharacterBody3D, IAttachmentChanged
 
     private bool _gesturesKnown;
 
+    /// <summary>The states <see cref="AnimationState"/> indexes, in the order the state machine knows them.</summary>
+    public static readonly string[] AnimationStates = ["idle", "run", "jump"];
+
+    /// <summary>The state machine's playback, set by the builder once the tree is in the scene.</summary>
+    public AnimationNodeStateMachinePlayback? Playback { get; set; }
+
+    /// <summary>
+    /// A state machine's state is an object driven by Travel, not a parameter with a value, so what travels is the
+    /// state itself and the setter applies it here. The same shape as the one-shot counter, and for the same reason.
+    /// </summary>
+    [Synced]
+    public int AnimationState
+    {
+        get;
+        set
+        {
+            field = value;
+            Playback?.Travel(AnimationStates[value]);
+        }
+    }
+
     /// <summary>Root motion: the animation's displacement moves the body, read from this mixer each physics frame.</summary>
     public AnimationMixer? RootMotion { get; set; }
 
