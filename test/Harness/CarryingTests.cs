@@ -1285,6 +1285,73 @@ public partial class CarryingTests : HarnessSuite
     }
 
     /// <summary>
+    /// The fourth playtest: a player standing still on a moving platform is drawn sliding along it on every screen
+    /// but its own, the way a copy interpolated in world coordinates would, catching up at each sample. Every check
+    /// so far measured the body, which playback places on the base every frame; what a player sees is the visual,
+    /// and nothing measured that on a rider. Peer 2 stands still on the host's slider and the host watches where its
+    /// drawn copy sits on its own slider, per frame.
+    /// </summary>
+    [Test]
+    public async Task AStillRiderIsDrawnStillOnAMovingPlatformOnAnotherPeer() => await StillRider(owner: 2);
+
+    /// <summary>
+    /// The same, the way the playtest had it: the player and the platform under it are both the host's, and a guest
+    /// watches. Both come from one peer and are shown at one moment there, so there should be nothing left to
+    /// disagree about - and it is the case nothing had ever measured.
+    /// </summary>
+    [Test]
+    public async Task AStillRiderOfTheHostsIsDrawnStillOnTheHostsPlatformOnAGuest() => await StillRider(owner: 1);
+
+    private async Task StillRider(int owner)
+    {
+        // The playtest's link, not a clean one: the bad profile is 150 ms with loss, and a lost sample is what makes
+        // playback fill a hole rather than follow the samples it has
+        Network.LatencyMs = 150;
+        Network.PacketLoss = 0.05;
+        var stacks = new[] { Host, Client };
+        var sliders = stacks.Select(stack => HarnessWorld.Lift(stack, "Slider", new Vector3(0, 0.25f, 0), new Vector3(40, 0.5f, 4), new Vector3(3, 0, 0))).ToArray();
+        // The playtest's own case: the player and the platform under it are both the host's, and a guest watches.
+        // Both come from one peer and are shown at one moment there, so nothing should be left to disagree about
+        var walkers = stacks.Select(stack => HarnessWorld.Walker(stack, owner, new Vector3(-3, 2.5f, 0), Vector3.Zero, smoothed: true)).ToArray();
+        foreach (var walker in walkers)
+        {
+            walker.Falls = true;
+            walker.SafeMargin = 0.05f;
+        }
+        var watcher = owner == 1 ? 1 : 0;
+        var visual = walkers[watcher].GetNode<Node3D>("Visual");
+        var own = walkers[owner == 1 ? 0 : 1];
+        Expect.True(await WaitUntil(() => own.IsOnFloor() && own.GlobalPosition.Y > 1.3f, 3), $"the walker never stood on the slider: {own.GlobalPosition}");
+        for (var seconds = 0.0; seconds < 1.5; seconds += GetProcessDeltaTime()) await NextFrame();
+
+        // Where the host draws it on its own slider, and where its body sits on it, per frame
+        var drawnOn = new List<float>();
+        var bodyOn = new List<float>();
+        var frames = new DrawnFrame();
+        AddChild(frames);
+        frames.Drawn += () =>
+        {
+            var slider = sliders[watcher].GlobalTransform.AffineInverse();
+            drawnOn.Add((slider * visual.GlobalPosition).X);
+            bodyOn.Add((slider * walkers[watcher].GlobalPosition).X);
+        };
+        for (var seconds = 0.0; seconds < 2.0; seconds += GetProcessDeltaTime()) await NextFrame();
+        frames.QueueFree();
+
+        Expect.True(drawnOn.Count > 30, $"only {drawnOn.Count} frames drawn");
+        var ownMoved = 0f;
+        var drawnSpread = drawnOn.Max() - drawnOn.Min();
+        var bodySpread = bodyOn.Max() - bodyOn.Min();
+        var worstStep = 0f;
+        for (var i = 1; i < drawnOn.Count; i++) worstStep = Mathf.Max(worstStep, Mathf.Abs(drawnOn[i] - drawnOn[i - 1]));
+        var report = $"drawn wandered {drawnSpread:F3} m along the slider, its body {bodySpread:F3} m, worst step {worstStep:F3} m; " +
+                     $"the walker moved {ownMoved:F3} m on its own peer";
+        GD.Print($"STILL ON A SLIDER the walker is peer {owner}'s, watched from peer {(watcher == 0 ? 1 : 2)}: " + report);
+        Expect.True(drawnSpread < 0.1f, "the host draws the standing walker sliding along the slider: " + report);
+        Expect.True(worstStep < 0.05f, "the host draws the standing walker catching up along the slider in steps: " + report);
+    }
+
+    /// <summary>
     /// The fourth playtest, on a bad link: a player stepping onto or off a horizontal platform is drawn teleporting
     /// on every other screen. The rider stands on its own delayed copy of the platform, so the offset it sends is
     /// against the platform as it was a link's depth ago, while every screen places it against the platform at the
