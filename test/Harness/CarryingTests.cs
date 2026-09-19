@@ -1091,4 +1091,77 @@ public partial class CarryingTests : HarnessSuite
         Expect.True(compared > 40, "too few frames compared: " + report);
         Expect.True(worst < 0.05f, "the observer draws the jumping rider elsewhere against the lift than its peer has it: " + report);
     }
+
+    /// <summary>
+    /// The playtest's crate on the slider changing hands, seen by a third peer: the guest's crate rests on the host's
+    /// moving platform and goes back to the host. On the change the observer used to take the crate off the platform
+    /// and clear its track, so the copy stood still in the world while the platform ran on, until the host's first
+    /// sample arrived a record and a transit later, then caught up. The guest that had it saw the same on its own
+    /// screen once the crate was the host's. It stays on the platform, and what a peer showed of the old authority
+    /// stays as the first sample of the new one's track, at the tick it was shown, so playback runs on from it.
+    /// Measured per frame on the observer and on the guest, relative to their platforms, against the offsets the
+    /// authority of the moment sent.
+    /// </summary>
+    [Test]
+    public async Task ACrateChangingHandsOnAMovingPlatformStaysOnItForAThirdPeer()
+    {
+        Network.LatencyMs = 100;
+        var stacks = new[] { Host, Client, await ThirdPeer() };
+        var lifts = stacks.Select(stack => HarnessWorld.Lift(stack, "Slider", new Vector3(0, 0.25f, 0), new Vector3(40, 0.5f, 3), new Vector3(3, 0, 0))).ToArray();
+        var crates = stacks.Select(stack => HarnessWorld.Crate(stack, "Crate", new Vector3(0, 1.0f, 0))).ToArray();
+        for (var i = 0; i < 20; i++) await NextFrame();
+
+        Expect.True(crates[1].TryClaim());
+        Expect.True(crates[1].ReleaseClaim(new Vector3(0, 0.5f, 0)));
+        Expect.True(await WaitUntil(() => crates[2].Authority.Peer == 2, 3), "the observer never saw the guest take the crate");
+
+        // What each authority sent while it had the crate, relative to its own copy of the platform
+        var sent = new SortedList<int, Vector3>();
+        crates[1].Net().Diagnostics.SampleSent += tick => sent[tick] = (lifts[1].GlobalTransform.AffineInverse() * crates[1].GlobalTransform).Origin;
+        crates[0].Net().Diagnostics.SampleSent += tick => sent[tick] = (lifts[0].GlobalTransform.AffineInverse() * crates[0].GlobalTransform).Origin;
+        // Frames between the record of the change and the new authority's first displayed sample have no display
+        // tick: they are judged against the latest offset sent, since the crate rests on the platform throughout
+        var shown = new[] { new List<(double? Tick, Vector3 Offset, Vector3 Latest)>(), new List<(double? Tick, Vector3 Offset, Vector3 Latest)>() };
+        var drawn = new DrawnFrame();
+        AddChild(drawn);
+        drawn.Drawn += () =>
+        {
+            foreach (var (peer, i) in new[] { (2, 0), (1, 1) })
+                if (!crates[peer].Authority.IsLocal && sent.Count > 0)
+                {
+                    shown[i].Add((crates[peer].Net().Diagnostics.DisplayTick, (lifts[peer].GlobalTransform.AffineInverse() * crates[peer].GlobalTransform).Origin, sent.Values[^1]));
+                }
+        };
+        for (var seconds = 0.0; seconds < 5 && crates[2].Authority.Peer != 1; seconds += GetProcessDeltaTime()) await NextFrame();
+        var changedAt = shown[0].Count;
+        for (var seconds = 0.0; seconds < 1.5; seconds += GetProcessDeltaTime()) await NextFrame();
+        drawn.QueueFree();
+        Expect.True(crates[2].Authority.Peer == 1, "the crate never went back to the host");
+
+        var interval = Client.Context.NetworkObjectServer.StateIntervalTicks;
+        var ticks = sent.Keys.ToList();
+        var worst = new float[2];
+        var compared = new int[2];
+        for (var i = 0; i < 2; i++)
+        {
+            foreach (var (shownTick, offset, latest) in i == 0 ? shown[0].Skip(changedAt - 5) : shown[1])
+            {
+                Vector3 expected;
+                if (shownTick is { } tick)
+                {
+                    var next = ticks.FindIndex(at => at >= tick);
+                    if (next <= 0 || ticks[next] - ticks[next - 1] > interval * 2) continue;
+                    expected = sent.Values[next - 1].Lerp(sent.Values[next], (float)((tick - ticks[next - 1]) / (ticks[next] - ticks[next - 1])));
+                }
+                else expected = latest;
+                worst[i] = Mathf.Max(worst[i], expected.DistanceTo(offset));
+                compared[i]++;
+            }
+        }
+        var report = $"third peer: worst {worst[0]:F3} m on the platform over {compared[0]} frames around the change of hands ({shown[0].Count - changedAt} after it); "
+                     + $"the guest that had it: worst {worst[1]:F3} m over {compared[1]} frames after it";
+        GD.Print("CRATE CHANGING HANDS ON A PLATFORM " + report);
+        Expect.True(compared.All(count => count > 20), "too few frames compared: " + report);
+        Expect.True(worst.All(distance => distance < 0.1f), "a peer draws the crate off its place on the platform across the change of hands: " + report);
+    }
 }

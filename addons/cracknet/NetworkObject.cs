@@ -166,6 +166,13 @@ public partial class NetworkObject : Node
     internal List<(int Tick, byte[] Body, ulong HeldAt)> HeldSamples { get; } = new();
 
     internal double? DisplayTick { get; set; }
+
+    /// <summary>
+    /// The tick of the sample playback carried over the last change of hands: what this peer showed of the old
+    /// authority, at the tick it showed it, for the new authority's first sample to be reached from. Null once that
+    /// sample has come.
+    /// </summary>
+    internal int? CarriedTick { get; set; }
     internal bool SnapPending { get; set; }
 
     /// <summary>State from a peer that is not the authority here yet, kept for when the host's word arrives.</summary>
@@ -723,14 +730,30 @@ public partial class NetworkObject : Node
             // Taken here: simulate on from the freshest state heard, not from the one displayed a playback delay ago.
             // Every other peer is already showing the old authority close to that, so the handover does not jump back
             if (IsAuthority && Track.TryGetNewest(out _, out var newest)) Jump(newest);
-            // Samples are stamped on the previous authority's clock; the new one sends its own, at once even at rest
-            // Whatever hung it was the previous authority's doing: the new one's samples say whether it still hangs
-            Unhang();
+            // Elsewhere, what was shown of the old authority stays as the first sample of the new one's track, at the
+            // tick it was shown: ticks count the same on every authority, so playback runs from there to the new
+            // authority's first sample instead of holding and then jumping to it, and whatever it hung on or rode
+            // it stays on until that sample says otherwise. Taken off, a crate changing hands on a moving platform
+            // stood still in the world while the platform ran on
+            // The peer that had it shows its own present, at its own tick
+            (int Tick, Sample Sample)? carried = !IsAuthority && Shown && !RemoteDespawned
+                ? ((int)Math.Round(DisplayTick ?? Context.NetworkTime.Tick), Snapshot())
+                : null;
+            if (carried is null) Unhang();
             Track.Clear();
             HeldSamples.Clear();
             PlaybackCursor.Reset();
             PlaybackStarted = false;
             DisplayTick = null;
+            CarriedTick = carried?.Tick;
+            if (carried is { } kept)
+            {
+                Logger.Debug("{0} changes hands to {1}: carried from tick {2}, {3}", Root!.Name, authority, kept.Tick, kept.Sample.Attachment is { } on ? "on " + on.Carrier : "free");
+                Track.Push(kept.Tick, kept.Sample, null);
+                // The peer that had it rode the platform by its own physics, not hung: hung now, so its copy rides
+                // on while the new authority's first sample is on its way
+                if (kept.Sample.Attachment is { } rode && _carrier is null) ShowAttached(rode, kept.Sample.Values[0].AsTransform3D());
+            }
             RemoteDespawned = false;
             LastSentBody = null;
             Context.NetworkObjectServer.ReplayEarlySamples(this);
@@ -909,6 +932,14 @@ public partial class NetworkObject : Node
         => DespawnRequested || RemoteDespawned ? PlaybackState.Ending
             : IsAuthority || Shown ? PlaybackState.Playing
             : PlaybackState.Pending;
+
+    /// <summary>The state this peer shows now, as the sample it would send: hung or riding, with the offset in the transform slot.</summary>
+    private Sample Snapshot()
+    {
+        var values = new Variant[Properties.Count];
+        for (var i = 0; i < values.Length; i++) values[i] = ValueToSend(i);
+        return new Sample(values, false, false, SentAttachment());
+    }
 
     private void Jump(Sample sample)
     {

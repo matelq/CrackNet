@@ -649,6 +649,19 @@ public partial class NetworkObjectServer : Node
         ReleaseHeld(obj, clock, all: false);
     }
 
+    /// <summary>
+    /// How far apart two samples put the body in this peer's world; null when an anchor is not here, or the root is
+    /// not a physics body, and then the state is not carried: a body's motion is the line to draw, other state
+    /// (a synced position of the game's own, say) is the new authority's to say from its first sample on.
+    /// </summary>
+    private static float? ApartBy(NetworkObject obj, NetworkObject.Sample a, Variant[] bValues, NetworkObject.Attachment? bAttachment)
+    {
+        if (obj.Root is not PhysicsBody3D) return null;
+        var here = obj.WorldOf(a.Attachment, a.Values[0].AsTransform3D());
+        var there = obj.WorldOf(bAttachment, bValues[0].AsTransform3D());
+        return here is { } from && there is { } to ? from.Origin.DistanceTo(to.Origin) : null;
+    }
+
     /// <summary>Plays the held samples whose predecessor has landed, in order; all of them when the wait is over.</summary>
     private void ReleaseHeld(NetworkObject obj, PlaybackClock clock, bool all)
     {
@@ -678,9 +691,24 @@ public partial class NetworkObjectServer : Node
             values[i] = CompactValues.Decode(reader);
 
         var shown = clock.Tick;
-        if (obj.Track.Count == 0 && shown is { } shared)
+        if (shown is { } shared && obj.CarriedTick is { } carried)
         {
-            shown = obj.PlaybackCursor.Start(tick, shared);
+            // The new authority's first sample: played from the state carried over the change of hands when it is
+            // later than that state, as it normally is, and within the distance a handover is smoothed over; older,
+            // it leads nowhere from there, and further away it is a relocation to show as one, not a flight across
+            if (tick > carried && obj.Track.TryGetNewest(out _, out var kept) && ApartBy(obj, kept, values, attachment) is { } apart && apart <= obj.MaxSmoothingDistance)
+                shown = obj.PlaybackCursor.Start(carried, shared);
+            else
+            {
+                obj.Track.Clear();
+                shown = obj.PlaybackCursor.Start(tick, shared);
+            }
+            obj.CarriedTick = null;
+            obj.PlaybackStarted = true;
+        }
+        else if (obj.Track.Count == 0 && shown is { } first)
+        {
+            shown = obj.PlaybackCursor.Start(tick, first);
             obj.PlaybackStarted = true;
         }
 

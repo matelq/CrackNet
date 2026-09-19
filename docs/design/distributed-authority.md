@@ -377,17 +377,23 @@ Two decisions here are made but not built, and both matter enough to keep in sig
   players shooting one crate in turn, a third watching, 80 ms) the largest drawn jump on a handover went from
   0.74-2.58 m to 0-0.70 m, the observer's from 1.09-2.40 to 0.06-0.20 (`HandoversDoNotJumpTheDisplayedCrate`). What is
   left is the ping's worth: the newest sample is still one trip old. Extrapolating it, or stepping the body forward, is
-  the next step if a playtest still shows it, and only with a number that says it helps. **Tried and dropped (after
-  the second playtest):** carrying what an observer showed of the old authority into the new authority's track as
-  its first sample, at the tick it was shown, so playback would run from there instead of holding and jumping.
-  Built and measured on the strike scenario: no change in the observer's handover jump (0.12-0.28 m before and
-  after). Takes are optimistic, so the taker's first samples usually reach an observer before the host's record
-  and are replayed at it: there is no hold to remove. What remains is the taker's rewind: its first sample is
-  its newest one, a trip older than what the observer already showed of the old authority, and the observer
-  starts from it (0.1-0.3 m back at 3 m/s), which the Visual smoothing spreads. A hold exists only when the
-  record outruns the taker's samples, one bad link: revisit if a playtest shows it. Also seen: the shared display
-  clock of a peer that sends only heartbeats leaps by 3-20 ticks in a frame when its samples resume; harmless
-  for what rests, worth a look if an idle peer's first motion ever looks skipped.
+  the next step if a playtest still shows it, and only with a number that says it helps. **Carried across (built
+  after the third playtest, tried and dropped after the second):** a peer that does not take the object keeps
+  what it showed, or the old authority what it had, as the first sample of the new authority's track, at the tick
+  it showed it (ticks count the same on every authority), hung or riding as it was, and playback runs from there
+  to the new authority's first sample on the object's own cursor. Physics bodies only, and only when that sample
+  is within `MaxSmoothingDistance` of the carried state: further is a relocation to show as one, and other state
+  (a synced position of the game's own) is the new authority's to say from its first sample, as
+  `StateFromTheFormerAuthorityIsNotShownAfterTheChange` insists. Dropped first because on the strike scenario it
+  changed nothing (0.12-0.28 m before and after: takes are optimistic, the taker's samples reach an observer
+  before the host's record, and what remains is the taker's rewind, its newest sample being a trip old, which the
+  Visual smoothing spreads). Built for the case the third playtest showed: a crate going back to the host on a
+  moving platform was taken off the platform on the change and stood still in the world until the host's first
+  sample was reached, 0.29 m off on a third peer and 0.90 m on the guest that had it, whose display of the host
+  runs a playback delay behind its own present; 0.01 and 0.04-0.06 with it
+  (`ACrateChangingHandsOnAMovingPlatformStaysOnItForAThirdPeer`). Also seen: the shared display clock of a peer
+  that sends only heartbeats leaps by 3-20 ticks in a frame when its samples resume; harmless for what rests,
+  worth a look if an idle peer's first motion ever looks skipped.
 - **Authority change smoothing (done).** A playtest showed the strikers' jump that the freshest-state takeover moved to
   them. The body moves at once; the node set as `Visual` keeps an offset that fades over `SmoothingTime` (0.15 s),
   as Photon Fusion and Fiedler do it, in presentation only. A handover opens a one-second window, long enough for an
