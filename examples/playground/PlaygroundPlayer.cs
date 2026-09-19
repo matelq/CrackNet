@@ -7,10 +7,12 @@ namespace CrackNet.Examples.Playground;
 /// peer, played back everywhere else, and it takes authority over the crates it walks into. Players do not collide
 /// with each other: a push is a knock delivered to the pushed player's peer, which applies it as knockback.
 /// <para>
-/// It carries a crate in its <c>Hand</c> marker, which the walk animation bobs: the library puts the crate there on
-/// every peer, after that peer's animation. Animation is parameters: <see cref="WalkBlend"/> drives the
-/// AnimationTree's walk blend everywhere, and <see cref="Throws"/> is the one-shot pattern, a counter bumped in the
-/// tick of the throw that fires the throw animation wherever the sample lands.
+/// The model is KayKit's knight (CC0, examples/playground/assets/kaykit), rigged and animated. It carries a crate in
+/// <see cref="Hand"/>, a marker under the bone attachment of its right hand slot: the library puts the crate there on
+/// every peer, after that peer's animation and the skeleton's deferred update. Animation is parameters:
+/// <see cref="WalkBlend"/> drives the AnimationTree's idle-to-run blend everywhere, and <see cref="Throws"/> is the
+/// one-shot pattern, a counter bumped in the tick of the throw that fires the throw animation wherever the sample
+/// lands.
 /// </para>
 /// </summary>
 public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
@@ -23,6 +25,9 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
     private bool _grabWasDown, _grabPlayerWasDown, _pushWasDown, _shootWasDown;
     private Marker3D _hand = null!;
     private AnimationTree _animation = null!;
+
+    /// <summary>Where a carried crate goes: the right hand, moved by the skeleton.</summary>
+    public Marker3D Hand => _hand;
     private bool _throwsKnown;
 
     private Vector3 Forward => -GlobalBasis.Z;
@@ -68,16 +73,27 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
     {
         Peer = GetMultiplayerAuthority();
         Name = $"Player{Peer}";
-        // The scene's capsule is white: this player's slot colour, and a material of its own to hold it
+        // The knight comes with one texture for every player: this player's slot colour over it, in materials of
+        // its own; the weapons and shields in its hand slots stay put away
         var color = Playground.SlotColors[Slot % Playground.SlotColors.Length];
-        GetNode<MeshInstance3D>("Visual/Body").MaterialOverride = new StandardMaterial3D { AlbedoColor = color };
+        var knight = GetNode<Node3D>("Visual/Knight");
+        foreach (var slot in new[] { "handslot_l", "handslot_r" })
+            foreach (var gear in knight.GetNode("Rig/Skeleton3D/" + slot).GetChildren().OfType<MeshInstance3D>())
+                gear.Visible = false;
+        foreach (var mesh in knight.FindChildren("*", "MeshInstance3D", recursive: true).OfType<MeshInstance3D>())
+        {
+            if (!mesh.Visible || mesh.GetActiveMaterial(0) is not StandardMaterial3D material) continue;
+            var tinted = (StandardMaterial3D)material.Duplicate();
+            tinted.AlbedoColor = color.Lerp(Colors.White, 0.4f);
+            mesh.MaterialOverride = tinted;
+        }
 
         Playground.SetSlot(Peer, Slot);
     }
 
     public override void _Ready()
     {
-        _hand = GetNode<Marker3D>("Hand");
+        _hand = GetNode<Marker3D>("Visual/Knight/Rig/Skeleton3D/handslot_r/Hand");
         _animation = GetNode<AnimationTree>("AnimationTree");
         // This peer's own throws start from zero; another peer's count is history until its first sample has landed
         _throwsKnown = this.Authority.IsLocal;

@@ -230,7 +230,7 @@ public partial class PlaygroundSmoke : Node
     {
         if (!IsInsideTree()) return;
         var tick = _crate.Net().Diagnostics.DisplayTick ?? NetworkTime.Instance.Tick;   // the carrier plays nothing back
-        var distance = _crate.AttachedTo is PlaygroundPlayer carrier ? _crate.GlobalPosition.DistanceTo(carrier.GetNode<Node3D>("Hand").GlobalPosition) : -1;
+        var distance = _crate.AttachedTo is PlaygroundPlayer carrier ? _crate.GlobalPosition.DistanceTo(carrier.Hand.GlobalPosition) : -1;
         _carried.Add((tick, distance >= 0, distance));
     }
 

@@ -1,117 +1,21 @@
-[gd_scene load_steps=19 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://examples/playground/PlaygroundPlayer.cs" id="1"]
 [ext_resource type="Script" path="res://addons/cracknet/NetworkObject.cs" id="2"]
+[ext_resource type="PackedScene" path="res://examples/playground/assets/kaykit/Knight.glb" id="3"]
 
 [sub_resource type="CapsuleShape3D" id="1"]
 radius = 0.4
 height = 1.8
 
-[sub_resource type="CapsuleMesh" id="2"]
-radius = 0.4
-height = 1.8
-
-[sub_resource type="BoxMesh" id="3"]
-size = Vector3(0.2, 0.2, 0.4)
-
-[sub_resource type="StandardMaterial3D" id="4"]
-albedo_color = Color(0, 0, 0, 1)
-
-[sub_resource type="BoxMesh" id="5"]
-size = Vector3(0.25, 0.12, 0.25)
-
-[sub_resource type="StandardMaterial3D" id="6"]
-albedo_color = Color(0.15, 0.15, 0.15, 1)
-
-[sub_resource type="Animation" id="Animation_idle"]
-length = 0.5
-loop_mode = 1
-tracks/0/type = "position_3d"
-tracks/0/imported = false
-tracks/0/enabled = true
-tracks/0/path = NodePath("Hand")
-tracks/0/interp = 1
-tracks/0/loop_wrap = true
-tracks/0/keys = PackedFloat32Array(0, 1, 0, 0.6, -1.1)
-tracks/1/type = "position_3d"
-tracks/1/imported = false
-tracks/1/enabled = true
-tracks/1/path = NodePath("Visual/Body")
-tracks/1/interp = 1
-tracks/1/loop_wrap = true
-tracks/1/keys = PackedFloat32Array(0, 1, 0, 0, 0)
-tracks/2/type = "position_3d"
-tracks/2/imported = false
-tracks/2/enabled = true
-tracks/2/path = NodePath("Visual/Nose")
-tracks/2/interp = 1
-tracks/2/loop_wrap = true
-tracks/2/keys = PackedFloat32Array(0, 1, 0, 0.5, -0.45)
-
-[sub_resource type="Animation" id="Animation_walk"]
-length = 0.5
-loop_mode = 1
-tracks/0/type = "position_3d"
-tracks/0/imported = false
-tracks/0/enabled = true
-tracks/0/path = NodePath("Hand")
-tracks/0/interp = 1
-tracks/0/loop_wrap = true
-tracks/0/keys = PackedFloat32Array(0, 1, 0, 0.6, -1.1, 0.25, 1, 0, 0.75, -1.1, 0.5, 1, 0, 0.6, -1.1)
-tracks/1/type = "position_3d"
-tracks/1/imported = false
-tracks/1/enabled = true
-tracks/1/path = NodePath("Visual/Body")
-tracks/1/interp = 1
-tracks/1/loop_wrap = true
-tracks/1/keys = PackedFloat32Array(0, 1, 0, 0, 0, 0.25, 1, 0, 0.1, 0, 0.5, 1, 0, 0, 0)
-tracks/2/type = "position_3d"
-tracks/2/imported = false
-tracks/2/enabled = true
-tracks/2/path = NodePath("Visual/Nose")
-tracks/2/interp = 1
-tracks/2/loop_wrap = true
-tracks/2/keys = PackedFloat32Array(0, 1, 0, 0.5, -0.45, 0.25, 1, 0, 0.6, -0.45, 0.5, 1, 0, 0.5, -0.45)
-
-[sub_resource type="Animation" id="Animation_throw"]
-length = 0.3
-tracks/0/type = "position_3d"
-tracks/0/imported = false
-tracks/0/enabled = true
-tracks/0/path = NodePath("Hand")
-tracks/0/interp = 1
-tracks/0/loop_wrap = true
-tracks/0/keys = PackedFloat32Array(0, 1, 0, 0.6, -1.1, 0.1, 1, 0, 0.7, -1.5, 0.3, 1, 0, 0.6, -1.1)
-tracks/1/type = "position_3d"
-tracks/1/imported = false
-tracks/1/enabled = true
-tracks/1/path = NodePath("Visual/Body")
-tracks/1/interp = 1
-tracks/1/loop_wrap = true
-tracks/1/keys = PackedFloat32Array(0, 1, 0, 0, 0, 0.1, 1, 0, 0, -0.3, 0.3, 1, 0, 0, 0)
-tracks/2/type = "position_3d"
-tracks/2/imported = false
-tracks/2/enabled = true
-tracks/2/path = NodePath("Visual/Nose")
-tracks/2/interp = 1
-tracks/2/loop_wrap = true
-tracks/2/keys = PackedFloat32Array(0, 1, 0, 0.5, -0.45, 0.1, 1, 0, 0.5, -0.75, 0.3, 1, 0, 0.5, -0.45)
-
-[sub_resource type="AnimationLibrary" id="AnimationLibrary"]
-_data = {
-&"idle": SubResource("Animation_idle"),
-&"throw": SubResource("Animation_throw"),
-&"walk": SubResource("Animation_walk")
-}
-
 [sub_resource type="AnimationNodeAnimation" id="Node_idle"]
-animation = &"idle"
+animation = &"Idle"
 
-[sub_resource type="AnimationNodeAnimation" id="Node_walk"]
-animation = &"walk"
+[sub_resource type="AnimationNodeAnimation" id="Node_run"]
+animation = &"Running_A"
 
 [sub_resource type="AnimationNodeAnimation" id="Node_throw"]
-animation = &"throw"
+animation = &"Throw"
 
 [sub_resource type="AnimationNodeBlend2" id="Node_walk_blend"]
 
@@ -121,7 +25,7 @@ animation = &"throw"
 nodes/output/position = Vector2(750, 100)
 nodes/Idle/node = SubResource("Node_idle")
 nodes/Idle/position = Vector2(0, 0)
-nodes/WalkAnimation/node = SubResource("Node_walk")
+nodes/WalkAnimation/node = SubResource("Node_run")
 nodes/WalkAnimation/position = Vector2(0, 150)
 nodes/Walk/node = SubResource("Node_walk_blend")
 nodes/Walk/position = Vector2(250, 50)
@@ -142,28 +46,17 @@ shape = SubResource("1")
 
 [node name="Visual" type="Node3D" parent="."]
 
-[node name="Body" type="MeshInstance3D" parent="Visual"]
-mesh = SubResource("2")
+[node name="Knight" parent="Visual" instance=ExtResource("3")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, -0.9, 0)
 
-[node name="Nose" type="MeshInstance3D" parent="Visual"]
-position = Vector3(0, 0.5, -0.45)
-mesh = SubResource("3")
-material_override = SubResource("4")
-
-[node name="Hand" type="Marker3D" parent="."]
-position = Vector3(0, 0.6, -1.1)
-
-[node name="Palm" type="MeshInstance3D" parent="Hand"]
-mesh = SubResource("5")
-material_override = SubResource("6")
-
-[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
-libraries/ = SubResource("AnimationLibrary")
+[node name="Hand" type="Marker3D" parent="Visual/Knight/Rig/Skeleton3D/handslot_r"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.35, 0)
 
 [node name="AnimationTree" type="AnimationTree" parent="."]
+root_node = NodePath("../Visual/Knight")
 active = true
 tree_root = SubResource("BlendTree")
-anim_player = NodePath("../AnimationPlayer")
+anim_player = NodePath("../Visual/Knight/AnimationPlayer")
 parameters/Walk/blend_amount = 0.0
 parameters/Throw/active = false
 parameters/Throw/internal_active = false
@@ -173,3 +66,5 @@ parameters/Throw/request = 0
 script = ExtResource("2")
 Visual = NodePath("../Visual")
 ImpulseStrength = 0.6
+
+[editable path="Visual/Knight"]

@@ -325,8 +325,12 @@ parent sync.
   aimed by `LookAtModifier3D` (the hand swept 2.8 m) is exact on both peers. Root motion on the authority travels as
   the transform (the copy is 0.000 m off the samples over 420 frames); applying it on an observer too showed no drift
   on screen, since playback rewrites the copy every frame, so the rule stays for the physics step, not the picture.
-  The playground's player carries the crate at a `Hand` marker bobbed by an AnimationTree walk blend and fires a
-  throw one-shot from a counter; it has no skeleton, so IK lives in the harness only.
+  The playground's player is KayKit's knight (CC0, `examples/playground/assets/kaykit`, chosen over Quaternius'
+  Universal Animation Library for having Throw, PickUp and aiming clips on its own mesh in one 3.6 MB glb): the
+  hand is a marker under the model's right hand slot bone attachment, the AnimationTree blends Idle into Running_A
+  and fires Throw, and the slot colour tints the knight's texture. Before it, the player carried the crate at a
+  `Hand` marker bobbed by an AnimationTree walk blend and fired a throw one-shot from a counter, on a capsule with
+  no skeleton.
 - **Tests first:** per frame on a remote peer during a carried walk with animation, item-to-anchor distance near zero,
   failing on today's carry before the change; attach and detach at the carrier's display tick; no jump during the
   detach blend; a third peer's carried player on its displayed carrier; a late joiner sees the item in the hand.
