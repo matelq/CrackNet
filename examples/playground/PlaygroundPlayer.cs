@@ -17,7 +17,10 @@ namespace CrackNet.Examples.Playground;
 /// </summary>
 public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>, IImpulsed
 {
-    private const float Speed = 6, JumpSpeed = 5, Gravity = 14, PushStrength = 4, ThrowSpeed = 9, ShotSpeed = 18;
+    /// <summary>Metres a second at a full run: what a walk can account for when a log asks why a player moved.</summary>
+    public const float Speed = 6;
+
+    private const float JumpSpeed = 5, Gravity = 14, PushStrength = 4, ThrowSpeed = 9, ShotSpeed = 18;
 
     /// <summary>
     /// Seconds from the start of the throw's swing to the hand letting go. The clip's first half second is the arm

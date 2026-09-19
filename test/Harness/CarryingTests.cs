@@ -514,6 +514,11 @@ public partial class CarryingTests : HarnessSuite
         }
         for (var i = 0; i < 30; i++) await NextFrame();
         Expect.True(riders[1].IsOnFloor() && riders[1].GlobalPosition.Y > 4, $"the rider is not standing on the platform: {riders[1].GlobalPosition}");
+        // What a playtest log and a check read to ask what a copy is standing on: the floor on the authority, the
+        // copy playback hung it from everywhere else, which takes the link's depth to arrive
+        Expect.True(await WaitUntil(() => riders[1].Net().Diagnostics.StandingOn == platforms[1] && riders[0].Net().Diagnostics.StandingOn == platforms[0], 2),
+            $"the rider says it stands on {riders[1].Net().Diagnostics.StandingOn?.Name.ToString() ?? "nothing"} on its own peer "
+            + $"and {riders[0].Net().Diagnostics.StandingOn?.Name.ToString() ?? "nothing"} on the host's");
 
         // What peer 2 sent: the rider relative to its own copy of the platform, per sample
         var sent = new SortedList<int, Vector3>();

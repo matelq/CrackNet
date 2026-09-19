@@ -222,7 +222,7 @@ public partial class Playground : Node3D
 
     public override void _PhysicsProcess(double delta)
         => PlaytestLog.Frame(this, GetNode("Crates").GetChildren().OfType<PlaygroundCrate>().ToList(),
-            Players.GetChildren().OfType<PlaygroundPlayer>());
+            Players.GetChildren().OfType<PlaygroundPlayer>().ToList());
 
     public override void _Process(double delta)
     {
