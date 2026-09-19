@@ -44,6 +44,21 @@ public sealed class LoopbackNetwork
     private readonly Random _rng = new(20260912);
     private readonly Dictionary<int, LoopbackMultiplayerPeer> _peers = new();
 
+    /// <summary>
+    /// While set, unreliable packets from this peer are kept back instead of delivered; <see cref="ReleaseHeld"/>
+    /// delivers them at once, newest first, the way packets swap places on a real path, but on purpose.
+    /// </summary>
+    public int? HoldUnreliableFrom { get; set; }
+
+    private readonly List<(LoopbackMultiplayerPeer To, LoopbackPacket Packet)> _held = new();
+
+    public void ReleaseHeld()
+    {
+        HoldUnreliableFrom = null;
+        for (var i = _held.Count - 1; i >= 0; i--) _held[i].To.Receive(_held[i].Packet, 0);
+        _held.Clear();
+    }
+
     /// <summary>Bytes and packets that were handed to the network, per sending peer. Counted before loss is applied.</summary>
     public Dictionary<int, (long Bytes, long Packets)> Traffic { get; } = new();
 
@@ -113,6 +128,11 @@ public sealed class LoopbackNetwork
             if (link.PacketLoss > 0 && _rng.NextDouble() < link.PacketLoss) continue;
             if (Bursts is { } bursts && NetworkSimulator.InLossBurst(bursts, Time.GetTicksMsec())) continue;
 
+            if (HoldUnreliableFrom == from)
+            {
+                _held.Add((peer, new LoopbackPacket(from, data, mode, channel)));
+                continue;
+            }
             peer.Receive(new LoopbackPacket(from, data, mode, channel), link.LatencyMs);
         }
     }

@@ -162,6 +162,9 @@ public partial class NetworkObject : Node
     internal ObjectPlaybackCursor PlaybackCursor { get; } = new();
     internal bool PlaybackStarted { get; set; }
 
+    /// <summary>Samples that arrived before the one they follow: kept until it lands, or a little while, see the server.</summary>
+    internal List<(int Tick, byte[] Body, ulong HeldAt)> HeldSamples { get; } = new();
+
     internal double? DisplayTick { get; set; }
     internal bool SnapPending { get; set; }
 
@@ -714,6 +717,7 @@ public partial class NetworkObject : Node
             // Whatever hung it was the previous authority's doing: the new one's samples say whether it still hangs
             Unhang();
             Track.Clear();
+            HeldSamples.Clear();
             PlaybackCursor.Reset();
             PlaybackStarted = false;
             DisplayTick = null;
@@ -888,7 +892,17 @@ public partial class NetworkObject : Node
     private void Jump(Sample sample)
     {
         for (var i = 0; i < Properties.Count; i++)
-            Properties[i].Node.SetValue(Properties[i].Property, sample.Values[i]);
+        {
+            var value = sample.Values[i];
+            // A sample of something hung or riding holds an anchor offset, not a place: a crate taken off a pile
+            // landed at the offset from the world's origin
+            if (i == 0 && Root is Node3D && sample.Attachment is not null)
+            {
+                if (WorldOf(sample.Attachment, value.AsTransform3D()) is not { } world) continue;
+                value = world;
+            }
+            Properties[i].Node.SetValue(Properties[i].Property, value);
+        }
     }
 
     internal bool Shown { get; private set; } = true;

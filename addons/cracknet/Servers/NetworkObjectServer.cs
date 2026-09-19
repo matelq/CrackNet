@@ -574,6 +574,7 @@ public partial class NetworkObjectServer : Node
     }
 
     private const ulong EarlySampleAgeMs = 1_000;
+    private const byte Resumed = 2;
     private const byte FirstSinceTaken = 8;
     private const byte Attached = 16;
     private const byte Riding = 32;
@@ -630,13 +631,44 @@ public partial class NetworkObjectServer : Node
         }
     }
 
+    /// <summary>How long a sample waits for the one before it at most, in state intervals: packets swap places by a few milliseconds.</summary>
+    private const int ReorderWaitIntervals = 1;
+
     private void KeepSample(NetworkObject obj, PlaybackClock clock, int tick, byte[] body)
+    {
+        // A sample that is neither the first after a rest nor the first since a take says there was one an interval
+        // before it. Not here yet, that one is late or lost: it is waited for a little, since played now the pair
+        // around the hole would be interpolated as the sender's motion, and a resumed sample arriving behind it could
+        // no longer hold the rest it ends (the playground's crate drifted out of the hand for a second before a throw)
+        if ((body[0] & (Resumed | FirstSinceTaken)) == 0 && obj.Track.TryGetNewest(out var newestTick, out _) && tick - StateIntervalTicks > newestTick)
+        {
+            obj.HeldSamples.Add((tick, body, Time.GetTicksMsec()));
+            return;
+        }
+        Keep(obj, clock, tick, body);
+        ReleaseHeld(obj, clock, all: false);
+    }
+
+    /// <summary>Plays the held samples whose predecessor has landed, in order; all of them when the wait is over.</summary>
+    private void ReleaseHeld(NetworkObject obj, PlaybackClock clock, bool all)
+    {
+        var held = obj.HeldSamples;
+        held.Sort((a, b) => a.Tick.CompareTo(b.Tick));
+        while (held.Count > 0 && (all || obj.Track.TryGetNewest(out var newest, out _) && held[0].Tick - StateIntervalTicks <= newest))
+        {
+            var (tick, body, _) = held[0];
+            held.RemoveAt(0);
+            Keep(obj, clock, tick, body);
+        }
+    }
+
+    private void Keep(NetworkObject obj, PlaybackClock clock, int tick, byte[] body)
     {
         var reader = new ByteReader(body);
 
         var flags = reader.GetU8();
         var teleport = (flags & 1) != 0;
-        var resumed = (flags & 2) != 0;
+        var resumed = (flags & Resumed) != 0;
         var despawned = (flags & 4) != 0;
         var attachment = (flags & Attached) != 0
             ? new NetworkObject.Attachment(reader.GetUtf8String(), reader.GetUtf8String(), (flags & Riding) != 0)
@@ -673,11 +705,18 @@ public partial class NetworkObjectServer : Node
 
         if (_pendingSamples.Count > 0) ApplyPendingSamples();
 
+        var now = Time.GetTicksMsec();
+        var waitMs = (ulong)(1000.0 * ReorderWaitIntervals * StateIntervalTicks / Context.NetworkTime.Tickrate);
         foreach (var obj in _objects)
         {
             if (obj.Authority.IsLocal) continue;
             if (!_clocks.TryGetValue(obj.Root!.GetMultiplayerAuthority(), out var clock) || clock.Tick is not { } shown) continue;
             var objectTick = obj.PlaybackStarted ? obj.PlaybackCursor.Advance(shown, elapsedTicks) : shown;
+            // Held samples are played once the wait is over, or sooner if playback has reached the last sample it has:
+            // after a loss, a stall there would be worse than the interpolation across the hole the wait is against
+            if (obj.HeldSamples.Count > 0 && (now - obj.HeldSamples.Min(sample => sample.HeldAt) >= waitMs
+                                              || obj.Track.TryGetNewest(out var newestTick, out _) && objectTick >= newestTick))
+                ReleaseHeld(obj, clock, all: true);
             if (!obj.Track.TrySample(objectTick, out var from, out var to, out var fraction)) continue;
             obj.DisplayTick = objectTick;
             Apply(obj, from, to, fraction);

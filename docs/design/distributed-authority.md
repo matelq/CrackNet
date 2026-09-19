@@ -476,7 +476,24 @@ Two decisions here are made but not built, and both matter enough to keep in sig
   moving platform is drawn at its authority's display time and the platform at the host's, so it sits shifted by
   v x (d_host - d_authority), and the shift jumps when the crate changes hands. Decided: fix it with relative sending
   (the crate's samples relative to the body it rests on, as riders already do), and keep the common display time as
-  the backup. A common tick numbering is not the missing piece: ticks are already global and comparable across
+  the backup. Built: a rigid body's base is the replicated body under it among the frame's contacts from the direct
+  body state (an upward normal), kept while it sleeps since a sleeping body reports none; the guest's crate on the
+  host's slider at 3 m/s and 100 ms went from 1.57 m off on the host to 0.000 over 350 frames, and the handover moves
+  it by nothing on the platform (`AGuestsCrateOnTheHostsMovingPlatformIsDrawnWhereTheGuestHasIt`). A crate on a
+  crate rides it too, which found a latent bug: the peer that takes an object jumps to its newest sample, and a
+  riding sample is an anchor offset, so the top crate of a pile landed a metre above the world's origin when the
+  pile was taken (`AHeldItemPassesThroughWhatItIsCarriedIntoAndCollidesAgainWhenLetGo`); the jump now goes
+  through the same conversion as playback. The interpolation across the switch also uncovered a playback hole
+  the hold used to cover: packets swap places on the way, and when a throw's second sample arrived before its
+  first, which carries the resumed-after-a-rest flag, the rest was never held and the host drew the crate
+  drifting out of the hand along the line from the last heartbeat to the throw (0.7 m in the smoke, 0.4 m in
+  `AThrowWhosePacketsArriveOutOfOrderDoesNotDriftTheCrateFromTheHand`). A sample that is neither resumed nor the
+  first since a take says there was one a state interval before it; missing, it waits for that one up to one
+  interval, or until playback reaches the last sample it has, whichever is first, so after a loss nothing stalls
+  and the hole is interpolated across as before (a fixed wait of two intervals cost 0.06-0.11 m of stall in the smoke).
+  Rest on a base is judged by the offset from it, averaged over 80 ms, not by the engine's velocity for the copy,
+  which swings by half (3.1-4.9 m/s for 4) since playback moves it in render frames; on that velocity the return to
+  the host at 3-4 m/s sometimes never came within the window. A common tick numbering is not the missing piece: ticks are already global and comparable across
   authorities; what differs per link is the display depth. Session-wide: every screen shows every remote object at the same
   moment, set by the worst link, so one bad connection slows everyone. Per screen: each viewer uses the deepest of its
   own links, so only the players on a bad link pay. Revisit if playtests show objects of different players visibly out

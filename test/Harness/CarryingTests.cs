@@ -761,4 +761,117 @@ public partial class CarryingTests : HarnessSuite
         Expect.True(compared > 40, "too few frames compared: " + report);
         Expect.True(worst < 0.05f, "the host draws the walker off the line its peer sent, stepping on or off the slab: " + report);
     }
+
+    /// <summary>
+    /// The playground's first report: a crate a guest throws onto the host's moving platform sat elsewhere on the
+    /// host's screen and jumped when it went back to the host. The guest simulates the crate on its own copy of the
+    /// platform, which is a network delay behind the host's; sent as world positions, the crate landed on the host's
+    /// platform that delay's travel behind where the guest had it (0.4 m at 3 m/s and 100 ms), and the handover
+    /// jumped it forward. Sent relative to the body it rests on, the host draws it on its platform where the guest
+    /// has it on its copy, per frame, and the handover moves it by nothing.
+    /// </summary>
+    [Test]
+    public async Task AGuestsCrateOnTheHostsMovingPlatformIsDrawnWhereTheGuestHasIt()
+    {
+        Network.LatencyMs = 100;
+        var lifts = new[] { HarnessWorld.Lift(Host, "Slider", new Vector3(0, 0.25f, 0), new Vector3(40, 0.5f, 3), new Vector3(3, 0, 0)), HarnessWorld.Lift(Client, "Slider", new Vector3(0, 0.25f, 0), new Vector3(40, 0.5f, 3), new Vector3(3, 0, 0)) };
+        var crates = new[] { HarnessWorld.Crate(Host, "Crate", new Vector3(0, 1.0f, 0)), HarnessWorld.Crate(Client, "Crate", new Vector3(0, 1.0f, 0)) };
+        for (var i = 0; i < 20; i++) await NextFrame();
+
+        Expect.True(crates[1].TryClaim());
+        Expect.True(crates[1].ReleaseClaim(new Vector3(0, 0.5f, 0)));   // a nudge: it lands back on the platform, simulated by the guest
+        Expect.True(await WaitUntil(() => crates[0].Authority.Peer == 2, 3), "the host never saw the guest take the crate");
+
+        // What the guest sent, relative to its own copy of the platform; what the host drew, relative to its platform
+        var sent = new SortedList<int, Vector3>();
+        crates[1].Net().Diagnostics.SampleSent += tick => sent[tick] = (lifts[1].GlobalTransform.AffineInverse() * crates[1].GlobalTransform).Origin;
+        var shown = new List<(double Tick, Vector3 Offset, int Authority)>();
+        var drawn = new DrawnFrame();
+        AddChild(drawn);
+        drawn.Drawn += () =>
+        {
+            if (crates[0].Net().Diagnostics.DisplayTick is { } tick)
+                shown.Add((tick, (lifts[0].GlobalTransform.AffineInverse() * crates[0].GlobalTransform).Origin, crates[0].Authority.Peer));
+        };
+        for (var seconds = 0.0; seconds < 5 && crates[0].Authority.Peer != 1; seconds += GetProcessDeltaTime()) await NextFrame();
+        for (var i = 0; i < 10; i++) await NextFrame();
+        drawn.QueueFree();
+        Expect.True(crates[1].GlobalPosition.Y > 0.6f, $"the crate fell off the platform, so this measures nothing: at {crates[1].GlobalPosition}");
+        Expect.True(crates[0].Authority.Peer == 1, "the crate never went back to the host");
+
+        var interval = Client.Context.NetworkObjectServer.StateIntervalTicks;
+        var ticks = sent.Keys.ToList();
+        var worst = 0f;
+        var compared = 0;
+        var handover = 0f;
+        for (var i = 1; i < shown.Count; i++)
+        {
+            var (tick, offset, authority) = shown[i];
+            if (authority != shown[i - 1].Authority) handover = offset.DistanceTo(shown[i - 1].Offset);
+            if (authority != 2) continue;
+            var next = ticks.FindIndex(at => at >= tick);
+            if (next <= 0 || ticks[next] - ticks[next - 1] > interval * 2) continue;
+            var expected = sent.Values[next - 1].Lerp(sent.Values[next], (float)((tick - ticks[next - 1]) / (ticks[next] - ticks[next - 1])));
+            worst = Mathf.Max(worst, expected.DistanceTo(offset));
+            compared++;
+        }
+        var report = $"worst {worst:F3} m over {compared} frames while the guest had it; the handover moved it {handover:F3} m on the platform";
+        GD.Print("GUEST CRATE ON THE HOST PLATFORM " + report);
+        Expect.True(compared > 15, "too few frames compared: " + report);
+        Expect.True(worst < 0.05f, "the host draws the guest's crate elsewhere on the platform than the guest has it: " + report);
+        Expect.True(handover < 0.1f, "the crate jumped on the platform when it went back to the host: " + report);
+    }
+
+    /// <summary>
+    /// The playground smoke's flake: peer 2 walks with the crate still in its hand (a heartbeat a second, nothing
+    /// else, since the offset does not change), then throws it, and the throw's packets reach the host out of order. The first free sample carries the
+    /// "resumed after a rest" flag, which makes the host hold the resting value until just before it; arriving behind
+    /// its successors, it came too late for that, and the host drew the crate drifting out of the hand for the length
+    /// of the rest, along the line from the heartbeat to the sample that had arrived first. A sample that expects a
+    /// predecessor waits for it, a little, before it is played.
+    /// </summary>
+    [Test]
+    public async Task AThrowWhosePacketsArriveOutOfOrderDoesNotDriftTheCrateFromTheHand()
+    {
+        Network.LatencyMs = 150;
+        var crates = new[] { HarnessWorld.Crate(Host, "Crate", new Vector3(0, 0.5f, 3)), HarnessWorld.Crate(Client, "Crate", new Vector3(0, 0.5f, 3)) };
+        var carriers = new[] { HarnessWorld.Walker(Host, 2, new Vector3(0, 1, 0), Vector3.Zero), HarnessWorld.Walker(Client, 2, new Vector3(0, 1, 0), Vector3.Zero) };
+        var hands = carriers.Select(carrier => StillHand(carrier)).ToArray();
+        for (var i = 0; i < 10; i++) await NextFrame();
+        Expect.True(carriers[1].TryAttach(crates[1], hands[1]));
+        Expect.True(await WaitUntil(() => crates[0].AttachedTo is not null, 3), "the host never showed the crate in the hand");
+        // Still in the hand long enough for the throw to come after a gap in the samples; walking, so the first free
+        // sample is well ahead of where the host's copy of the hand is when it arrives
+        carriers[1].Walk = new Vector3(4, 0, 0);
+        for (var seconds = 0.0; seconds < 1.2; seconds += GetProcessDeltaTime()) await NextFrame();
+
+        var frames = new List<(double Tick, float HandDistance)>();
+        var drawn = new DrawnFrame();
+        AddChild(drawn);
+        drawn.Drawn += () =>
+        {
+            if (crates[0].AttachedTo is not null && crates[0].Net().Diagnostics.DisplayTick is { } tick)
+                frames.Add((tick, crates[0].GlobalPosition.DistanceTo(hands[0].GlobalPosition)));
+        };
+
+        // The throw's first samples are kept back and then delivered at once, newest first, while the host's playback
+        // of peer 2 is still well before the throw
+        Network.HoldUnreliableFrom = 2;
+        var detachTick = Client.Context.NetworkTime.Tick + 1;
+        Expect.True(carriers[1].Detach(crates[1]));
+        crates[1].Impulse(new Vector3(0, 2, -6) * crates[1].Mass);
+        var interval = Client.Context.NetworkObjectServer.StateIntervalTicks;
+        Expect.True(await WaitUntil(() => Client.Context.NetworkTime.Tick > detachTick + 2 * interval, 2));
+        Network.ReleaseHeld();
+        Expect.True(await WaitUntil(() => crates[0].AttachedTo is null, 3), "the host never showed the throw");
+        drawn.QueueFree();
+
+        // Up to two intervals before the detach tick the crate is on its way out of the hand by design
+        var held = frames.Where(frame => frame.Tick <= detachTick - 2 * interval).ToList();
+        var worst = held.Count == 0 ? 0 : held.Max(frame => frame.HandDistance);
+        var report = $"worst {worst:F3} m from the hand over {held.Count} frames before the throw's display tick";
+        GD.Print("OUT-OF-ORDER THROW " + report);
+        Expect.True(held.Count > 5, "too few frames measured: " + report);
+        Expect.True(worst < CarryTolerance, "the crate drifted out of the hand before the throw reached the host's screen: " + report);
+    }
 }

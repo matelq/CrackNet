@@ -155,6 +155,10 @@ internal abstract class PhysicsHandling
         private bool RestsOnWhatItTouches()
         {
             if (_body.LinearVelocity.Length() < RestSpeed) return true;
+            // On a replicated body, judged by how the offset from it moves, averaged: a copy of a platform is moved by
+            // playback in render frames, so the velocity the engine reports for it swings by half (3.1-4.9 m/s for 4)
+            if (Object.Base is not null && _relativeVelocity is { } relative)
+                return relative.Length() < RestSpeed + 0.3f * _baseVelocity.Length();
             foreach (var other in _body.GetCollidingBodies())
             {
                 if (other is not PhysicsBody3D under) continue;
@@ -163,6 +167,60 @@ internal abstract class PhysicsHandling
                 if ((_body.LinearVelocity - underVelocity).Length() < RestSpeed + 0.3f * underVelocity.Length()) return true;
             }
             return false;
+        }
+
+        /// <summary>
+        /// The replicated body this one rests on, from the frame's contacts: its position goes out relative to that
+        /// body, as a character's does, so a crate a guest drops on the host's moving platform is drawn on the host's
+        /// platform where the guest has it on its copy, not a network delay's travel behind. A sleeping body reports
+        /// no contacts: the base stays until it wakes.
+        /// </summary>
+        private void UpdateBase()
+        {
+            if (!Object.Authority.IsLocal)
+            {
+                Object.Base = null;
+                return;
+            }
+            if (_body.Sleeping) return;
+            var previous = Object.Base;
+            NetworkObject? under = null;
+            var state = PhysicsServer3D.BodyGetDirectState(_body.GetRid());
+            for (var i = 0; state is not null && i < state.GetContactCount(); i++)
+            {
+                if (state.GetContactLocalNormal(i).Dot(Vector3.Up) < 0.7f) continue;
+                if (state.GetContactColliderObject(i) is Node node && NetworkObject.Of(node) is { } other && !ReferenceEquals(other, Object))
+                {
+                    under = other;
+                    break;
+                }
+            }
+            Object.Base = under;
+            TrackBase(ReferenceEquals(under, previous) ? under : null);
+        }
+
+        private Vector3? _lastRelative;
+        private Vector3? _lastBasePosition;
+        private Vector3? _relativeVelocity;
+        private Vector3 _baseVelocity;
+
+        /// <summary>The body's velocity relative to its base and the base's own, from positions, averaged over about 80 ms.</summary>
+        private void TrackBase(NetworkObject? sameBase)
+        {
+            if (sameBase is not { Root: Node3D floor })
+            {
+                _lastRelative = _lastBasePosition = _relativeVelocity = null;
+                return;
+            }
+            var dt = (float)_body.GetPhysicsProcessDeltaTime();
+            var relative = floor.ToLocal(_body.GlobalPosition);
+            if (_lastRelative is { } lastRelative && _lastBasePosition is { } lastBase)
+            {
+                _relativeVelocity = (_relativeVelocity ?? Vector3.Zero).Lerp((relative - lastRelative) / dt, 0.2f);
+                _baseVelocity = _baseVelocity.Lerp((floor.GlobalPosition - lastBase) / dt, 0.2f);
+            }
+            _lastRelative = relative;
+            _lastBasePosition = floor.GlobalPosition;
         }
 
         /// <summary>Whether <paramref name="member"/> touches a rigid body this peer holds (attached, collisions off).</summary>
@@ -227,6 +285,7 @@ internal abstract class PhysicsHandling
 
         public override void PhysicsProcess()
         {
+            UpdateBase();
             if (Object.ResolvedKind != NetworkObject.ObjectKind.Shared || !Object.Authority.IsLocal || Object.ClaimedBy != 0 || IsHost)
             {
                 Object.RestFrames = 0;
