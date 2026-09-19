@@ -1141,6 +1141,14 @@ public partial class NetworkObject : Node
         public double? DisplayTick => _object.DisplayTick;
 
         /// <summary>
+        /// What this object is drawn standing on here - a moving platform, a crate - or null when it is free. On the
+        /// authority it is what the engine reported as the floor; on every other peer it is the copy playback hung it
+        /// from. A check or a playtest log reads it to ask whether a rider is where its own peer has it.
+        /// </summary>
+        public Node? StandingOn
+            => (_object.IsAuthority ? _object.Base : _object.AttachmentState is { Riding: true } ? _object.Carrier : null)?.Root;
+
+        /// <summary>
         /// Raised on the authority for every state it sends: the tick. Not every tick - an unchanged object is sent
         /// only as a heartbeat - so this is the ground truth a check compares playback against.
         /// </summary>
