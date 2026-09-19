@@ -19,10 +19,15 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
 {
     private const float Speed = 6, JumpSpeed = 5, Gravity = 14, PushStrength = 4, ThrowSpeed = 9, ShotSpeed = 18;
 
+    /// <summary>Seconds into the Throw clip at which the hand is furthest forward and lets go: the swing before it is the wind-up.</summary>
+    private const double ThrowRelease = 0.72;
+
     public int Peer { get; private set; }
     public int Slot { get; private set; }
 
-    private bool _grabWasDown, _grabPlayerWasDown, _pushWasDown, _shootWasDown;
+    private bool _grabWasDown, _grabPlayerWasDown, _pushWasDown, _shootWasDown, _putDownWasDown;
+    private double _throwDue = -1;
+    private Node? _throwing;
     private Marker3D _hand = null!;
     private AnimationTree _animation = null!;
 
@@ -50,9 +55,22 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
         }
     }
 
+    /// <summary>Whether this player is in the air: the AnimationTree's air blend, synced like the walk.</summary>
+    [Synced]
+    public float AirBlend
+    {
+        get;
+        set
+        {
+            field = value;
+            _animation?.Set("parameters/Air/blend_amount", value);
+        }
+    }
+
     /// <summary>
-    /// Throws so far. Bumped in the same tick as the crate leaves the hand, so an observer plays the throw animation in
-    /// the frame it sees the crate go. The first value a late joiner receives is history, not a throw.
+    /// Throws so far. Bumped in the tick the swing starts; the item leaves the hand <see cref="ThrowRelease"/> later,
+    /// when the clip lets go, so an observer plays the swing and sees the item go on the right frame of it. The first
+    /// value a late joiner receives is history, not a throw.
     /// </summary>
     [Synced]
     public int Throws
@@ -95,6 +113,11 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
     {
         _hand = GetNode<Marker3D>("Visual/Knight/Rig/Skeleton3D/handslot_r/Hand");
         _animation = GetNode<AnimationTree>("AnimationTree");
+        // The clips come out of the glb as one-shots; the cycles loop. The library is shared by every knight, so this
+        // is done once and holds for all
+        var clips = GetNode<AnimationPlayer>("Visual/Knight/AnimationPlayer");
+        foreach (var cycle in new[] { "Idle", "Running_A", "Jump_Idle" })
+            clips.GetAnimation(cycle).LoopMode = Animation.LoopModeEnum.Linear;
         // This peer's own throws start from zero; another peer's count is history until its first sample has landed
         _throwsKnown = this.Authority.IsLocal;
         if (this.Authority.IsLocal) AddToGroup("local_player");
@@ -129,9 +152,12 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
         Velocity = velocity;
         MoveAndSlide();
         WalkBlend = Mathf.Clamp(new Vector2(Velocity.X, Velocity.Z).Length() / Speed, 0, 1);
+        AirBlend = IsOnFloor() ? 0 : 1;
 
+        if (_throwDue >= 0 && Time.GetTicksMsec() / 1000.0 >= _throwDue) Release();
         if (Pressed(bot?.Grab, Key.F, ref _grabWasDown)) GrabOrThrow();
         if (Pressed(null, Key.G, ref _grabPlayerWasDown)) PickUpOrThrowPlayer();
+        if (Pressed(null, Key.Q, ref _putDownWasDown)) PutDown();
         if (Pressed(bot?.Push, Key.E, ref _pushWasDown)) PushPlayers();
         var shootDown = bot?.Shoot ?? (GetWindow().HasFocus() && (Input.IsMouseButtonPressed(MouseButton.Left) || Input.IsPhysicalKeyPressed(Key.Enter)));
         if (shootDown && !_shootWasDown) Shoot();
@@ -146,15 +172,45 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
         return pressed;
     }
 
+    /// <summary>Starts the swing; <see cref="Release"/> lets go when the clip does.</summary>
+    private void Throw(Node item)
+    {
+        if (_throwDue >= 0) return;   // one swing at a time
+        PlaytestLog.Action(this, $"throw {item.Name}");
+        Throws++;
+        _throwing = item;
+        _throwDue = Time.GetTicksMsec() / 1000.0 + ThrowRelease;
+    }
+
+    private void Release()
+    {
+        _throwDue = -1;
+        var item = _throwing;
+        _throwing = null;
+        if (item is null || !this.Attached.Contains(item)) return;   // put down or taken meanwhile
+        this.Detach(item);
+        switch (item)
+        {
+            case PlaygroundCrate crate: crate.Impulse((Forward * ThrowSpeed + Vector3.Up * 2) * crate.Mass); break;
+            case PlaygroundPlayer player: player.Impulse(Forward * ThrowSpeed + Vector3.Up * 3); break;
+        }
+    }
+
+    /// <summary>Puts down whatever is carried, crate or player, without a throw.</summary>
+    private void PutDown()
+    {
+        foreach (var item in this.Attached.ToArray())
+        {
+            PlaytestLog.Action(this, $"put down {item.Name}");
+            this.Detach(item);
+        }
+    }
+
     private void GrabOrThrow()
     {
         if (Held is { } held)
         {
-            PlaytestLog.Action(this, $"throw {held.Name}");
-            // The counter and the detach in one tick: an observer sees the swing and the crate leave in the same frame
-            Throws++;
-            this.Detach(held);
-            held.Impulse((Forward * ThrowSpeed + Vector3.Up * 2) * held.Mass);
+            Throw(held);
             return;
         }
 
@@ -174,10 +230,7 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
     {
         if (this.Attached.OfType<PlaygroundPlayer>().FirstOrDefault() is { } carried)
         {
-            PlaytestLog.Action(this, $"throw {carried.Name}");
-            Throws++;
-            this.Detach(carried);
-            carried.Impulse(Forward * ThrowSpeed + Vector3.Up * 3);
+            Throw(carried);
             return;
         }
 

@@ -1,4 +1,4 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=13 format=3]
 
 [ext_resource type="Script" path="res://examples/playground/PlaygroundPlayer.cs" id="1"]
 [ext_resource type="Script" path="res://addons/cracknet/NetworkObject.cs" id="2"]
@@ -17,7 +17,12 @@ animation = &"Running_A"
 [sub_resource type="AnimationNodeAnimation" id="Node_throw"]
 animation = &"Throw"
 
+[sub_resource type="AnimationNodeAnimation" id="Node_air"]
+animation = &"Jump_Idle"
+
 [sub_resource type="AnimationNodeBlend2" id="Node_walk_blend"]
+
+[sub_resource type="AnimationNodeBlend2" id="Node_air_blend"]
 
 [sub_resource type="AnimationNodeOneShot" id="Node_throw_one_shot"]
 
@@ -29,11 +34,15 @@ nodes/WalkAnimation/node = SubResource("Node_run")
 nodes/WalkAnimation/position = Vector2(0, 150)
 nodes/Walk/node = SubResource("Node_walk_blend")
 nodes/Walk/position = Vector2(250, 50)
+nodes/AirAnimation/node = SubResource("Node_air")
+nodes/AirAnimation/position = Vector2(250, 200)
+nodes/Air/node = SubResource("Node_air_blend")
+nodes/Air/position = Vector2(450, 100)
 nodes/ThrowAnimation/node = SubResource("Node_throw")
-nodes/ThrowAnimation/position = Vector2(250, 250)
+nodes/ThrowAnimation/position = Vector2(450, 300)
 nodes/Throw/node = SubResource("Node_throw_one_shot")
-nodes/Throw/position = Vector2(500, 100)
-node_connections = [&"output", 0, &"Throw", &"Walk", 0, &"Idle", &"Walk", 1, &"WalkAnimation", &"Throw", 0, &"Walk", &"Throw", 1, &"ThrowAnimation"]
+nodes/Throw/position = Vector2(650, 100)
+node_connections = [&"output", 0, &"Throw", &"Walk", 0, &"Idle", &"Walk", 1, &"WalkAnimation", &"Air", 0, &"Walk", &"Air", 1, &"AirAnimation", &"Throw", 0, &"Air", &"Throw", 1, &"ThrowAnimation"]
 
 [node name="Player" type="CharacterBody3D"]
 collision_layer = 2
@@ -58,6 +67,7 @@ active = true
 tree_root = SubResource("BlendTree")
 anim_player = NodePath("../Visual/Knight/AnimationPlayer")
 parameters/Walk/blend_amount = 0.0
+parameters/Air/blend_amount = 0.0
 parameters/Throw/active = false
 parameters/Throw/internal_active = false
 parameters/Throw/request = 0

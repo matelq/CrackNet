@@ -328,7 +328,10 @@ parent sync.
   The playground's player is KayKit's knight (CC0, `examples/playground/assets/kaykit`, chosen over Quaternius'
   Universal Animation Library for having Throw, PickUp and aiming clips on its own mesh in one 3.6 MB glb): the
   hand is a marker under the model's right hand slot bone attachment, the AnimationTree blends Idle into Running_A
-  and fires Throw, and the slot colour tints the knight's texture. Before it, the player carried the crate at a
+  and fires Throw, the slot colour tints the knight's texture, the cycle clips are set to loop at start (the glb
+  brings them as one-shots, and the third playtest saw them freeze on their last frame), Jump_Idle blends in
+  while airborne, and the throw lets go 0.72 s into the clip, where the hand is furthest forward, so the item
+  leaves the hand on the swing rather than before it; Q puts down what is carried. Before it, the player carried the crate at a
   `Hand` marker bobbed by an AnimationTree walk blend and fired a throw one-shot from a counter, on a capsule with
   no skeleton.
 - **Tests first:** per frame on a remote peer during a carried walk with animation, item-to-anchor distance near zero,

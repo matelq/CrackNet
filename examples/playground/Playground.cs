@@ -251,7 +251,7 @@ public partial class Playground : Node3D
         _status.Text = Multiplayer.MultiplayerPeer is null or OfflineMultiplayerPeer
             ? $"Host, or join an address. Network: {profile}"
             : $"Peer {Multiplayer.GetUniqueId()}  tick {time.Tick}  rtt {time.RemoteRtt * 1000:F0}ms  network: {profile}\n" +
-              "WASD move, Space jump, F grab / throw a crate, G pick up / throw a player (G again to wriggle free), E push a player, left mouse or Enter shoot.\n" +
+              "WASD move, Space jump, F grab / throw a crate, G pick up / throw a player (G again to wriggle free), Q put down, E push a player, left mouse or Enter shoot.\n" +
               $"F3: playtest log {(PlaytestLog.On ? "on" : "off")} (user://playtest, or Project Settings > Playground)" +
               delayReadout;
         _status.Text += _steamNote;
