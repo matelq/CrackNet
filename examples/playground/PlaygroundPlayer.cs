@@ -10,17 +10,20 @@ namespace CrackNet.Examples.Playground;
 /// The model is KayKit's knight (CC0, examples/playground/assets/kaykit), rigged and animated. It carries a crate in
 /// <see cref="Hand"/>, a marker under the bone attachment of its right hand slot: the library puts the crate there on
 /// every peer, after that peer's animation and the skeleton's deferred update. Animation is parameters:
-/// <see cref="WalkBlend"/> drives the AnimationTree's idle-to-run blend everywhere, and <see cref="Throws"/> is the
-/// one-shot pattern, a counter bumped in the tick of the throw that fires the throw animation wherever the sample
+/// <see cref="WalkBlend"/> drives the AnimationTree's idle-to-run blend everywhere, and <see cref="Gesture"/> is the
+/// one-shot pattern: a clip and a counter bumped in the tick of the action, which fire the clip wherever the sample
 /// lands.
 /// </para>
 /// </summary>
-public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
+public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>, IImpulsed
 {
     private const float Speed = 6, JumpSpeed = 5, Gravity = 14, PushStrength = 4, ThrowSpeed = 9, ShotSpeed = 18;
 
     /// <summary>Seconds into the Throw clip at which the hand is furthest forward and lets go: the swing before it is the wind-up.</summary>
     private const double ThrowRelease = 0.72;
+
+    /// <summary>The clips the one-shot slot can play, in the order <see cref="Gesture"/> indexes them.</summary>
+    private static readonly string[] OneShots = ["Throw", "PickUp", "1H_Ranged_Shoot", "Hit_A"];
 
     public int Peer { get; private set; }
     public int Slot { get; private set; }
@@ -30,10 +33,11 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
     private Node? _throwing;
     private Marker3D _hand = null!;
     private AnimationTree _animation = null!;
+    private AnimationNodeAnimation? _gestureClip;
 
     /// <summary>Where a carried crate goes: the right hand, moved by the skeleton.</summary>
     public Marker3D Hand => _hand;
-    private bool _throwsKnown;
+    private bool _gestureKnown;
 
     private Vector3 Forward => -GlobalBasis.Z;
 
@@ -68,21 +72,33 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
     }
 
     /// <summary>
-    /// Throws so far. Bumped in the tick the swing starts; the item leaves the hand <see cref="ThrowRelease"/> later,
-    /// when the clip lets go, so an observer plays the swing and sees the item go on the right frame of it. The first
-    /// value a late joiner receives is history, not a throw.
+    /// The one-shot slot: which of <see cref="OneShots"/> played last, and how many have played. The clip and the
+    /// counter are one value so that one sample carries both; a counter of its own would fire before the clip beside
+    /// it had been applied. Bumped in the tick the action starts - a throw's item leaves the hand
+    /// <see cref="ThrowRelease"/> later, when the clip lets go, so an observer plays the swing and sees the item go on
+    /// the right frame of it. The first value a late joiner receives is history, played zero times.
     /// </summary>
     [Synced]
-    public int Throws
+    public Vector2I Gesture
     {
         get;
         set
         {
-            if (_throwsKnown && value != field) _animation?.Set("parameters/Throw/request", (int)AnimationNodeOneShot.OneShotRequest.Fire);
-            _throwsKnown = true;
+            if (_gestureKnown && value.Y != field.Y && value.X >= 0 && value.X < OneShots.Length && _gestureClip is not null)
+            {
+                _gestureClip.Animation = OneShots[value.X];
+                _animation.Set("parameters/Gesture/request", (int)AnimationNodeOneShot.OneShotRequest.Fire);
+            }
+            _gestureKnown = true;
             field = value;
         }
     }
+
+    /// <summary>Plays <paramref name="clip"/> once, here and on every screen this player is drawn on.</summary>
+    private void Play(string clip) => Gesture = new Vector2I(Array.IndexOf(OneShots, clip), Gesture.Y + 1);
+
+    /// <summary>A push delivered to this player - a shove, a shot, a throw - arrives on its own peer: it flinches.</summary>
+    public void OnImpulsed(Vector3 impulse) => Play("Hit_A");
 
     /// <summary>Spawn data from the host: which colour slot this player has, the same on every peer.</summary>
     public void OnSpawned(int slot) => Slot = slot;
@@ -113,13 +129,17 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
     {
         _hand = GetNode<Marker3D>("Visual/Knight/Rig/Skeleton3D/handslot_r/Hand");
         _animation = GetNode<AnimationTree>("AnimationTree");
+        // Every player instanced from the scene shares its blend tree: a copy of its own lets this one point the
+        // slot at its own clip, as the tint above gives it materials of its own
+        _animation.TreeRoot = (AnimationRootNode)_animation.TreeRoot.Duplicate(true);
+        _gestureClip = ((AnimationNodeBlendTree)_animation.TreeRoot).GetNode("GestureAnimation") as AnimationNodeAnimation;
         // The clips come out of the glb as one-shots; the cycles loop. The library is shared by every knight, so this
         // is done once and holds for all
         var clips = GetNode<AnimationPlayer>("Visual/Knight/AnimationPlayer");
         foreach (var cycle in new[] { "Idle", "Running_A", "Jump_Idle" })
             clips.GetAnimation(cycle).LoopMode = Animation.LoopModeEnum.Linear;
-        // This peer's own throws start from zero; another peer's count is history until its first sample has landed
-        _throwsKnown = this.Authority.IsLocal;
+        // This peer's own gestures start from zero; another peer's count is history until its first sample has landed
+        _gestureKnown = this.Authority.IsLocal;
         if (this.Authority.IsLocal) AddToGroup("local_player");
     }
 
@@ -177,7 +197,7 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
     {
         if (_throwDue >= 0) return;   // one swing at a time
         PlaytestLog.Action(this, $"throw {item.Name}");
-        Throws++;
+        Play("Throw");
         _throwing = item;
         _throwDue = Time.GetTicksMsec() / 1000.0 + ThrowRelease;
     }
@@ -199,7 +219,10 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
     /// <summary>Puts down whatever is carried, crate or player, without a throw.</summary>
     private void PutDown()
     {
-        foreach (var item in this.Attached.ToArray())
+        var carried = this.Attached.ToArray();
+        if (carried.Length == 0) return;
+        Play("PickUp");
+        foreach (var item in carried)
         {
             PlaytestLog.Action(this, $"put down {item.Name}");
             this.Detach(item);
@@ -218,6 +241,7 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
             .Where(crate => crate.GlobalPosition.DistanceTo(GlobalPosition + Forward) < 1.6f)
             .MinBy(crate => crate.GlobalPosition.DistanceTo(GlobalPosition));
         if (nearest is null) return;
+        Play("PickUp");
         var attached = this.TryAttach(nearest, _hand);
         PlaytestLog.Action(this, $"grab {nearest.Name} {(attached ? "attached" : "refused")}");
     }
@@ -238,6 +262,7 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
             .Where(other => other != this && other.GlobalPosition.DistanceTo(GlobalPosition + Forward) < 1.6f)
             .MinBy(other => other.GlobalPosition.DistanceTo(GlobalPosition));
         if (nearest is null) return;
+        Play("PickUp");
         var asked = this.TryAttach(nearest, _hand);
         PlaytestLog.Action(this, $"pick up {nearest.Name} {(asked ? "asked" : "refused")}");
     }
@@ -257,6 +282,7 @@ public partial class PlaygroundPlayer : CharacterBody3D, ISpawnedWith<int>
         // Chest height, so a shot can hit a crate on the floor as well as another player
         var at = new Transform3D(GlobalBasis, GlobalPosition + Forward * 0.8f);
         PlaytestLog.Action(this, "shoot");
+        Play("1H_Ranged_Shoot");
         PlaygroundShot.Spawn(at, Forward * ShotSpeed, parent: GetParent().GetParent<Playground>().Shots);
     }
 

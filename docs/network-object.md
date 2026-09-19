@@ -125,10 +125,12 @@ public float WalkBlend
 
 - **A loop** (walk, run, idle) is a blend parameter like the one above, set from the character's speed on the
   authority every physics frame.
-- **A one-shot** (grab, throw, shoot) is a counter bumped in the same tick as the action, so an observer plays it in
-  the frame it sees the crate leave the hand. The setter plays the *difference* each sample brings, once the first
-  value is known: two bumps inside one snapshot arrive as one step of two, and the first value a late joiner receives
-  is history, played zero times.
+- **A one-shot** (grab, throw, shoot, a flinch) is a counter bumped in the same tick as the action, so an observer
+  plays it in the frame it sees the crate leave the hand. The setter plays the *difference* each sample brings, once
+  the first value is known: two bumps inside one snapshot arrive as one step of two, and the first value a late joiner
+  receives is history, played zero times. Several clips share one slot by sending the clip's index beside the counter
+  in *one* value (`Vector2I`): two properties would arrive in no fixed order, and the counter would fire before the
+  clip beside it had been applied.
 - **Root motion** runs on the authority only: the animation's displacement moves the body there and travels as the
   transform. An observer's copy is placed from the samples every frame, so applying root motion there does not show,
   but it walks a kinematic copy into the world between frames: skip it when `Authority.IsLocal` is false.
@@ -137,8 +139,14 @@ public float WalkBlend
   at something synced (a `[Synced] Vector3`, or the anchor of a carried item), not at what a peer happens to display.
 - **Not in: animation phase on late join.** A peer joining mid-loop starts it from phase zero.
 
-The playground's player is the worked example: `WalkBlend` and `Throws` in `PlaygroundPlayer.cs`, the tree in
-`PlaygroundPlayer.tscn`.
+The playground's player is the worked example: `WalkBlend` and `Gesture` in `PlaygroundPlayer.cs`, the tree in
+`PlaygroundPlayer.tscn`. Its flinch shows where a one-shot comes from when the action happened elsewhere: the shove
+arrives as a push, `IImpulsed.OnImpulsed` fires on the pushed player's own peer, and the gesture it bumps there travels
+back out like any other state.
+
+A resource in a scene is shared by everything instanced from it, the blend tree included: a player that retargets a
+slot in it retargets it for every other player. Give each one `TreeRoot.Duplicate(true)` in `_Ready`, as you would
+duplicate a material to tint one copy.
 
 ## Events and state
 
