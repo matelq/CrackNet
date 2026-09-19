@@ -173,6 +173,54 @@ public partial class NetworkObject : Node
     /// sample has come.
     /// </summary>
     internal int? CarriedTick { get; set; }
+
+    /// <summary>
+    /// Where this peer was drawing the object when the new authority's first sample turned out to be unusable as a
+    /// continuation: the tick it carried over is later than that sample, or the two are too far apart. Playback then
+    /// starts clean at that sample and the object slides there from here, instead of being put there.
+    /// </summary>
+    internal void CrossFadeFromHere()
+    {
+        if (Root is Node3D root) _fadeFrom = root.GlobalPosition;
+    }
+
+    private Vector3? _fadeFrom;
+    private Vector3 _fadeOffset;
+
+    /// <summary>
+    /// Lets the object slide from where it was drawn to where the new authority's playback puts it, over
+    /// <see cref="SmoothingTime"/>, instead of being put there in one frame. The step goes into an offset that fades
+    /// by the same share every frame, so a second handover landing while the first is still fading adds to it rather
+    /// than restarting it: at sixteen strikes 0.12 s apart a fade that restarted never converged and the body
+    /// trailed for the whole exchange. Called after playback has placed the body.
+    /// </summary>
+    internal void CrossFade(double delta)
+    {
+        if (Root is not Node3D root) return;
+        // Hung on something, the placer puts it on its anchor at the end of the frame and an offset here is both
+        // erased and, while it is not, measured by the placer as motion of the anchor
+        if (_carrier is not null)
+        {
+            _fadeFrom = null;
+            _fadeOffset = Vector3.Zero;
+            return;
+        }
+        if (_fadeFrom is { } from)
+        {
+            // Where it was against where the new authority's first placement put it. No distance guard: this step is
+            // known to be a handover, not a jump that has to be told apart from a relocation
+            _fadeOffset += from - root.GlobalPosition;
+            _fadeFrom = null;
+        }
+        if (_fadeOffset.IsZeroApprox()) return;
+        _fadeOffset *= (float)Math.Exp(-delta * 3 / Math.Max(SmoothingTime, 0.001));
+        if (_fadeOffset.LengthSquared() < 1e-6f)
+        {
+            _fadeOffset = Vector3.Zero;
+            return;
+        }
+        root.GlobalPosition += _fadeOffset;
+    }
     internal bool SnapPending { get; set; }
 
     /// <summary>State from a peer that is not the authority here yet, kept for when the host's word arrives.</summary>
