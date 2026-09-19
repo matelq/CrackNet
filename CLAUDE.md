@@ -1,9 +1,10 @@
 # CrackNet
 
-Co-op netcode for Godot C#: distributed authority with state synchronization. Started as a port of netfox; on this
-branch (`distributed-authority`) it no longer is one. The model, its decisions and sources: `docs/design/distributed-authority.md`
+Co-op netcode for Godot C#: distributed authority with state synchronization. Started as a port of netfox; it no
+longer is one. The model, its decisions and sources: `docs/design/distributed-authority.md`
 - read it before changing anything networked. The rules of the port (1:1 with the `.gd` original, "Port of x.gd" summaries,
-parity checks) do not apply here; `reworked` and `master` keep the port. Roadmap: the `Distributed authority` milestone.
+parity checks) are gone with it; the last commit that kept them is the tag `archive/reworked`. Roadmap: the
+`Distributed authority` milestone.
 
 ## Layout
 
