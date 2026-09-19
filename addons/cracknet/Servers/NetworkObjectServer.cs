@@ -214,6 +214,7 @@ public partial class NetworkObjectServer : Node
     internal void ResetSession()
     {
         _clocks.Clear();
+        _commonTick = double.NegativeInfinity;
         _ages.Clear();
         _pendingAuthority.Clear();
         _pendingSamples.Clear();
@@ -227,7 +228,31 @@ public partial class NetworkObjectServer : Node
     }
 
     /// <summary>The display tick for objects of <paramref name="peer"/>, or null before anything arrived from it.</summary>
-    internal double? GetDisplayTick(int peer) => _clocks.TryGetValue(peer, out var clock) ? clock.Tick : null;
+    internal double? GetDisplayTick(int peer) => _clocks.TryGetValue(peer, out var clock) ? ShownOf(clock) : null;
+
+    /// <summary>
+    /// The one time this screen shows every remote object at: the deepest of its live links' clocks, never running
+    /// back. Each peer's clock still trails that peer's own link by its own depth, but shown each at its own depth a
+    /// platform from the host and a player from a guest were places at two moments, and the player stepping onto it
+    /// slid along it by the platform's speed times the difference (a metre on a link 120 ms deeper than the host's).
+    /// A peer whose clock has stopped, its samples overdue by more than the lead, does not hold the others back.
+    /// </summary>
+    private double _commonTick = double.NegativeInfinity;
+
+    private void AdvanceCommonTick()
+    {
+        double? deepest = null;
+        foreach (var clock in _clocks.Values)
+            if (clock.IsLive && clock.Time is { } time && (deepest is null || time < deepest)) deepest = time;
+        if (deepest is { } tick && tick > _commonTick) _commonTick = tick;
+    }
+
+    /// <summary>Where this peer's objects are shown: the common time, but never past what the peer has sent.</summary>
+    private double? ShownOf(PlaybackClock clock)
+    {
+        if (clock.Tick is not { } own) return null;
+        return double.IsNegativeInfinity(_commonTick) ? own : Math.Min(_commonTick, clock.Newest);
+    }
 
     /// <summary>
     /// How old what <paramref name="peer"/> is shown is, averaged over the last second, or null before any state arrived.
@@ -690,7 +715,7 @@ public partial class NetworkObjectServer : Node
         for (var i = 0; i < values.Length; i++)
             values[i] = CompactValues.Decode(reader);
 
-        var shown = clock.Tick;
+        var shown = ShownOf(clock);
         if (shown is { } shared && obj.CarriedTick is { } carried)
         {
             // The new authority's first sample: played from the state carried over the change of hands when it is
@@ -733,6 +758,7 @@ public partial class NetworkObjectServer : Node
             clock.Advance(elapsedTicks);
             if (clock.Time is { } time) AddAge(AgesOf(peer).Total, Math.Max(0, LocalTick - time));
         }
+        AdvanceCommonTick();
 
         if (_pendingSamples.Count > 0) ApplyPendingSamples();
 
@@ -741,8 +767,11 @@ public partial class NetworkObjectServer : Node
         foreach (var obj in _objects)
         {
             if (obj.Authority.IsLocal) continue;
-            if (!_clocks.TryGetValue(obj.Root!.GetMultiplayerAuthority(), out var clock) || clock.Tick is not { } shown) continue;
+            if (!_clocks.TryGetValue(obj.Root!.GetMultiplayerAuthority(), out var clock) || ShownOf(clock) is not { } shown) continue;
             var objectTick = obj.PlaybackStarted ? obj.PlaybackCursor.Advance(shown, elapsedTicks) : shown;
+            // Never back: a deeper link joining pulls the common time behind what a shallower peer's objects already
+            // show, and they wait for it rather than rewind
+            if (obj.DisplayTick is { } before && objectTick < before) objectTick = before;
             // Held samples are played once the wait is over, or sooner if playback has reached the last sample it has:
             // after a loss, a stall there would be worse than the interpolation across the hole the wait is against
             if (obj.HeldSamples.Count > 0 && (now - obj.HeldSamples.Min(sample => sample.HeldAt) >= waitMs
@@ -805,6 +834,10 @@ public partial class NetworkObjectServer : Node
         }
         var attachment = sampled ?? obj.ClaimedHere;
         var switching = from.Attachment != to.Attachment;
+        // A world position and an anchor offset are places at two moments: the platform shown at the host's depth,
+        // the player at its own. The line between them is a slide of that gap over two ticks; the Visual smoothing
+        // spreads it over its own time instead
+        if (switching) obj.Switching();
         for (var i = 0; i < obj.Properties.Count; i++)
         {
             var (node, property, interpolate) = obj.Properties[i];

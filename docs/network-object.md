@@ -255,6 +255,9 @@ A remote object is shown from its authority's samples, a little in the past:
   quickly. A late sample never rewrites what was already shown.
 - **Objects start at their first sample.** A spawned object is hidden until playback reaches its first sample. A
   projectile starts at the muzzle, not hanging there or appearing down range.
+- **One time per screen.** Everything a peer shows of the others is shown at one moment, the deepest of its
+  links, so a crate from one player and the platform from the host are places at the same time. A player on a
+  bad link costs the others its depth; a link gone quiet for longer than a heartbeat does not hold anyone back.
 
 `NetworkObjectServer.Instance.Diagnostics.GetPlaybackStatus(peer)` reports, averaged over a second, how old that peer's
 state is on arrival and how long it waits in the buffer, in ticks and in milliseconds (`TotalMs`, `NetworkMs`, `PlaybackMs`). `Object.Diagnostics` has the sequences, the display tick and

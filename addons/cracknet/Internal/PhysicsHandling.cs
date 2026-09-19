@@ -182,14 +182,29 @@ internal abstract class PhysicsHandling
                 Object.Base = null;
                 return;
             }
-            if (_body.Sleeping) return;
             var previous = Object.Base;
+            if (_body.Sleeping)
+            {
+                // Asleep it reports no contacts, and the engine does not wake it for a body that merely moves away
+                // from under it: the base stays only while it is still there. Crates from the third playtest had
+                // fallen asleep against a player, kept the player as their base, and walked off with it on every
+                // other screen
+                if (previous is { Root: RigidBody3D } && !Touching().Any(other => ReferenceEquals(other, previous)))
+                {
+                    Object.Base = null;
+                    TrackBase(null);
+                }
+                return;
+            }
             NetworkObject? under = null;
             var state = PhysicsServer3D.BodyGetDirectState(_body.GetRid());
             for (var i = 0; state is not null && i < state.GetContactCount(); i++)
             {
                 if (state.GetContactLocalNormal(i).Dot(Vector3.Up) < 0.7f) continue;
-                if (state.GetContactColliderObject(i) is Node node && NetworkObject.Of(node) is { } other && !ReferenceEquals(other, Object))
+                // Never a player: a crate on a player's head is the player's to carry, and a player's copy moves by
+                // playback, which the engine does not report as a moving floor
+                if (state.GetContactColliderObject(i) is Node node && NetworkObject.Of(node) is { } other && !ReferenceEquals(other, Object)
+                    && other.ResolvedKind != NetworkObject.ObjectKind.Personal)
                 {
                     under = other;
                     break;

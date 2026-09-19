@@ -1164,4 +1164,79 @@ public partial class CarryingTests : HarnessSuite
         Expect.True(compared.All(count => count > 20), "too few frames compared: " + report);
         Expect.True(worst.All(distance => distance < 0.1f), "a peer draws the crate off its place on the platform across the change of hands: " + report);
     }
+
+    /// <summary>
+    /// The third playtest's slide: a player stepping onto a moving platform slid along it on the other screens. An
+    /// observer showed the platform at the host's depth and the player at the player's, and the world position the
+    /// player sent before landing and its first offset on the platform were that far apart along the platform's
+    /// travel, so the switch, drawn along the line between them, was a slide over two ticks. Part of the gap was the
+    /// observer's two clocks, and everything a screen shows is now shown at one time, the deepest of its links; the
+    /// rest is the player's own view of the platform, a playback delay behind the host's, which only an extrapolated
+    /// platform on the player's peer would close, and that part is the Visual smoothing's to spread. Peer 2 drops
+    /// onto the host's slider; a third peer 30 ms from the host and 150 ms from peer 2 watches, per frame, how far
+    /// its drawn player moves beyond what the player's speed covers.
+    /// </summary>
+    [Test]
+    public async Task AWalkerLandingOnAMovingPlatformIsDrawnWithoutASlideOnAPeerWithUnevenLinks()
+    {
+        var stacks = new[] { Host, Client, await ThirdPeer() };
+        Network.SetLink(1, 3, 30);
+        Network.SetLink(2, 3, 150);
+        Network.SetLink(1, 2, 60);
+        var sliders = stacks.Select(stack => HarnessWorld.Lift(stack, "Slider", new Vector3(0, 0.25f, 0), new Vector3(40, 0.5f, 4), new Vector3(3, 0, 0))).ToArray();
+        var walkers = stacks.Select(stack => HarnessWorld.Walker(stack, 2, new Vector3(-3, 2.5f, 0), Vector3.Zero, smoothed: true)).ToArray();
+        foreach (var walker in walkers)
+        {
+            walker.Falls = true;
+            walker.SafeMargin = 0.05f;
+        }
+        var visual = walkers[2].GetNode<Node3D>("Visual");
+        for (var i = 0; i < 5; i++) await NextFrame();
+
+        // A frame's motion is judged against the display time it covers: headless, with three stacks in one tree,
+        // playback advances in bursts against the wall clock, and a frame that covers two frames' worth of ticks is
+        // not a jump. The frames before the walker's first sample have no display tick and are not judged
+        var frames = new List<(Vector3 Body, Vector3 Drawn, double Delta)>();
+        var tickrate = stacks[2].Context.NetworkTime.Tickrate;
+        double? lastShown = null;
+        var drawn = new DrawnFrame();
+        AddChild(drawn);
+        drawn.Drawn += () =>
+        {
+            var shown = walkers[2].Net().Diagnostics.DisplayTick;
+            var covered = shown is { } now && lastShown is { } before ? (now - before) / tickrate : double.NaN;
+            lastShown = shown;
+            frames.Add((walkers[2].GlobalPosition, visual.GlobalPosition, covered));
+        };
+        walkers[1].Walk = new Vector3(4, 0, 0);
+        var rode = false;
+        for (var seconds = 0.0; seconds < 2.5; seconds += GetProcessDeltaTime())
+        {
+            await NextFrame();
+            rode |= walkers[1].IsOnFloor() && walkers[1].GlobalPosition.Y > 1.3f;
+        }
+        drawn.QueueFree();
+        Expect.True(rode, $"the walker never stood on the slider: at {walkers[1].GlobalPosition}");
+
+        // Around the landing on the observer's screen: the first frame the copy is down at riding height after its
+        // fall. Beyond 7 m/s, the walk plus the fall plus the platform, anything more in a frame there is the slide
+        var landing = frames.FindIndex(frame => frame.Body.Y < 1.5f);
+        Expect.True(landing > 12, $"the observer never showed the landing: {frames.Count} frames, last at {frames[^1].Body}");
+        float bodyExcess = 0, drawnExcess = 0;
+        for (var i = landing - 12; i < Math.Min(frames.Count, landing + 8); i++)
+        {
+            if (double.IsNaN(frames[i].Delta)) continue;
+            var allowed = 7 * (float)frames[i].Delta + 0.01f;
+            bodyExcess = Mathf.Max(bodyExcess, frames[i].Body.DistanceTo(frames[i - 1].Body) - allowed);
+            drawnExcess = Mathf.Max(drawnExcess, frames[i].Drawn.DistanceTo(frames[i - 1].Drawn) - allowed);
+        }
+        var settled = frames[^1].Drawn.DistanceTo(frames[^1].Body);
+        var report = $"body slid {bodyExcess:F3} m beyond its speed in a frame, the drawn walker {drawnExcess:F3} m; drawn {settled:F3} m from the body at the end";
+        GD.Print("LANDING ON A SLIDER " + report);
+        Expect.True(bodyExcess > 0.05f, "the body did not slide at the switch, so this measures nothing: " + report);
+        // Without the smoothing the drawn walker is the body (0.17 of 0.17, 0.41 of 0.41); with it, what the fade
+        // itself moves the visual by, about half the slide (0.044-0.073 of 0.063-0.143 over six runs)
+        Expect.True(drawnExcess < 0.8f * bodyExcess, "the drawn walker slides along the platform as it lands on the observer's screen: " + report);
+        Expect.True(settled < 0.05f, "the drawn walker never caught up with the body: " + report);
+    }
 }

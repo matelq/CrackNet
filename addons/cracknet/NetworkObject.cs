@@ -210,6 +210,9 @@ public partial class NetworkObject : Node
     /// <summary>A snap sample was applied here: it is to be seen, not smoothed.</summary>
     internal void SnapApplied() => _smoothing?.Snapped();
 
+    /// <summary>Playback is between a world position and an anchor: the step between them is the smoothing's to spread.</summary>
+    internal void Switching() => _smoothing?.Opened();
+
     /// <summary>
     /// Ends this authoritative object's timeline. It is hidden and stops processing here immediately; remote peers
     /// hide it when their playback reaches the flagged final sample, and the root is freed after the playback grace
@@ -488,7 +491,7 @@ public partial class NetworkObject : Node
         if (_anchor is null || Root is not Node3D node || !_anchor.IsInsideTree() || !node.IsInsideTree() || _riding && IsAuthority) return;
         node.GlobalTransform = _anchor.GlobalTransform * _anchorOffset;
         // The hand's motion is not a jump to smooth: the smoothing follows the body while it hangs
-        _smoothing?.Following();
+        _smoothing?.Following(GetProcessDeltaTime());
     }
 
     /// <summary>The value property <paramref name="index"/> sends: the anchor offset instead of the transform while attached.</summary>

@@ -37,12 +37,14 @@ internal static class HarnessWorld
         return crate;
     }
 
-    public static Walker Walker(CrackNetStack stack, int peer, Vector3 position, Vector3 velocity, float pushStrength = 0, string? name = null)
+    public static Walker Walker(CrackNetStack stack, int peer, Vector3 position, Vector3 velocity, float pushStrength = 0, string? name = null, bool smoothed = false)
     {
         var walker = new Walker { Name = name ?? $"Walker{peer}", Position = position, Walk = velocity };
         walker.SetMultiplayerAuthority(peer);
         walker.AddChild(Shapes.Collision(new CapsuleShape3D { Radius = 0.4f, Height = 1.8f }));
-        walker.AddChild(new NetworkObject { Name = "NetworkObject", ImpulseStrength = pushStrength });
+        var visual = new Node3D { Name = "Visual" };
+        walker.AddChild(visual);
+        walker.AddChild(new NetworkObject { Name = "NetworkObject", ImpulseStrength = pushStrength, Visual = smoothed ? visual : null, SmoothingTime = 0.5f });
         World(stack).AddChild(walker);
         return walker;
     }

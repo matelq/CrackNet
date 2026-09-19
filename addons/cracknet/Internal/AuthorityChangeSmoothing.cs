@@ -36,6 +36,8 @@ internal sealed class AuthorityChangeSmoothing
     private double _window;
     private bool _snapped;
     private bool _drawnAway;
+    private bool _following;
+    private ulong _followedFrame = ulong.MaxValue;
 
     private AuthorityChangeSmoothing(NetworkObject obj, Node3D root, Node3D visual)
     {
@@ -63,17 +65,30 @@ internal sealed class AuthorityChangeSmoothing
     public void Snapped() => _snapped = true;
 
     /// <summary>
-    /// The body was just put where it belongs (on its anchor): nothing to smooth, and the next frame's motion is judged
-    /// from here. Called instead of <see cref="Process"/> while the object hangs on something.
+    /// The body was just put where it belongs (on its anchor): the anchor's motion is not a jump to measure, so the
+    /// next frame's motion is judged from here, while what is still being smoothed goes on fading. Called instead of
+    /// <see cref="Process"/> while the object hangs on something.
     /// </summary>
-    public void Following()
+    public void Following(double delta)
     {
-        _lastBody = _root.GlobalTransform;
+        // Once a frame: the item is placed when hung and again by the placer at the end of that frame
+        var frame = Engine.GetProcessFrames();
+        if (frame == _followedFrame) return;
+        _followedFrame = frame;
+        var body = _root.GlobalTransform;
+        // The frame it was hung in: the step that put it on the anchor was the end of the line playback drew to it,
+        // and nothing measured it yet. From the next frame on the anchor's motion is the body's own
+        if (!_following && _lastBody is { } last && _window > 0)
+        {
+            var step = body.Origin - last.Origin;
+            if (step.Length() <= _object.MaxSmoothingDistance && step.Length() > Noise) _offset -= step;
+        }
+        _following = true;
+        _lastBody = body;
         _lastVelocity = Vector3.Zero;
-        _offset = Vector3.Zero;
-        _rotationOffset = Quaternion.Identity;
-        if (_drawnAway) _visual.Transform = _rest;
-        _drawnAway = false;
+        _snapped = false;
+        _window = Math.Max(0, _window - delta);
+        Fade(delta);
     }
 
     /// <summary>Once per rendered frame, after playback has placed the body.</summary>
@@ -107,10 +122,15 @@ internal sealed class AuthorityChangeSmoothing
             }
         }
         _snapped = false;
+        _following = false;
         _lastBody = body;
         _lastVelocity = velocity;
         _window = Math.Max(0, _window - delta);
+        Fade(delta);
+    }
 
+    private void Fade(double delta)
+    {
         // Fade: the same share of what is left each frame, whatever the frame rate
         var keep = _object.SmoothingTime > 0 ? (float)Math.Exp(-delta * 3 / _object.SmoothingTime) : 0;
         _offset *= keep;

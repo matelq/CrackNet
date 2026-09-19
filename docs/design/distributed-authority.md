@@ -517,7 +517,11 @@ Two decisions here are made but not built, and both matter enough to keep in sig
   crate rides it too, which found a latent bug: the peer that takes an object jumps to its newest sample, and a
   riding sample is an anchor offset, so the top crate of a pile landed a metre above the world's origin when the
   pile was taken (`AHeldItemPassesThroughWhatItIsCarriedIntoAndCollidesAgainWhenLetGo`); the jump now goes
-  through the same conversion as playback. The interpolation across the switch also uncovered a playback hole
+  through the same conversion as playback. Two more rules from the third playtest: a player is never a rigid
+  body's base (a crate that fell asleep against a player kept it as its base and walked off with it on every other
+  screen, 30 m away and under the floor on a late joiner's, since a sleeping body reports no contacts and the
+  engine does not wake it for a body moving away), and a sleeping body keeps its base only while an overlap
+  query still finds it. The interpolation across the switch also uncovered a playback hole
   the hold used to cover: packets swap places on the way, and when a throw's second sample arrived before its
   first, which carries the resumed-after-a-rest flag, the rest was never held and the host drew the crate
   drifting out of the hand along the line from the last heartbeat to the throw (0.7 m in the smoke, 0.4 m in
@@ -538,8 +542,21 @@ Two decisions here are made but not built, and both matter enough to keep in sig
   until another floor is touched: 0.275 m off against the lift on a peer 30 ms from the host and 150 ms from the
   player, 0.000 with it (`AJumpOnARisingLiftIsDrawnOnItOnAPeerWithUnevenLinks`). What remains is the step at a
   landing on another floor, the platform's speed times the depth difference, and the same step when a walker
-  steps onto a moving platform from the ground: only a common display time removes it; until then the Visual
-  smoothing is where it belongs.
+  steps onto a moving platform from the ground.
+- **A common display time, and the slide that is left (third playtest).** Built: a screen shows every remote
+  object at one time, the deepest of its live links' clocks (a clock whose samples are overdue by more than its
+  lead does not count), never running back; a shallower peer's objects wait for it rather than rewind when a
+  deeper link joins. It takes the observer's two clocks out of the step above, but not the step itself: a player
+  stepping onto a moving platform sends world positions that are consistent with its own copy of the platform,
+  a playback delay behind the host's, so the first offset on the platform is that delay's travel away from the
+  last world position (0.4-0.6 m on a 60 ms link at 3 m/s), whoever looks and at whatever time. The Visual
+  smoothing spreads it: it opens at every switch and keeps fading while the object hangs, and the step of the
+  frame the object was hung in is measured too. On a third peer 30 ms from the host and 150 ms from the player
+  the body slides 0.06-0.14 m beyond its speed in a frame, the drawn walker 0.04-0.07, the fade's own speed,
+  where without it the two were equal (`AWalkerLandingOnAMovingPlatformIsDrawnWithoutASlideOnAPeerWithUnevenLinks`). What removes the step
+  is a platform on the rider's own peer that runs at the present, extrapolated from the host's samples, so the
+  rider's world positions agree with the host's platform: the deferred rider's-own-copy item, and the next one
+  if the slide still shows.
   Rest on a base is judged by the offset from it, averaged over 80 ms, not by the engine's velocity for the copy,
   which swings by half (3.1-4.9 m/s for 4) since playback moves it in render frames; on that velocity the return to
   the host at 3-4 m/s sometimes never came within the window. A common tick numbering is not the missing piece: ticks are already global and comparable across

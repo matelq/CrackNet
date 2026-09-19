@@ -71,6 +71,12 @@ public sealed class PlaybackClock
     /// </summary>
     public double? Time => Tick is null ? null : _time;
 
+    /// <summary>
+    /// Whether the peer has been heard from within the lead the clock's time may run past its newest tick: past that
+    /// the time stands still, and a clock standing still must not hold back the screen's common display time.
+    /// </summary>
+    public bool IsLive => Tick is not null && _sinceNewest <= _maxLead;
+
     /// <summary>How far behind the newest tick the clock aims to run now: the minimum plus this link's recent jitter.</summary>
     public double Depth => _lateness.Count < MinSamplesForJitter ? _delay : _depth;
 
