@@ -31,8 +31,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The addon names no engine (#52): Rapier is what the project uses, Jolt (built into Godot) keeps that claim tested
-        engine: [rapier, jolt]
+        # The addon names no engine (#81): Jolt is what the project uses, Rapier keeps that claim tested
+        engine: [jolt, rapier]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-dotnet@v5
@@ -52,16 +52,12 @@ jobs:
             unzip -q godot.zip -d godot
           fi
           echo "GODOT=$PWD/godot/Godot_v${GODOT_VERSION}_mono_linux_x86_64/Godot_v${GODOT_VERSION}_mono_linux.x86_64" >> "$GITHUB_ENV"
-      - name: Install Rapier
+      - name: Install Rapier and switch to it
         if: matrix.engine == 'rapier'
-        # The project is Rapier-first (#52): project.godot already asks for Rapier3D, this drops the
-        # pinned extension next to it. Without this step every physics body would sit on an engine that is not there.
-        run: sh tools/install-extensions.sh rapier
-      - name: Switch to Jolt
-        if: matrix.engine == 'jolt'
+        # Jolt is built into Godot and is what project.godot asks for (#81), so the plain job needs no step at all.
+        # This one fetches the pinned extension and points project.godot at it.
         run: |
-          sed -i 's/^3d\/physics_engine=.*/3d\/physics_engine="Jolt Physics"/' project.godot
-          sed -i '/^rapier\//d' project.godot
+          sh tools/install-extensions.sh rapier --enable-rapier
           grep -n physics_engine project.godot
       - name: Import resources
         # --import exits with a segfault after a successful import on 4.7.2, so its exit code says nothing

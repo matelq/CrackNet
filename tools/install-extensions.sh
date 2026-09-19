@@ -8,8 +8,9 @@
 #
 # Usage: sh tools/install-extensions.sh [rapier|steam|all] [--enable-rapier]
 #   all             both, the default
-#   --enable-rapier also set physics/3d/physics_engine=Rapier3D in project.godot, which the Rapier tier needs.
-#                   Off by default: it changes the physics engine for the whole repository, tests included.
+#   --enable-rapier also point physics/3d/physics_engine at Rapier3D in project.godot. Off by default: the project
+#                   runs on Jolt, built into Godot (#81), so nothing here is a prerequisite for a fresh clone; this
+#                   changes the physics engine for the whole repository, tests included.
 #
 # Restart Godot afterwards - an extension is loaded at startup and will not appear in a running editor.
 set -eu
@@ -101,6 +102,12 @@ install_rapier() {
     # that was never switched looks exactly like a broken Rapier install later on. So say so now.
     grep -q '^3d/physics_engine="Rapier3D"' "$settings" \
       || { echo "  could not set physics/3d/physics_engine in project.godot - set it by hand" >&2; exit 1; }
+    # The corrective velocity the playground was tuned against; it lives with the engine that has it, not in a
+    # project.godot that now asks for Jolt
+    grep -q '^rapier/solver/normalized_max_corrective_velocity=' "$settings" || {
+      sed -i.bak 's|^3d/physics_engine="Rapier3D"|3d/physics_engine="Rapier3D"\nrapier/solver/normalized_max_corrective_velocity=2.0|' "$settings"
+    }
+    rm -f "$settings.bak"
     echo "  project.godot now asks for Rapier3D"
   fi
 }
@@ -136,5 +143,5 @@ if [ "$what" != rapier ]; then
   echo "  <godot> --headless --path . res://examples/steam/SteamSmoke.tscn   # needs the Steam client running"
 fi
 if [ "$what" != steam ] && ! grep -q '^3d/physics_engine="Rapier3D"' "$root/project.godot"; then
-  echo "  Rapier is installed but not selected: set physics/3d/physics_engine=\"Rapier3D\", or rerun with --enable-rapier"
+  echo "  Rapier is installed but not selected: the project stays on Jolt until you rerun with --enable-rapier"
 fi
