@@ -44,38 +44,9 @@ Every `cracknet/*` project setting, read once into one mutable object. Upstream 
 
 | | Member | Summary |
 |---|---|---|
-| property | `AutoTileWindows` | Arrange the windows of the running instances side by side, so several peers are visible at once. |
-| property | `AutoconnectEnabled` | The first instance hosts and the rest join it on start, with no menu. |
-| property | `AutoconnectHost` | Address the joining instances connect to. |
-| property | `AutoconnectPort` | Port autoconnect hosts and joins on. |
-| property | `CrackNetExtrasLogLevel` | Lowest level the extras (window tiler, network simulator) print. |
-| property | `CrackNetLogLevel` | Lowest level the addon's own loggers print. |
-| property | `EventsEnabled` | Emit the `NetworkEvents` signals at all. |
 | property | `Instance` | The settings the autoloads use. Replace before they enter the tree; mutating it later only affects re-reads. |
-| property | `LogLevel` | Lowest level any logger prints. |
-| property | `MaxSyncPacketSize` | Bytes a state packet may reach before it is split. 1200 stays under the path MTU with room for IP, UDP and transport headers. |
-| property | `MaxTicksPerFrame` | Ticks a single frame may run before the clock gives up catching up. |
-| property | `MaxTimeStretch` | Fastest the clock may run while catching up, as a multiple of real time. |
-| property | `RecalibrateThreshold` | Seconds of clock error after which the local clock is snapped to the remote one instead of stretched towards it. |
-| property | `SimulatedBurstIntervalSeconds` | Seconds between simulated outages. Zero means none. |
-| property | `SimulatedBurstLossMs` | Length of a simulated outage, in milliseconds. |
-| property | `SimulatedJitterMs` | Random variation added to the simulated latency, in milliseconds. |
-| property | `SimulatedLatencyMs` | One-way delay the simulator adds, in milliseconds. |
-| property | `SimulatedPacketLossChance` | Share of packets the simulator drops, 0 to 1. |
 | property | `SimulatedProfile` | A named NetworkSimulator profile, or "Custom" for the latency, loss, jitter and burst settings. |
-| property | `StallThreshold` | Seconds a frame may take before it counts as a stall and its time is discarded rather than ticked through. |
-| property | `SuppressIdentityPeerDisconnectedWarning` | Drop the warning the identity server logs when a peer disconnects without an identity. |
-| property | `SuppressOfflinePeerWarning` | Drop the warning logged when the clock is asked about a peer that is no longer connected. |
-| property | `SyncAdjustSteps` | Ticks over which a measured offset is applied, so the clock eases rather than jumps. |
-| property | `SyncInterval` | Seconds between clock sync exchanges. |
-| property | `SyncSamples` | Round trips averaged into one clock offset estimate. |
-| property | `SyncToPhysics` | Drive ticks from `_PhysicsProcess` instead of `_Process`. |
-| property | `Tickrate` | Network ticks per second. Every peer must agree; see `TickrateMismatchAction`. |
-| property | `TickrateMismatchAction` | What a peer does when another peer reports a different tickrate. |
-| property | `TileBorderless` | Give the tiled windows no title bar, so more of each one is game. |
-| property | `TileScreen` | Index of the screen the tiler lays the windows out on. |
-| property | `UseCompression` | Compress the autoconnect peer's traffic. |
-| property | `UseRawCommands` | Send commands as raw packets instead of RPCs. Cheaper per command, but invisible to Godot's RPC tooling. |
+| property | `SyncPanicThreshold` | Same `cracknet/time/recalibrate_threshold` key as `RecalibrateThreshold`, but with the fallback upstream uses in the time synchronizer (`network-time-synchronizer.gd:105`). The two differ only when the setting is absent. |
 | method | `Load` | Reads every setting from `ProjectSettings`, falling back to the defaults the plugin registers. |
 
 ### IAttachmentChanged
@@ -208,6 +179,8 @@ One replicated object. While its root is this peer's multiplayer authority it se
 | field | `_anchorOffset` | How the item sits on the anchor: identity when hung here, whatever the authority sends otherwise. |
 | method | `Answered(System.Int32)` | The host answered `requestId`: events held for it go wherever authority now is. |
 | method | `AutoProperties(Godot.Node)` | What is sent for a root of this type before its `[Synced]` properties. |
+| method | `CrossFade(System.Double)` | Lets the object slide from where it was drawn to where the new authority's playback puts it, over `SmoothingTime`, instead of being put there in one frame. The step goes into an offset that fades by the same share every frame, so a second handover landing while the first is still fading adds to it rather than restarting it: at sixteen strikes 0.12 s apart a fade that restarted never converged and the body trailed for the whole exchange. Called after playback has placed the body. |
+| method | `CrossFadeFromHere` | Where this peer was drawing the object when the new authority's first sample turned out to be unusable as a continuation: the tick it carried over is later than that sample, or the two are too far apart. Playback then starts clean at that sample and the object slides there from here, instead of being put there. |
 | method | `Deliver(System.Int32,CrackNet.NetworkObject.EventKind,Godot.Variant,System.Int32)` | Raises an event here if this peer is the authority, and passes it on otherwise. While this peer's own request is unanswered its authority may be about to be taken back, so the event waits for the host's answer. |
 | method | `DescribeSynced` | The inspector's list. In the editor a script without `[Tool]` is a placeholder, so its `[Synced]` properties are read from the compiled type the script path points at. |
 | method | `Despawn` | Ends this authoritative object's timeline. It is hidden and stops processing here immediately; remote peers hide it when their playback reaches the flagged final sample, and the root is freed after the playback grace period so a `MultiplayerSpawner` cannot remove it from observers early. |
@@ -257,7 +230,6 @@ Sends the state of every `NetworkObject` this peer is authority for, once per ti
 | property | `StateIntervalTicks` | State goes out every this many ticks: 2 with the tick on the physics step (the default, 60 Hz), 1 on a 30 Hz tick of its own, 30 snapshots a second either way. |
 | field | `ReorderWaitIntervals` | How long a sample waits for the one before it at most, in state intervals: packets swap places by a few milliseconds. |
 | field | `SnapshotRate` | Snapshots a second, whatever the tickrate. |
-| field | `_commonTick` | The one time this screen shows every remote object at: the deepest of its live links' clocks, never running back. Each peer's clock still trails that peer's own link by its own depth, but shown each at its own depth a platform from the host and a player from a guest were places at two moments, and the player stepping onto it slid along it by the platform's speed times the difference (a metre on a link 120 ms deeper than the host's). A peer whose clock has stopped, its samples overdue by more than the lead, does not hold the others back. |
 | method | `ApartBy(CrackNet.NetworkObject,CrackNet.NetworkObject.Sample,Godot.Variant[],CrackNet.NetworkObject.Attachment)` | How far apart two samples put the body in this peer's world; null when an anchor is not here, or the root is not a physics body, and then the state is not carried: a body's motion is the line to draw, other state (a synced position of the game's own, say) is the new authority's to say from its first sample on. |
 | method | `ErasePeer(System.Int32)` | Forgets a peer's clock. On the host, also takes back every object the peer simulated or held and tells everyone: otherwise a crate carried out of the session stays with nobody for good. |
 | method | `GetDisplayTick(System.Int32)` | The display tick for objects of `peer`, or null before anything arrived from it. |
@@ -268,7 +240,7 @@ Sends the state of every `NetworkObject` this peer is authority for, once per ti
 | method | `ReleaseHeld(CrackNet.NetworkObject,CrackNet.Core.Time.PlaybackClock,System.Boolean)` | Plays the held samples whose predecessor has landed, in order; all of them when the wait is over. |
 | method | `ReplayEarlySamples(CrackNet.NetworkObject)` | `obj` just changed authority here: the new authority's samples that came first are played from the start of its flight; anyone else's are dropped, since the host did not give it to them. |
 | method | `SendAllAuthorityTo(System.Int32)` | On the host: tells a peer that just joined who has authority over and who holds every object. |
-| method | `ShownOf(CrackNet.Core.Time.PlaybackClock)` | Where this peer's objects are shown: the common time, but never past what the peer has sent. |
+| method | `ShownOf(CrackNet.Core.Time.PlaybackClock)` | Where this peer's objects are shown: its own clock, at its own link's depth. A screen therefore holds as many moments as it has peers, and two objects from different peers that touch - a player and the platform under it - are places at two moments, which is the limitation written up in #74 and on the parked/common-display-time branch. The one time per screen that removed it charged every player on the screen the depth of the worst live link: 117 ms became 695 ms with one 300 ms guest present, and the screen held still 415 ms as it joined. |
 | method | `SubmitAuthority(CrackNet.NetworkObject)` | Sends an authority change this peer just applied: a guest asks the host, the host tells everyone. |
 
 ### NetworkTickrateHandshake
@@ -472,7 +444,6 @@ The display tick for everything one remote peer sends. One clock per peer, not p
 |---|---|---|
 | property | `Depth` | How far behind the newest tick the clock aims to run now: the minimum plus this link's recent jitter. |
 | property | `Holds` | Advances where the clock started holding at the newest tick; a measure of underruns. |
-| property | `IsLive` | Whether the peer has been heard from within the lead the clock's time may run past its newest tick: past that the time stands still, and a clock standing still must not hold back the screen's common display time. |
 | property | `Newest` | The newest tick heard from the peer. |
 | property | `Tick` | The tick to display, or null until the peer has sent anything. |
 | property | `Time` | The clock's own time, which keeps running while nothing arrives. How far this is behind the local tick is the peer's playback age; `Tick` can sit still at the newest sample while a peer rests. |
