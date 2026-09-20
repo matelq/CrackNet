@@ -152,10 +152,26 @@ public float WalkBlend
   Its authority picks the point from the players as it draws them, and the *point* is what travels: every peer turns
   that knight's spine to the same place and the shot leaves along it, where each peer aiming at its own copy of the
   target would pose the knight a playback delay away from the shot that arrives.
-- **Not covered here yet**, because nothing in the repo exercises them and this guide does not teach what has not
-  been run: root motion (#75) and `AnimationNodeStateMachine`, whose state is an object rather than a parameter and
-  so needs a pattern of its own (#77).
-- **Not in: animation phase on late join.** A peer joining mid-loop starts it from phase zero.
+- **A state machine** is the one case that is not a parameter. `parameters/<name>/playback` is an
+  `AnimationNodeStateMachinePlayback` *object* driven by `Travel("state")`, and `[Synced]` moves Variant values, so
+  it cannot carry it. Send the state instead and travel to it in the setter, the same shape the one-shot uses:
+
+  ```csharp
+  [Synced]
+  public int AnimationState
+  {
+      get;
+      set { field = value; _playback?.Travel(States[value]); }
+  }
+  ```
+
+  Every peer then enters the state at the display tick of the sample that carried it, like any other state. Send an
+  index, or another fixed-size value, rather than the state's name: a string is sent whole in every sample.
+- **Not covered here yet**, because nothing in the repo exercises it and this guide does not teach what has not been
+  run: root motion (#75).
+- **Not in: animation phase on late join.** A peer joining mid-loop starts it from phase zero. A state has a phase
+  of its own and gets the same answer: a peer that joins mid-state, or misses the sample that carried the
+  transition, travels there and starts the state's clip from zero.
 
 The playground's player is the worked example: `WalkBlend`, `Gesture` and `AimAt` in `PlaygroundPlayer.cs`, the tree
 and the `LookAtModifier3D` on the spine in `PlaygroundPlayer.tscn`. Its flinch shows where a one-shot comes from when the action happened elsewhere: the shove

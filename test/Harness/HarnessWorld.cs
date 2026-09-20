@@ -113,6 +113,57 @@ internal static class HarnessWorld
     }
 
     /// <summary>
+    /// A walker whose AnimationTree is an AnimationNodeStateMachine with an idle, a run and a jump state, each one
+    /// clip. Its state is not a parameter but a playback object, so what the walker syncs is the state's index and
+    /// the setter travels to it; see <see cref="Walker.AnimationState"/>.
+    /// </summary>
+    public static Walker StateMachineWalker(CrackNetStack stack, int peer, string name, Vector3 position)
+    {
+        var states = CrackNet.Tests.Walker.AnimationStates;   // the type, not the builder above
+        var walker = Walker(stack, peer, position, Vector3.Zero, name: name);
+        var flag = new Marker3D { Name = "Flag" };
+        walker.AddChild(flag);
+
+        var library = new AnimationLibrary();
+        var machine = new AnimationNodeStateMachine();
+        for (var i = 0; i < states.Length; i++)
+        {
+            // One clip per state, each holding the flag at its own height: a peer's state is visible in the pose
+            var animation = new Animation { Length = 1, LoopMode = Animation.LoopModeEnum.Linear };
+            var track = animation.AddTrack(Animation.TrackType.Position3D);
+            animation.TrackSetPath(track, new NodePath("Flag"));
+            animation.PositionTrackInsertKey(track, 0, new Vector3(0, i, 0));
+            animation.PositionTrackInsertKey(track, 1, new Vector3(0, i, 0));
+            library.AddAnimation(states[i], animation);
+            machine.AddNode(states[i], new AnimationNodeAnimation { Animation = states[i] });
+        }
+        // Travel pathfinds over transitions, and an instant one keeps the check on the state rather than on a fade
+        foreach (var from in states)
+            foreach (var to in states)
+                if (from != to)
+                    machine.AddTransition(from, to, new AnimationNodeStateMachineTransition
+                    {
+                        XfadeTime = 0,
+                        SwitchMode = AnimationNodeStateMachineTransition.SwitchModeEnum.Immediate,
+                    });
+
+        var player = new AnimationPlayer { Name = "Animation" };
+        player.AddAnimationLibrary("", library);
+        walker.AddChild(player);
+        var tree = new AnimationTree
+        {
+            Name = "AnimationTree",
+            TreeRoot = machine,
+            AnimPlayer = player.GetPath(),
+            Active = true,
+            CallbackModeProcess = AnimationMixer.AnimationCallbackModeProcess.Physics,
+        };
+        walker.AddChild(tree);
+        walker.Playback = tree.Get("parameters/playback").As<AnimationNodeStateMachinePlayback>();
+        return walker;
+    }
+
+    /// <summary>
     /// A hand at the end of a bone that a LookAtModifier3D aims at a target circling the carrier: IK moves the hand
     /// in the skeleton's own pass, after the animation.
     /// </summary>
