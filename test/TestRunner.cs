@@ -153,6 +153,9 @@ public partial class TestRunner : Node
                 AddChild(suite);
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
 
+                // The suite is wall-clock bound: its cases wait out real latency, so the only way to run fewer
+                // seconds is to run fewer cases. The time says which ones --test= is worth aiming at
+                var startedAt = Time.GetTicksMsec();
                 try
                 {
                     // Cases share the autoload servers, so a case that ran ticks would leave the history buffers
@@ -161,14 +164,14 @@ public partial class TestRunner : Node
                     await suite.BeforeCase();
                     var result = test.Invoke(suite, null);
                     if (result is Task task) await task;
-                    GD.Print($"   ok   {test.Name}");
+                    GD.Print($"   ok   {test.Name} ({Time.GetTicksMsec() - startedAt} ms)");
                     passed++;
                 }
                 catch (Exception e)
                 {
                     var inner = e is TargetInvocationException { InnerException: { } i } ? i : e;
                     var reason = inner is TestFailedException ? inner.Message : inner.ToString();
-                    GD.Print($"   FAIL {test.Name}: {reason}");
+                    GD.Print($"   FAIL {test.Name} ({Time.GetTicksMsec() - startedAt} ms): {reason}");
                     failures.Add($"{suiteType.Name}.{test.Name}: {reason}");
                     failed++;
                 }
