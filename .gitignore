@@ -35,10 +35,6 @@ Thumbs.db
 /netfox/
 /.parity/
 
-# Physics GDExtensions, installed by hand for examples/physics/RapierCheck.tscn
-/addons/godot-rapier2d/
-/addons/godot-rapier3d/
-
 # GodotSteam GDExtension and its app id, installed by hand for the playground Steam tier
 /addons/godotsteam/
 steam_appid.txt

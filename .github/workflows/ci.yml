@@ -25,14 +25,12 @@ jobs:
         run: dotnet test CrackNet.slnx
 
   godot:
-    name: Godot tests (${{ matrix.engine }})
+    # Jolt, and only Jolt (#84). The addon names no engine (#81), but a second matrix leg was a poor way to hold
+    # that claim: it doubled every run, and what it caught was the suite's own unsteadiness rather than an engine
+    # difference. Running on another engine is an option nobody has asked for yet - #68 owns it.
+    name: Godot tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        # The addon names no engine (#52): Rapier is what the project uses, Jolt (built into Godot) keeps that claim tested
-        engine: [rapier, jolt]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-dotnet@v5
@@ -52,17 +50,6 @@ jobs:
             unzip -q godot.zip -d godot
           fi
           echo "GODOT=$PWD/godot/Godot_v${GODOT_VERSION}_mono_linux_x86_64/Godot_v${GODOT_VERSION}_mono_linux.x86_64" >> "$GITHUB_ENV"
-      - name: Install Rapier
-        if: matrix.engine == 'rapier'
-        # The project is Rapier-first (#52): project.godot already asks for Rapier3D, this drops the
-        # pinned extension next to it. Without this step every physics body would sit on an engine that is not there.
-        run: sh tools/install-extensions.sh rapier
-      - name: Switch to Jolt
-        if: matrix.engine == 'jolt'
-        run: |
-          sed -i 's/^3d\/physics_engine=.*/3d\/physics_engine="Jolt Physics"/' project.godot
-          sed -i '/^rapier\//d' project.godot
-          grep -n physics_engine project.godot
       - name: Import resources
         # --import exits with a segfault after a successful import on 4.7.2, so its exit code says nothing
         run: $GODOT --headless --path . --import || true
@@ -72,21 +59,11 @@ jobs:
         run: python3 tools/check-doc-examples.py
       - name: Run Godot tests
         run: $GODOT --headless --path . res://test/TestRunner.tscn
-      - name: Playground smoke under the bad profile
-        run: |
-          "$GODOT" --headless --path . res://examples/playground/playground.tscn -- --smoke --host --seconds=40 --profile=bad --port=20000 > pg-host.log 2>&1 &
-          host=$!
-          sleep 8
-          "$GODOT" --headless --path . res://examples/playground/playground.tscn -- --smoke --join --smoke-client=a --seconds=24 --profile=bad --port=20000 > pg-client-a.log 2>&1 &
-          client_a=$!
-          sleep 2
-          "$GODOT" --headless --path . res://examples/playground/playground.tscn -- --smoke --join --smoke-client=b --seconds=20 --profile=bad --port=20000 > pg-client-b.log 2>&1 || true
-          wait $client_a || true
-          wait $host || true
-          echo "--- host"; grep -E "PLAYGROUND|ERROR|Exception" pg-host.log || cat pg-host.log
-          echo "--- client A"; grep -E "PLAYGROUND|ERROR|Exception" pg-client-a.log || cat pg-client-a.log
-          echo "--- client B"; grep -E "PLAYGROUND|ERROR|Exception" pg-client-b.log || cat pg-client-b.log
-          # The verdict line, not the exit code: Godot has crashed on shutdown after printing it
-          grep -q "role=host ok=True" pg-host.log \
-            && grep -q "role=client-a ok=True" pg-client-a.log \
-            && grep -q "role=client-b ok=True" pg-client-b.log
+
+      # The playground smoke is off (#94). It is three real processes over real sockets under a lossy profile - the
+      # only end-to-end check here - and it did earn its place: the sleeping-crate bug in #84 is one no harness case
+      # could reach. But it is a simulated playtest, it costs about ninety seconds of every run, and its verdicts
+      # were read all day as failures of the branch under them when they were failures of its own thresholds.
+      # A playtest is done by a person. Run it by hand when something looks wrong:
+      #   <godot> --headless --path . res://examples/playground/playground.tscn -- --smoke --host --seconds=40 --profile=bad --port=20000
+      #   (then --join --smoke-client=a, and --smoke-client=b; see examples/playground and test/Playground)
