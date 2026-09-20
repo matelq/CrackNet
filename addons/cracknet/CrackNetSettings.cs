@@ -47,8 +47,11 @@ public sealed class CrackNetSettings
     /// <summary>The first instance hosts and the rest join it on start, with no menu.</summary>
     public bool AutoconnectEnabled { get; set; }
 
-    /// <summary>A named NetworkSimulator profile, or "Custom" for <see cref="SimulatedLatencyMs"/> and the rest.</summary>
-    public string SimulatedProfile { get; set; } = "Clear";
+    /// <summary>
+    /// A named NetworkSimulator profile, or "Custom" for <see cref="SimulatedLatencyMs"/> and the rest. "Realistic" is
+    /// the floor to playtest above: a playtest on a clear link is a playtest of code nobody will run.
+    /// </summary>
+    public string SimulatedProfile { get; set; } = "Realistic";
 
     // Tuning, code only
 

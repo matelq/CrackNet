@@ -12,9 +12,9 @@ transport resends reliable ones. Latency is each way.
 
 | Profile | Latency | Jitter | Loss | Bursts | Use |
 |---|---|---|---|---|---|
-| `clear` | 0 | 0 | 0 | none | Default. Checks that the code runs at all. |
+| `clear` | 0 | 0 | 0 | none | Checks that the code runs at all. |
 | `casual` | 25 ms | 20 ms | 1% | 50 ms every 10 s | A good home connection. |
-| `realistic` | 60 ms | 50 ms | 3% | 100 ms every 10 s | The floor to playtest above. |
+| `realistic` | 60 ms | 50 ms | 3% | 100 ms every 10 s | Default. The floor to playtest above. |
 | `bad` | 150 ms | 100 ms | 5% | 200 ms every 5 s | A friend across the continent on Wi-Fi. |
 | `hostile` | 250 ms | 150 ms | 15% | 300 ms every 3 s | For checks: fails when the code is wrong. |
 

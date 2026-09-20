@@ -33,7 +33,7 @@ public partial class CrackNetPlugin : EditorPlugin
 
         // Extras: autoconnect / network simulator
         new("cracknet/autoconnect/enabled", false, Variant.Type.Bool),
-        new("cracknet/autoconnect/simulated_profile", "Clear", Variant.Type.String, PropertyHint.Enum, "Clear,Casual,Realistic,Bad,Hostile"),
+        new("cracknet/autoconnect/simulated_profile", "Realistic", Variant.Type.String, PropertyHint.Enum, "Clear,Casual,Realistic,Bad,Hostile"),
     ];
 
     // Order matters: dependencies come first

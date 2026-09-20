@@ -44,7 +44,7 @@ CrackNet's configuration, read once into one mutable object. Eight of these are 
 
 | | Member | Summary |
 |---|---|---|
-| property | `AutoTileWindows` | Arrange the windows of the running instances side by side, so several peers are visible at once. |
+| property | `AutoTileWindows` | Arrange the windows of the running instances side by side, so several peers are visible at once. Off unless a playtest turns it on: a library that moves a game's window unasked is not one. |
 | property | `AutoconnectEnabled` | The first instance hosts and the rest join it on start, with no menu. |
 | property | `AutoconnectHost` | Address the autoconnecting instances connect to. |
 | property | `AutoconnectPort` | Port autoconnect hosts and joins on. |
