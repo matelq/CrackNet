@@ -47,17 +47,36 @@ public partial class AnimationTests : HarnessSuite
 
         // The walker slides some 0.13 m after landing and the observer plays that back late too, so the walk is
         // found from the blend: the body has to stand still in the frames before it and move from that frame on
-        var blended = frames.FindIndex(frame => frame.Blend > 0.001f);
-        Expect.True(blended > 6, $"the walk blend never arrived, or too soon to judge: frame {blended} of {frames.Count}");
-        var plateau = frames[blended - 1].X;
-        var stillBefore = frames.Skip(blended - 6).Take(5).All(frame => Mathf.Abs(frame.X - plateau) < 0.0001f);   // a held sample repeats exactly
-        // Both come from the same sample pair: in the frame the blend first reads 0.06, the body has moved 0.06 of a step
-        var moved = frames.FindIndex(blended - 6, frame => Mathf.Abs(frame.X - plateau) > 0.0001f);
-        var report = $"the walk blend from frame {blended}, the body from frame {moved}, still before it: {stillBefore}; around them: "
-                     + string.Join(" ", frames.Skip(blended - 3).Take(6).Select(frame => $"({frame.X:F3}, {frame.Blend:F2})"));
+        var arrived = frames.FindIndex(frame => frame.Blend > 0.001f);
+        Expect.True(arrived > 6 && arrived + 2 < frames.Count, $"the walk blend never arrived, or too soon to judge: frame {arrived} of {frames.Count}");
+        var plateau = frames[arrived - 1].X;
+        var stillBefore = frames.Skip(arrived - 6).Take(5).All(frame => Mathf.Abs(frame.X - plateau) < 0.0001f);   // a held sample repeats exactly
+
+        // Two questions, because neither answers it alone.
+        //
+        // First, when each leaves rest. The thresholds cannot be the same number: over one sample pair the blend
+        // covers its whole range from 0 to 1 while the body covers the few millimetres it managed in that tick,
+        // accelerating from rest, so an epsilon on each trips at a different fraction of the same pair. On CI the
+        // blend passed 0.001 a frame before the body passed 0.0001 m, which is that race and not a gap. A frame of
+        // slack covers it and still fails on a real one: a display tick is two frames wide at 60 Hz against 30.
+        var startedBlend = frames.FindIndex(frame => frame.Blend > 0.001f);
+        var startedBody = frames.FindIndex(arrived - 6, frame => Mathf.Abs(frame.X - plateau) > 0.0001f);
+
+        // Second, whether they then climb together, which the slack above would let through. Each is asked when it
+        // is halfway through what it covers by two frames in - the same question of both, on their own scales.
+        var blendHalf = frames[arrived + 2].Blend / 2;
+        var moveHalf = Mathf.Abs(frames[arrived + 2].X - plateau) / 2;
+        var blended = frames.FindIndex(frame => frame.Blend > blendHalf);
+        var moved = frames.FindIndex(arrived - 6, frame => Mathf.Abs(frame.X - plateau) > moveHalf);
+
+        var report = $"the walk blend leaves rest at frame {startedBlend} and is halfway at {blended}, the body at "
+                     + $"{startedBody} and {moved}, still before it: {stillBefore}; "
+                     + $"halves: blend {blendHalf:F3}, motion {moveHalf:F4} m; around them: "
+                     + string.Join(" ", frames.Skip(arrived - 3).Take(6).Select(frame => $"({frame.X:F4}, {frame.Blend:F3})"));
         GD.Print("LOOP PARAMETER " + report);
         Expect.True(stillBefore, "the body was already moving before the blend arrived: " + report);
-        Expect.Equal(blended, moved, "the animation and the motion start in different frames: " + report);
+        Expect.True(Math.Abs(startedBlend - startedBody) <= 1, "the animation and the motion leave rest more than a frame apart: " + report);
+        Expect.Equal(blended, moved, "the animation and the motion do not advance in the same frame: " + report);
     }
 
     /// <summary>
