@@ -130,6 +130,12 @@ internal abstract class PhysicsHandling
         public override void AuthorityChanged()
         {
             UpdateGhosts();
+            // Whatever sleeps on this body has to notice that it is about to stop being simulated here. Jolt does not
+            // wake a sleeping body when the one under it is frozen or teleported away by playback, so the crate on top
+            // of a stack a guest pulled apart hung in the air on the host, and stayed hanging on every screen
+            // (Rapier woke it: stackHangingFrames 0 against 175 in the playground smoke under the bad profile)
+            foreach (var other in Touching())
+                if (other.Root is RigidBody3D resting && !resting.Freeze) resting.Sleeping = false;
             SetFrozen(_body, !Object.Authority.IsLocal || Object.ClaimedBy != 0);
             // Whoever takes a body takes what rests on and against it: a frozen body reports no resting contacts, and
             // left alone a stack would hang in the air here until the host's word that it fell
@@ -193,6 +199,11 @@ internal abstract class PhysicsHandling
                 {
                     Object.Base = null;
                     TrackBase(null);
+                    // And wake it, or it hangs where its support used to be. AuthorityChanged wakes what touches a
+                    // body when it changes hands, but that is too early: the copy is frozen in place there and only
+                    // moves away later, as playback carries it off, and Jolt does not wake a sleeping body for that.
+                    // The query above has just established that the support is gone, so this costs nothing extra.
+                    _body.Sleeping = false;
                 }
                 return;
             }
