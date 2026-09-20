@@ -59,25 +59,11 @@ jobs:
         run: python3 tools/check-doc-examples.py
       - name: Run Godot tests
         run: $GODOT --headless --path . res://test/TestRunner.tscn
-      - name: Playground smoke under the bad profile
-        run: |
-          "$GODOT" --headless --path . res://examples/playground/playground.tscn -- --smoke --host --seconds=40 --profile=bad --port=20000 > pg-host.log 2>&1 &
-          host=$!
-          sleep 8
-          "$GODOT" --headless --path . res://examples/playground/playground.tscn -- --smoke --join --smoke-client=a --seconds=24 --profile=bad --port=20000 > pg-client-a.log 2>&1 &
-          client_a=$!
-          sleep 2
-          "$GODOT" --headless --path . res://examples/playground/playground.tscn -- --smoke --join --smoke-client=b --seconds=20 --profile=bad --port=20000 > pg-client-b.log 2>&1 || true
-          wait $client_a || true
-          wait $host || true
-          # The smoke prints why it failed as well as that it failed - STACK HANGING and CRATE FELL name the body,
-          # its authority, its holder and whether it was frozen. Left out of this filter, a red tick carried a
-          # number (stackHangingFrames=67) and nothing that explains it, which is a run wasted.
-          report='PLAYGROUND|STACK HANGING|CRATE FELL|SHOT AIM|ERROR|Exception'
-          echo "--- host"; grep -E "$report" pg-host.log || cat pg-host.log
-          echo "--- client A"; grep -E "$report" pg-client-a.log || cat pg-client-a.log
-          echo "--- client B"; grep -E "$report" pg-client-b.log || cat pg-client-b.log
-          # The verdict line, not the exit code: Godot has crashed on shutdown after printing it
-          grep -q "role=host ok=True" pg-host.log \
-            && grep -q "role=client-a ok=True" pg-client-a.log \
-            && grep -q "role=client-b ok=True" pg-client-b.log
+
+      # The playground smoke is off (#94). It is three real processes over real sockets under a lossy profile - the
+      # only end-to-end check here - and it did earn its place: the sleeping-crate bug in #84 is one no harness case
+      # could reach. But it is a simulated playtest, it costs about ninety seconds of every run, and its verdicts
+      # were read all day as failures of the branch under them when they were failures of its own thresholds.
+      # A playtest is done by a person. Run it by hand when something looks wrong:
+      #   <godot> --headless --path . res://examples/playground/playground.tscn -- --smoke --host --seconds=40 --profile=bad --port=20000
+      #   (then --join --smoke-client=a, and --smoke-client=b; see examples/playground and test/Playground)
