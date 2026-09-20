@@ -5,7 +5,15 @@ namespace CrackNet.Tests;
 
 /// <summary>Marks a test method on a TestSuite. Methods may return void or Task.</summary>
 [AttributeUsage(AttributeTargets.Method)]
-public sealed class TestAttribute : Attribute { }
+public sealed class TestAttribute : Attribute
+{
+    /// <summary>
+    /// Why this case does not run, and where it is owned - an issue number. A skipped case is still compiled and
+    /// still runs when it is named (<c>--test=Suite.Case</c>), which is how the series that lifts the skip is run.
+    /// It is left out of a plain run so that a red tick means the branch, not a case that fails on its own.
+    /// </summary>
+    public string? Skip { get; init; }
+}
 
 public sealed class TestFailedException(string message) : Exception(message);
 
@@ -127,6 +135,7 @@ public partial class TestRunner : Node
 
         var passed = 0;
         var failed = 0;
+        var skipped = 0;
         var failures = new List<string>();
 
         // -- --test=Suite or --test=Suite.Case (repeatable): run only those, for a quick check or a mutant
@@ -148,11 +157,22 @@ public partial class TestRunner : Node
             GD.Print($"== {suiteType.Name}");
             foreach (var test in tests)
             {
+                // Named explicitly, a skipped case runs: that is how it is worked on
+                if (test.GetCustomAttribute<TestAttribute>()!.Skip is { } why
+                    && !filters.Contains($"{suiteType.Name}.{test.Name}"))
+                {
+                    GD.Print($"   skip {test.Name} ({why})");
+                    skipped++;
+                    continue;
+                }
                 var suite = (TestSuite)Activator.CreateInstance(suiteType)!;
                 suite.Name = suiteType.Name;
                 AddChild(suite);
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
 
+                // The suite is wall-clock bound: its cases wait out real latency, so the only way to run fewer
+                // seconds is to run fewer cases. The time says which ones --test= is worth aiming at
+                var startedAt = Time.GetTicksMsec();
                 try
                 {
                     // Cases share the autoload servers, so a case that ran ticks would leave the history buffers
@@ -161,14 +181,14 @@ public partial class TestRunner : Node
                     await suite.BeforeCase();
                     var result = test.Invoke(suite, null);
                     if (result is Task task) await task;
-                    GD.Print($"   ok   {test.Name}");
+                    GD.Print($"   ok   {test.Name} ({Time.GetTicksMsec() - startedAt} ms)");
                     passed++;
                 }
                 catch (Exception e)
                 {
                     var inner = e is TargetInvocationException { InnerException: { } i } ? i : e;
                     var reason = inner is TestFailedException ? inner.Message : inner.ToString();
-                    GD.Print($"   FAIL {test.Name}: {reason}");
+                    GD.Print($"   FAIL {test.Name} ({Time.GetTicksMsec() - startedAt} ms): {reason}");
                     failures.Add($"{suiteType.Name}.{test.Name}: {reason}");
                     failed++;
                 }

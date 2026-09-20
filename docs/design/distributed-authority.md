@@ -17,7 +17,7 @@ and its owners. No host migration.
 
 | Model | Why not here |
 |---|---|
-| Lockstep | Needs bit-exact determinism (Rapier and floats do not give it) and adds input delay. |
+| Lockstep | Needs bit-exact determinism (neither the engine nor floats give it) and adds input delay. |
 | Rollback (netfox) | Needs determinism or state correction, resimulates the physics space N ticks per frame (netfox-net#62), and still has to guess remote players. Contact between players never agreed (#44, #50, #51, #64). |
 | Snapshot interpolation + prediction (Source, Overwatch) | Two timelines: my predicted player against everyone else in the past. Pushing each other and sharing objects is exactly where it is weakest. Server authority buys cheat safety we do not need. |
 | Tribes / partial state | Built for bandwidth-starved huge worlds; objects can reach states the sender never had. |
@@ -158,7 +158,7 @@ Goal: a crate needs no code and a player needs only its own movement. Paid for i
   - `Auto` resolves `CharacterBody3D` and plain `Node3D` to `Personal`; `RigidBody3D` and `VehicleBody3D`
     to `Shared`; `AnimatableBody`, `StaticBody`, `Area` and non-spatial `Node`/`Control` to `World`. A grenade (a
     rigid body that stays its thrower's) is the common case that picks `Personal` by hand.
-- **Built-in behaviour for physics roots:** freeze where not authoritative (with the Rapier re-set), contact
+- **Built-in behaviour for physics roots:** freeze where not authoritative (with the transform re-set and the Jolt wake), contact
   monitoring and `Spread` on contact for rigid bodies, `Spread` on slide collisions for character bodies, return to the
   host at rest.
 - **`Knock(Vector3)`** built in: an impulse on a rigid body's authority, a `Knocked` event on a character's. The
@@ -404,7 +404,11 @@ Two decisions here are made but not built, and both matter enough to keep in sig
   moving platform was taken off the platform on the change and stood still in the world until the host's first
   sample was reached, 0.29 m off on a third peer and 0.90 m on the guest that had it, whose display of the host
   runs a playback delay behind its own present; 0.01 and 0.04-0.06 with it
-  (`ACrateChangingHandsOnAMovingPlatformStaysOnItForAThirdPeer`). Also seen: the shared display clock of a peer
+  (`ACrateChangingHandsOnAMovingPlatformStaysOnItForAThirdPeer`). The third peer still reads 0.038-0.104 over a
+  series. **The guest no longer reads 0.04-0.06**: it reads 0.19-0.47, as a spike in the first quarter of the
+  window and exactly 0.000 for every frame after, so the splice is not what decays - the crate rides its
+  attachment and agrees perfectly once the step is past. That step is #80, and the guest's figure is reported by
+  the check rather than asserted by it (#84). Also seen: the shared display clock of a peer
   that sends only heartbeats leaps by 3-20 ticks in a frame when its samples resume; harmless for what rests,
   worth a look if an idle peer's first motion ever looks skipped.
 - **Authority change smoothing (done).** A playtest showed the strikers' jump that the freshest-state takeover moved to
@@ -418,7 +422,8 @@ Two decisions here are made but not built, and both matter enough to keep in sig
   Known limits, deferred: ragdoll bones under Visual would be moved by hand; IK aimed at the world stretches a limb
   for the smoothing time.
 - Already in: a character does not take what it stands on; a group touched by any character does not go back to the
-  host; Rapier's `normalized_max_corrective_velocity` is 2 in the playground project.
+  host. (`normalized_max_corrective_velocity` was set to 2 in the playground project for Rapier; with Rapier gone
+  (#84) the setting does nothing and is #82's to remove.)
 - **Copies are frozen static, not kinematic.** Rapier gives a kinematic body the velocity of its last move; a copy
   that snapped by 0.3 m launched a character standing on it 13 m up, and in a playtest 140 m. Riding a moving copy
   therefore no longer carries a player along until the base-relative position above is in.
@@ -555,11 +560,15 @@ Two decisions here are made but not built, and both matter enough to keep in sig
   until another floor is touched: 0.275 m off against the lift on a peer 30 ms from the host and 150 ms from the
   player, 0.000 with it (`AJumpOnARisingLiftIsDrawnOnItOnAPeerWithUnevenLinks`). What remains is the step at a
   landing on another floor, the platform's speed times the depth difference, and the same step when a walker
-  steps onto a moving platform from the ground. Seen right after: a player standing on the ground beside a
-  platform rode along with it on other screens. Standing still the engine reports no floor collision, so the
-  ground was never seen as another floor, and a platform brushing past touches the capsule at an edge with a
-  normal that passes for a floor; the base is now what a ray under the feet finds, whatever the contacts said
-  (`APlayerWhoSteppedOffAMovingPlatformOntoTheGroundStandsStillOnOtherScreens` covers the standing case).
+  steps onto a moving platform from the ground. Seen right after and **not settled**: a player standing on the
+  ground beside a platform rode along with it on other screens. Standing still the engine reports no floor
+  collision, so the ground was never seen as another floor, and a platform brushing past touches the capsule at
+  an edge with a normal that passes for a floor. A ray under the feet fixed the standing case and lost the one
+  at a platform's edge, which is why the base is asked with the character's own shape instead (`874c196`,
+  `AStillRiderOnAPlatformsEdgeKeepsItOnAnotherPeer`) - and a shape reaches far enough to take the standing case
+  back. Getting off a platform is part of #74, where the same conserved
+  quantity is recorded; its check is out of the suite until then, since a red tick for unbuilt behaviour says
+  nothing about the branch under it.
 - **A common display time, and the slide that is left (third playtest).** Built: a screen shows every remote
   object at one time, the deepest of its live links' clocks (a clock whose samples are overdue by more than its
   lead does not count), never running back; a shallower peer's objects wait for it rather than rewind when a

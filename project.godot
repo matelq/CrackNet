@@ -53,5 +53,4 @@ playtest_log=false
 
 [physics]
 
-3d/physics_engine="Rapier3D"
-rapier/solver/normalized_max_corrective_velocity=2.0
+3d/physics_engine="Jolt Physics"
