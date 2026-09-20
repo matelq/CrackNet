@@ -199,6 +199,11 @@ internal abstract class PhysicsHandling
                 {
                     Object.Base = null;
                     TrackBase(null);
+                    // And wake it, or it hangs where its support used to be. AuthorityChanged wakes what touches a
+                    // body when it changes hands, but that is too early: the copy is frozen in place there and only
+                    // moves away later, as playback carries it off, and Jolt does not wake a sleeping body for that.
+                    // The query above has just established that the support is gone, so this costs nothing extra.
+                    _body.Sleeping = false;
                 }
                 return;
             }

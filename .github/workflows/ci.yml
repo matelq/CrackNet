@@ -70,9 +70,13 @@ jobs:
           "$GODOT" --headless --path . res://examples/playground/playground.tscn -- --smoke --join --smoke-client=b --seconds=20 --profile=bad --port=20000 > pg-client-b.log 2>&1 || true
           wait $client_a || true
           wait $host || true
-          echo "--- host"; grep -E "PLAYGROUND|ERROR|Exception" pg-host.log || cat pg-host.log
-          echo "--- client A"; grep -E "PLAYGROUND|ERROR|Exception" pg-client-a.log || cat pg-client-a.log
-          echo "--- client B"; grep -E "PLAYGROUND|ERROR|Exception" pg-client-b.log || cat pg-client-b.log
+          # The smoke prints why it failed as well as that it failed - STACK HANGING and CRATE FELL name the body,
+          # its authority, its holder and whether it was frozen. Left out of this filter, a red tick carried a
+          # number (stackHangingFrames=67) and nothing that explains it, which is a run wasted.
+          report='PLAYGROUND|STACK HANGING|CRATE FELL|SHOT AIM|ERROR|Exception'
+          echo "--- host"; grep -E "$report" pg-host.log || cat pg-host.log
+          echo "--- client A"; grep -E "$report" pg-client-a.log || cat pg-client-a.log
+          echo "--- client B"; grep -E "$report" pg-client-b.log || cat pg-client-b.log
           # The verdict line, not the exit code: Godot has crashed on shutdown after printing it
           grep -q "role=host ok=True" pg-host.log \
             && grep -q "role=client-a ok=True" pg-client-a.log \

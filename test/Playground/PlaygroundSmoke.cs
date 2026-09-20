@@ -56,6 +56,7 @@ public partial class PlaygroundSmoke : Node
     private PlaygroundCrate _onTop = null!;
     private bool _watchingShot;
     private int _stackHangingFrames;
+    private int _stackAloftFrames;
     private const int MaxStackHangingFrames = 6;
     private bool _shotTookCrate;
     private bool _returnedWhileGuestConnected;
@@ -266,6 +267,23 @@ public partial class PlaygroundSmoke : Node
             if (_stackHangingFrames++ % 60 == 0)
                 GD.Print($"STACK HANGING frame {_stackHangingFrames}: Crate4 at {_onTop.GlobalPosition} authority {_onTop.Authority.Peer} " +
                          $"holder {_onTop.ClaimedBy} frozen {_onTop.Freeze}; Crate0 at {_crate.GlobalPosition} authority {_crate.Authority.Peer} holder {_crate.ClaimedBy}");
+        }
+
+        // The same moment from the side that has to act on it. A crate hanging on an observer is a crate its own
+        // authority did not drop, and what a client's STACK HANGING line cannot say is why: asleep with no base to
+        // lose, awake and held up by something, or not this peer's to simulate at all
+        // The same moment from every side, including the one that has to act on it. A crate up there with nothing
+        // under it is either one its authority has not dropped or one a peer is drawing back where it used to be,
+        // and only the authority's own view tells them apart - which is why the count above was read for a year as
+        // "it did not fall" when what happens is that it falls and a handover puts it back up (#93).
+        // Quiet on a healthy run: the crate is only above 1.2 m for the few frames of the fall itself.
+        if (underneathGone && _onTop.GlobalPosition.Y > 1.2f)
+        {
+            if (_stackAloftFrames++ % 30 == 0)
+                GD.Print($"STACK ALOFT frame {_stackAloftFrames}: Crate4 y {_onTop.GlobalPosition.Y:F3} authority {_onTop.Authority.Peer} " +
+                         $"local {_onTop.Authority.IsLocal} frozen {_onTop.Freeze} sleeping {_onTop.Sleeping} " +
+                         $"standingOn {_onTop.Net().Diagnostics.StandingOn?.Name.ToString() ?? "<null>"} v {_onTop.LinearVelocity.Length():F2} " +
+                         $"holder {_onTop.ClaimedBy}; Crate0 at {_crate.GlobalPosition} authority {_crate.Authority.Peer}");
         }
 
         if (_isHost && !_crate.Authority.IsLocal)
