@@ -143,8 +143,15 @@ public float WalkBlend
 - **An item on a bone** goes on a `Marker3D` under a `BoneAttachment3D` and is placed after that peer's animation
   and the skeleton's own deferred pass, so it does not lag the hand by a frame. This is what the playground's crate
   rides, and what the smoke measures as the distance from the hand it should be in.
+- **A hand moved by a `SkeletonModifier3D`** - `LookAtModifier3D`, two-bone IK - needs nothing extra: the modifier
+  changes the pose in the skeleton's own modification pass, and the placement is queued behind that pass too. The
+  harness carries a crate in a hand a `LookAtModifier3D` sweeps 2.8 m and finds it 0.000 m from the hand on both
+  peers, where a placement that is not deferred leaves it 0.028 m behind. The playground's knight aims with one.
 - **Aim at synced state**, a `[Synced] Vector3` or the anchor of a carried item, rather than at where this peer
-  happens to draw another player: the two are a playback delay apart.
+  happens to draw another player: the two are a playback delay apart. The playground's `AimAt` is the worked example.
+  Its authority picks the point from the players as it draws them, and the *point* is what travels: every peer turns
+  that knight's spine to the same place and the shot leaves along it, where each peer aiming at its own copy of the
+  target would pose the knight a playback delay away from the shot that arrives.
 - **A state machine** is the one case that is not a parameter. `parameters/<name>/playback` is an
   `AnimationNodeStateMachinePlayback` *object* driven by `Travel("state")`, and `[Synced]` moves Variant values, so
   it cannot carry it. Send the state instead and travel to it in the setter, the same shape the one-shot uses:
@@ -160,14 +167,14 @@ public float WalkBlend
 
   Every peer then enters the state at the display tick of the sample that carried it, like any other state. Send an
   index, or another fixed-size value, rather than the state's name: a string is sent whole in every sample.
-- **Not covered here yet**, because nothing in the repo exercises them and this guide does not teach what has not
-  been run: root motion (#75) and a hand moved by a `SkeletonModifier3D` (#76).
+- **Not covered here yet**, because nothing in the repo exercises it and this guide does not teach what has not been
+  run: root motion (#75).
 - **Not in: animation phase on late join.** A peer joining mid-loop starts it from phase zero. A state has a phase
   of its own and gets the same answer: a peer that joins mid-state, or misses the sample that carried the
   transition, travels there and starts the state's clip from zero.
 
-The playground's player is the worked example: `WalkBlend` and `Gesture` in `PlaygroundPlayer.cs`, the tree in
-`PlaygroundPlayer.tscn`. Its flinch shows where a one-shot comes from when the action happened elsewhere: the shove
+The playground's player is the worked example: `WalkBlend`, `Gesture` and `AimAt` in `PlaygroundPlayer.cs`, the tree
+and the `LookAtModifier3D` on the spine in `PlaygroundPlayer.tscn`. Its flinch shows where a one-shot comes from when the action happened elsewhere: the shove
 arrives as a push, `IImpulsed.OnImpulsed` fires on the pushed player's own peer, and the gesture it bumps there travels
 back out like any other state.
 
@@ -271,7 +278,7 @@ displayed positions, so the ray hits what the shooter sees.
 - velocity for a character body, linear and angular velocity for a rigid body;
 - every `[Synced]` property of the root and its descendants, down to a nested `NetworkObject`.
 
-Nothing else. State goes out 30 times a second (`NetworkObjectServer.SnapshotRate`), every other tick with the tick on the physics step (the default);
+Nothing else. State goes out every `cracknet/time/state_interval_ticks` physics steps - 2 by default, so 30 times a second at 60 Hz physics;
 an unchanged object only once a second. Every object that changed is packed into as few packets per peer as fit
 **Max Sync Packet Size** (1200 bytes by default, under the MTU of any real route).
 
@@ -292,9 +299,12 @@ A remote object is shown from its authority's samples, a little in the past:
   quickly. A late sample never rewrites what was already shown.
 - **Objects start at their first sample.** A spawned object is hidden until playback reaches its first sample. A
   projectile starts at the muzzle, not hanging there or appearing down range.
-- **One time per screen.** Everything a peer shows of the others is shown at one moment, the deepest of its
-  links, so a crate from one player and the platform from the host are places at the same time. A player on a
-  bad link costs the others its depth; a link gone quiet for longer than a heartbeat does not hold anyone back.
+- **One clock per peer, not one per screen.** Each peer's objects are shown at that peer's own depth, so a screen
+  holds as many moments as it has peers and nobody pays for anyone else's link. Two objects from different peers
+  that touch - a player and the platform under it - are therefore places at two moments, which is what
+  "Standing on a moving body" above is not first class about. Shown at one time instead, every player on the screen was drawn
+  at the depth of the worst live link: a 25 ms player went from 117 ms behind to 695 ms behind with a single 300 ms
+  player present. That is the trade, and it was taken this way.
 
 `NetworkObjectServer.Instance.Diagnostics.GetPlaybackStatus(peer)` reports, averaged over a second, how old that peer's
 state is on arrival and how long it waits in the buffer, in ticks and in milliseconds (`TotalMs`, `NetworkMs`, `PlaybackMs`). `Object.Diagnostics` has the sequences, the display tick and
@@ -307,6 +317,15 @@ state it heard, which is already a ping old, and the others switch from one auth
 **Authority Change Smoothing** group on `NetworkObject` hides that jump. The body moves at once, so physics stays
 right; what is drawn stays where it was on screen and catches up over **Smoothing Time**. A jump further than **Max
 Smoothing Distance** is drawn at once, and so is anything after `Snap()`: those are moves, not lag.
+
+One case moves the body itself rather than the drawing. Normally what a peer was showing of the old authority becomes
+the first sample of the new authority's track and playback runs from there, which needs the two to be in order on one
+timeline. When they are not - the tick carried over is later than the new authority's first sample, or the two are
+further apart than **Max Smoothing Distance** - the body used to be put on that sample in one frame. It now slides
+there over **Smoothing Time** instead, and a second handover arriving mid-slide adds to the remaining distance rather
+than restarting it. Two players shooting one crate faster than a round trip on links ten times apart drew teleports
+of 2.0-2.4 m before and 0.06-0.16 m after. The cost is that while it slides, the body is deliberately off the line
+between the samples that were received.
 
 It moves one node, **Visual**, so everything drawn has to sit under it and nothing physical may:
 

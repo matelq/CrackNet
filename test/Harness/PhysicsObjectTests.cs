@@ -183,7 +183,7 @@ public partial class PhysicsObjectTests : HarnessSuite
     [Test]
     public async Task HandoversDoNotJumpTheDisplayedCrate()
     {
-        var (report, body, _) = await Handovers(smoothed: false);
+        var (report, body, _, _) = await Handovers(smoothed: false);
         GD.Print("HANDOVER JUMPS " + report);
         Expect.True(body < HandoverJumpLimit, "handovers jump the displayed crate: " + report);
     }
@@ -195,15 +195,45 @@ public partial class PhysicsObjectTests : HarnessSuite
     [Test]
     public async Task AuthorityChangeSmoothingDrawsHandoversWithoutAJump()
     {
-        var (report, body, drawn) = await Handovers(smoothed: true);
+        var (report, _, drawn, _) = await Handovers(smoothed: true);
         GD.Print("SMOOTHED HANDOVER JUMPS " + report);
         Expect.True(drawn < SmoothedJumpLimit, "the drawn crate still jumps on a handover: " + report);
     }
 
-    private async Task<(string Report, float Body, float Drawn)> Handovers(bool smoothed)
+    /// <summary>
+    /// The same two strikers, but hitting faster than a round trip and on links ten times apart: peer 2 is 30 ms from
+    /// the host, peer 3 is 300 ms, and a second request goes out while the first is still unanswered. Sixteen strikes
+    /// 0.12 s apart - a player clicking as fast as they can, which the playground allows - measured on the drawn
+    /// crate on all three screens. Prints its numbers.
+    /// <para>
+    /// This is what one display time per screen (#78) is worth, and it is worth it to the peer that is not fighting
+    /// over the crate: the host draws it within 0.13-0.18 m through the whole exchange, and with playback back on
+    /// each peer's own clock it draws teleports of 3.7 and 4.3 m in two runs of three. The strikers are not asserted
+    /// on: the deeper of them jumps 2.0-2.4 m whichever way playback is timed, which is #80.
+    /// </para>
+    /// </summary>
+    [Test]
+    public async Task RapidHandoversBetweenUnevenLinksAreDrawnWithoutAJumpByBystanders()
+    {
+        var (report, body, drawn, bystanders) = await Handovers(smoothed: true, gapSeconds: 0.12, total: 16, unevenLinks: true);
+        GD.Print($"RAPID HANDOVER JUMPS bystanders {bystanders:F2} m, worst of all four {drawn:F2} m, body {body:F2} m; " + report);
+        Expect.True(bystanders < RapidBystanderLimit, "a peer watching two others fight over the crate is drawn a teleport: " + report);
+    }
+
+    private async Task<(string Report, float Body, float Drawn, float Bystanders)> Handovers(bool smoothed, double gapSeconds = 0.4, int total = 8, bool unevenLinks = false)
     {
         Network.LatencyMs = 80;
-        var peers = new[] { Host, Client, AddPeer(3), AddPeer(4) };
+        if (unevenLinks)
+        {
+            // The host is the bystander here: what it draws is one screen looking at two strikers ten times apart in
+            // depth, which is the difference one display time per screen exists to hide. A fourth stack is left out
+            // on purpose - four of them in one tree hitch for a tenth of a second and take the rest of the suite with
+            // them, and a third watcher shows nothing the host does not
+            Network.SetLink(1, 2, 30);
+            Network.SetLink(1, 3, 300);
+            Network.SetLink(2, 3, 300);
+        }
+        var peers = unevenLinks ? new[] { Host, Client, AddPeer(3) } : new[] { Host, Client, AddPeer(3), AddPeer(4) };
         foreach (var peer in peers)
             Expect.True(await WaitUntil(() => peer.Context.NetworkTime.IsInitialSyncDone(), 5), $"{peer.Name} never synced");
         var crates = peers.Select(peer => Crate(peer, "Crate", new Vector3(0, 0.5f, 0), smoothed)).ToArray();
@@ -227,28 +257,39 @@ public partial class PhysicsObjectTests : HarnessSuite
                 drawn[i].Add((visuals[i].GlobalPosition, crates[i].LinearVelocity, authority, delta));
             }
             sinceStrike += delta;
-            if (strikes >= 8 || sinceStrike < 0.4) continue;
+            if (strikes >= total || sinceStrike < gapSeconds) continue;
             sinceStrike = 0;
             // Each striker hits what it sees, as the playground's shot does
             if (strikes++ % 2 == 0) south[1].Impulse(crates[1], new Vector3(0, 0, 4));
             else north[2].Impulse(crates[2], new Vector3(0, 0, -4));
         }
 
-        var report = new List<string>();
-        float worstBody = 0, worstDrawn = 0;
-        foreach (var (name, i) in new[] { ("host", 0), ("south striker", 1), ("north striker", 2), ("observer", 3) })
+        var frameMs = bodies[0].Select(frame => frame.Delta * 1000).Order().ToArray();
+        var report = new List<string>
+        {
+            $"frames {frameMs[frameMs.Length / 2]:F0} ms median, {frameMs[^1]:F0} ms worst, {strikes} strikes",
+        };
+        float worstBody = 0, worstDrawn = 0, worstBystander = 0;
+        var named = new[] { ("host", 0), ("south striker", 1), ("north striker", 2), ("observer", 3) };
+        foreach (var (name, i) in named.Where(entry => entry.Item2 < peers.Length))
         {
             var (bodyJump, steady) = Jumps(bodies[i]);
             var (drawnJump, _) = Jumps(drawn[i]);
             worstBody = Mathf.Max(worstBody, bodyJump);
             worstDrawn = Mathf.Max(worstDrawn, drawnJump);
+            // Peers 1 and 4 struck nothing: they are watching two other people fight over the crate
+            if (i is 0 or 3) worstBystander = Mathf.Max(worstBystander, drawnJump);
             report.Add($"{name}: body {bodyJump:F2} m, drawn {drawnJump:F2} m, steady {steady:F2} m");
         }
-        return (string.Join("; ", report), worstBody, worstDrawn);
+        return (string.Join("; ", report), worstBody, worstDrawn, worstBystander);
     }
 
     // Six runs: the body's worst was 0.25-0.61 m in every one, the drawn crate's 0.05-0.18
     private const float SmoothedJumpLimit = 0.25f;
+
+    // Three full-suite runs with one display time per screen: 0.13, 0.18, 0.14 m. Three with per-peer clocks: 0.02,
+    // 3.70, 4.28 - it misses sometimes, which is why the limit sits above the readings rather than between them
+    private const float RapidBystanderLimit = 0.5f;
 
     /// <summary>
     /// A snap is meant to be seen. Right after a handover, when jumps are being smoothed, the new authority snaps the
@@ -279,6 +320,14 @@ public partial class PhysicsObjectTests : HarnessSuite
     /// The largest distance a displayed frame moved beyond what the crate's own speed covers in that frame, within ten
     /// frames after the displayed authority changed, and everywhere else. A strike reverses the crate without moving
     /// it; a jump moves it without the speed for it.
+    /// <para>
+    /// The speed a frame is judged against is the fastest of the crate's own, the frame before's and the frame
+    /// after's, measured from the drawn positions. A crate an observer does not simulate is frozen and reports no
+    /// velocity at all, so judged by its own velocity every frame of ordinary playback reads as unexplained and the
+    /// reading grows with the frame: four stacks in one tree under a full suite stretch a frame to a fifth of a
+    /// second and turned plain playback into a 0.9 m "jump". Neighbouring frames carry the speed the body has
+    /// whether or not it admits to one, and a real jump is still a jump because its neighbours are not.
+    /// </para>
     /// </summary>
     private static (float Handover, float Steady) Jumps(List<(Vector3 At, Vector3 Velocity, int Authority, double Delta)> history)
     {
@@ -287,13 +336,28 @@ public partial class PhysicsObjectTests : HarnessSuite
         for (var i = 1; i < history.Count; i++)
         {
             sinceChange = history[i].Authority != history[i - 1].Authority ? 0 : sinceChange + 1;
+            // A hitch and the frames beside it are not judged: playback resyncs across a stall instead of catching up
+            // at a few percent, so the jump measured there is the harness stopping, not a handover
+            if (Hitch(history, i - 1) || Hitch(history, i) || Hitch(history, i + 1)) continue;
             var speed = Mathf.Max(history[i].Velocity.Length(), history[i - 1].Velocity.Length());
+            speed = Mathf.Max(speed, Drawn(history, i - 1));
+            speed = Mathf.Max(speed, Drawn(history, i + 1));
             var excess = history[i].At.DistanceTo(history[i - 1].At) - speed * (float)history[i].Delta;
             if (sinceChange <= 10) handover = Mathf.Max(handover, excess);
             else steady = Mathf.Max(steady, excess);
         }
         return (handover, steady);
     }
+
+    /// <summary>Whether frame <paramref name="i"/> took longer than anything a player lives through.</summary>
+    private static bool Hitch(List<(Vector3 At, Vector3 Velocity, int Authority, double Delta)> history, int i)
+        => i >= 0 && i < history.Count && history[i].Delta > 0.05;
+
+    /// <summary>How fast the crate was drawn moving over the frame ending at <paramref name="i"/>, or 0 off the ends.</summary>
+    private static float Drawn(List<(Vector3 At, Vector3 Velocity, int Authority, double Delta)> history, int i)
+        => i <= 0 || i >= history.Count || history[i].Delta <= 0
+            ? 0
+            : history[i].At.DistanceTo(history[i - 1].At) / (float)history[i].Delta;
 
     [Test]
     public async Task TwoStrikesFromOppositeSidesAtOnceBothCount() => await StrikeFromBothSides(gapMs: 0);

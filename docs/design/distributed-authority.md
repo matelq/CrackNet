@@ -10,7 +10,7 @@ pushing each other, joint QTEs), physics and projectiles, fast and slow. Listen-
 concern: clients are trusted. **3D only** (decided): 2D roots are refused rather than kept as an untested copy of every
 physics rule.
 
-Tick on the physics step (60 Hz), a state snapshot every other tick (30 Hz). The host leaving ends the session; a late joiner gets a full snapshot of the world
+Tick on the physics step (60 Hz by Godot's default), a state snapshot every other tick (30 Hz). The host leaving ends the session; a late joiner gets a full snapshot of the world
 and its owners. No host migration.
 
 ## Why not the other models
@@ -119,7 +119,7 @@ one `ENetConnection` in `ENetMultiplayerPeer.CreateMesh`. Its `MultiplayerPeerEx
 once on each sending link—delay and jitter to all packets, steady and burst loss only to unreliable packets—so a
 guest-to-guest packet is no longer relayed or charged twice.
 
-**Bandwidth.** State goes out 30 times a second (`SnapshotRate`), whatever the tickrate: every other tick with the tick on the physics step (`sync_to_physics`, on by default, 60 Hz), every tick on a 30 Hz tick of its own. With the tick on the physics step every snapshot carries a fresh step; without it network and physics stay apart, and now and then a tick has no new step to send. Measured against 15 Hz: traffic x1.8 (1.0 Mbit/s against 0.56 to one guest for 50 moving crates), and the playback buffer had to grow to two send intervals to ride out a lost packet, so what is shown is about as fresh as before. Kept for the finer samples; quantization and deltas are what pay for it. Its flakes on the way were Rapier's (#67): on v0.35.4, 7 of 18 full runs failed; on v0.35.1, 6 of 6 clean. Values are written compactly (a type byte, floats). An object
+**Bandwidth.** The tick is the physics step, and state goes out every `state_interval_ticks` of them: 2 at Godot's default 60 Hz physics, so 30 snapshots a second, each carrying a fresh step. Driving the tick from `_Process` instead was the other option and is gone (#82): network and physics then stay apart, and now and then a tick has no new step to send. Measured against 15 Hz: traffic x1.8 (1.0 Mbit/s against 0.56 to one guest for 50 moving crates), and the playback buffer had to grow to two send intervals to ride out a lost packet, so what is shown is about as fresh as before. Kept for the finer samples; quantization and deltas are what pay for it. Its flakes on the way were Rapier's (#67): on v0.35.4, 7 of 18 full runs failed; on v0.35.1, 6 of 6 clean. Values are written compactly (a type byte, floats). An object
 whose state has not changed is sent only as a heartbeat once a second; a receiver that sees a sample after such a gap
 holds the resting value until just before it, so the object starts moving when its authority did. Measured by
 `BandwidthTests`: 50 moving and 150 resting objects cost about 136 kbit/s of state payload per peer (was 1.8 Mbit/s).
@@ -322,7 +322,8 @@ parent sync.
 - **Animation, built (stage B, step 6):** `AnimationTests`. A synced walk blend changes on the observer in the frame
   the body starts moving. The one-shot counter plays the difference per sample: once per bump, twice for two bumps in
   one snapshot (the observer sees 0, 1, 3), and a late joiner plays its first value zero times. An item in a hand
-  aimed by `LookAtModifier3D` (the hand swept 2.8 m) is exact on both peers. Root motion on the authority travels as
+  aimed by `LookAtModifier3D` (the hand swept 2.8 m) is exact on both peers; undeferred, the same case leaves the
+  crate 0.028 m behind the hand, which is what says the modification pass is what the deferral clears. Root motion on the authority travels as
   the transform (the copy is 0.000 m off the samples over 420 frames); applying it on an observer too showed no drift
   on screen, since playback rewrites the copy every frame, so the rule stays for the physics step, not the picture.
   The playground's player is KayKit's knight (CC0, `examples/playground/assets/kaykit`, chosen over Quaternius'
@@ -331,7 +332,12 @@ parent sync.
   and fires Throw, the slot colour tints the knight's texture, the cycle clips are set to loop at start (the glb
   brings them as one-shots, and the third playtest saw them freeze on their last frame), Jump_Idle blends in
   while airborne, and the throw lets go 0.72 s into the clip, where the hand is furthest forward, so the item
-  leaves the hand on the swing rather than before it; Q puts down what is carried. Before it, the player carried the crate at a
+  leaves the hand on the swing rather than before it; Q puts down what is carried. Aiming is the third kind of
+  animation state beside the blend and the one-shot: `AimAt`, a `[Synced] Vector3` the authority picks from the
+  players as it draws them, turned into a pose everywhere by a `LookAtModifier3D` on the spine, with the shot leaving
+  along it - so the hand the crate hangs in is one a modifier moves in the sample too, and the smoke's `handError`
+  stays 0.000 with it in the chain. The scene case is `TheUpperBodyAndTheHandTurnToTheAimedPoint`: a knight stepping
+  across another's line of sight turns its torso 26 degrees and carries the hand 0.56 m with it. Before it, the player carried the crate at a
   `Hand` marker bobbed by an AnimationTree walk blend and fired a throw one-shot from a counter, on a capsule with
   no skeleton.
 - **Tests first:** per frame on a remote peer during a carried walk with animation, item-to-anchor distance near zero,
@@ -579,11 +585,23 @@ Two decisions here are made but not built, and both matter enough to keep in sig
   if the slide still shows.
   Rest on a base is judged by the offset from it, averaged over 80 ms, not by the engine's velocity for the copy,
   which swings by half (3.1-4.9 m/s for 4) since playback moves it in render frames; on that velocity the return to
-  the host at 3-4 m/s sometimes never came within the window. A common tick numbering is not the missing piece: ticks are already global and comparable across
-  authorities; what differs per link is the display depth. Session-wide: every screen shows every remote object at the same
-  moment, set by the worst link, so one bad connection slows everyone. Per screen: each viewer uses the deepest of its
-  own links, so only the players on a bad link pay. Revisit if playtests show objects of different players visibly out
-  of step with each other outside interactions, which authority transfer already puts on one clock.
+  the host at 3-4 m/s sometimes never came within the window. A common tick numbering is not the missing piece: ticks
+  are already global and comparable across authorities; what differs per link is the display depth.
+- **Decided 2026-09-20 (#78): one display time per screen is out; playback is on each peer's own clock.** It was
+  built for the case that is deferred (#74), and it was never costed before it shipped. Costed now, in the harness:
+  a 25 ms player is drawn 117 ms behind while it is the only one on the screen and 695 ms behind with one 300 ms
+  player present, and the screen holds still 415 ms as that player joins. Of the deep peer's 691 ms of depth, 575 ms
+  is the link and 115 ms the jitter buffer, so no tuning of ours takes any of it back, and the bill falls on the
+  players who have a good line rather than on the one who does not.
+  What it bought, found by a check written to price it: a peer watching two others hand a crate back and forth
+  faster than a round trip, on links ten times apart, was drawn a 3.7-4.3 m teleport without it. That case is now
+  covered by the handover cross-fade instead (0.06-0.15 m on per-peer clocks), which also fixes what one time per
+  screen never could - the two peers doing the handover saw 2.0-2.4 m teleports either way (#80). The two remaining
+  options, a depth cap and a time shared only by what interacts, were not built: the cap re-creates the same
+  mismatch for the peer past it, and a prototype of the second showed it does not replace the common time on its
+  own. The implementation is kept on `parked/common-display-time`.
+  Revisit if playtests show objects of different players visibly out of step with each other outside interactions,
+  which authority transfer already puts on one clock.
 - Ghost pairs cost O(n) per authority change: every change of a shared 3D body visits every other shared body to set
   or clear its collision exception. Fine for dozens of crates; a spatial index (or per-island bookkeeping) when a game
   has hundreds.

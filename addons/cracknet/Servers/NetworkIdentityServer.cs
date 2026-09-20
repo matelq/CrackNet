@@ -58,13 +58,10 @@ public partial class NetworkIdentityServer : Node
         else
         {
             Multiplayer.PeerDisconnected += id => ErasePeer((int)id);
-            if (!CrackNetSettings.Instance.SuppressIdentityPeerDisconnectedWarning)
-                Logger.Warning(
-                    "Using `multiplayer.peer_disconnected` to detect leaving peers. " +
-                    "If the `multiplayer` instance changes, this will no longer work. " +
-                    "Enable NetworkEvents, or call `NetworkIdentityServer.ErasePeer()` " +
-                    "manually and disable this warning in the Project Settings. " +
-                    "( CrackNet > General > Supress Identity Peer Disconnected Warning)");
+            Logger.Warning(
+                "Using `multiplayer.peer_disconnected` to detect leaving peers. " +
+                "If the `multiplayer` instance changes, this will no longer work. " +
+                "Enable NetworkEvents, or call `NetworkIdentityServer.ErasePeer()` manually.");
         }
     }
 

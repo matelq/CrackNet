@@ -42,11 +42,6 @@ custom_bind_ip=""
 port_override_enabled=false
 port_override=6550
 
-[cracknet]
-
-general/clear_settings=false
-events/enabled=true
-
 [playground]
 
 playtest_log=false
