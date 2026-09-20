@@ -579,11 +579,23 @@ Two decisions here are made but not built, and both matter enough to keep in sig
   if the slide still shows.
   Rest on a base is judged by the offset from it, averaged over 80 ms, not by the engine's velocity for the copy,
   which swings by half (3.1-4.9 m/s for 4) since playback moves it in render frames; on that velocity the return to
-  the host at 3-4 m/s sometimes never came within the window. A common tick numbering is not the missing piece: ticks are already global and comparable across
-  authorities; what differs per link is the display depth. Session-wide: every screen shows every remote object at the same
-  moment, set by the worst link, so one bad connection slows everyone. Per screen: each viewer uses the deepest of its
-  own links, so only the players on a bad link pay. Revisit if playtests show objects of different players visibly out
-  of step with each other outside interactions, which authority transfer already puts on one clock.
+  the host at 3-4 m/s sometimes never came within the window. A common tick numbering is not the missing piece: ticks
+  are already global and comparable across authorities; what differs per link is the display depth.
+- **Decided 2026-09-20 (#78): one display time per screen is out; playback is on each peer's own clock.** It was
+  built for the case that is deferred (#74), and it was never costed before it shipped. Costed now, in the harness:
+  a 25 ms player is drawn 117 ms behind while it is the only one on the screen and 695 ms behind with one 300 ms
+  player present, and the screen holds still 415 ms as that player joins. Of the deep peer's 691 ms of depth, 575 ms
+  is the link and 115 ms the jitter buffer, so no tuning of ours takes any of it back, and the bill falls on the
+  players who have a good line rather than on the one who does not.
+  What it bought, found by a check written to price it: a peer watching two others hand a crate back and forth
+  faster than a round trip, on links ten times apart, was drawn a 3.7-4.3 m teleport without it. That case is now
+  covered by the handover cross-fade instead (0.06-0.15 m on per-peer clocks), which also fixes what one time per
+  screen never could - the two peers doing the handover saw 2.0-2.4 m teleports either way (#80). The two remaining
+  options, a depth cap and a time shared only by what interacts, were not built: the cap re-creates the same
+  mismatch for the peer past it, and a prototype of the second showed it does not replace the common time on its
+  own. The implementation is kept on `parked/common-display-time`.
+  Revisit if playtests show objects of different players visibly out of step with each other outside interactions,
+  which authority transfer already puts on one clock.
 - Ghost pairs cost O(n) per authority change: every change of a shared 3D body visits every other shared body to set
   or clear its collision exception. Fine for dozens of crates; a spatial index (or per-island bookkeeping) when a game
   has hundreds.
