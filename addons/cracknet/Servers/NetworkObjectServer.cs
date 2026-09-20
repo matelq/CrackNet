@@ -713,7 +713,7 @@ public partial class NetworkObjectServer : Node
                 // one track, or far enough apart to be a relocation. Playback starts clean at this sample and the
                 // body slides to it, where it used to be put there in one frame - two peers ten times apart in link
                 // depth hand a crate back and forth and every screen showed the step as a teleport (#80)
-                obj.CrossFadeFromHere();
+                obj.CrossingTo();
                 obj.Track.Clear();
                 shown = obj.PlaybackCursor.Start(tick, shared);
             }
@@ -766,7 +766,6 @@ public partial class NetworkObjectServer : Node
             if (!obj.Track.TrySample(objectTick, out var from, out var to, out var fraction)) continue;
             obj.DisplayTick = objectTick;
             Apply(obj, from, to, fraction);
-            obj.CrossFade(delta);
         }
     }
 
