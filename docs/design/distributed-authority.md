@@ -398,7 +398,11 @@ Two decisions here are made but not built, and both matter enough to keep in sig
   moving platform was taken off the platform on the change and stood still in the world until the host's first
   sample was reached, 0.29 m off on a third peer and 0.90 m on the guest that had it, whose display of the host
   runs a playback delay behind its own present; 0.01 and 0.04-0.06 with it
-  (`ACrateChangingHandsOnAMovingPlatformStaysOnItForAThirdPeer`). Also seen: the shared display clock of a peer
+  (`ACrateChangingHandsOnAMovingPlatformStaysOnItForAThirdPeer`). The third peer still reads 0.038-0.104 over a
+  series. **The guest no longer reads 0.04-0.06**: it reads 0.19-0.47, as a spike in the first quarter of the
+  window and exactly 0.000 for every frame after, so the splice is not what decays - the crate rides its
+  attachment and agrees perfectly once the step is past. That step is #80, and the guest's figure is reported by
+  the check rather than asserted by it (#84). Also seen: the shared display clock of a peer
   that sends only heartbeats leaps by 3-20 ticks in a frame when its samples resume; harmless for what rests,
   worth a look if an idle peer's first motion ever looks skipped.
 - **Authority change smoothing (done).** A playtest showed the strikers' jump that the freshest-state takeover moved to
