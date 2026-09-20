@@ -18,9 +18,7 @@ internal static class CrackNetRuntime
         CrackNetLogger.PushWarning = s => GD.PushWarning(s);
         CrackNetLogger.PushError = s => GD.PushError(s);
 
-        CrackNetLogger.Level = CrackNetSettings.Instance.LogLevel;
         CrackNetLogger.ModuleLevels["cracknet"] = CrackNetSettings.Instance.CrackNetLogLevel;
-        CrackNetLogger.ModuleLevels["cracknet.extras"] = CrackNetSettings.Instance.CrackNetExtrasLogLevel;
     }
 }
 

@@ -50,16 +50,13 @@ public partial class NetworkObjectServer : Node
 
     private double? _playbackDelayTicks;
 
-    /// <summary>Snapshots a second, whatever the tickrate.</summary>
-    public const double SnapshotRate = 30;
-
     /// <summary>
-    /// State goes out every this many ticks: 2 with the tick on the physics step (the default, 60 Hz), 1 on a 30 Hz
-    /// tick of its own, 30 snapshots a second either way.
+    /// Physics steps between two snapshots, from <c>cracknet/time/state_interval_ticks</c>: 2 at Godot's default
+    /// 60 Hz physics is 30 snapshots a second.
     /// </summary>
-    public int StateIntervalTicks => Math.Max(1, (int)Math.Round(Tickrate / SnapshotRate));
+    public int StateIntervalTicks { get; set; } = Math.Max(1, CrackNetSettings.Instance.StateIntervalTicks);
 
-    // Times rather than ticks: the tickrate is the physics rate by default and a project may change it
+    // Times rather than ticks: the tickrate is the physics rate, which a project sets for itself
     private const double MaxPlaybackDepthSeconds = 2.0 / 3;
     private const double RestHeartbeatSeconds = 1;
     private const double ResyncSeconds = 1;

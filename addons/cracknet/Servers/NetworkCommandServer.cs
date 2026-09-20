@@ -36,13 +36,8 @@ public partial class NetworkCommandServer : Node
 
     private static readonly CrackNetLogger Logger = CrackNetLogger.ForCrackNet("NetworkCommandServer");
 
-    /// <summary>Prefix of raw command packets: NUL, n, f.</summary>
-    public static readonly byte[] PacketPrefix = [0, 78, 70];
-
     private readonly RpcCommandTransport _rpcTransport = new();
-    private readonly PacketCommandTransport _packetTransport = new(PacketPrefix);
     private readonly Dictionary<int, Command> _commands = new();
-    private readonly bool _useRaw = CrackNetSettings.Instance.UseRawCommands;
     private int _nextIdx = CommandIds.FirstUserCommand;
 
     public override void _EnterTree()
@@ -56,10 +51,8 @@ public partial class NetworkCommandServer : Node
     public override void _Ready()
     {
         AddChild(_rpcTransport, true);
-        AddChild(_packetTransport, true);
 
         _rpcTransport.OnReceive += HandleCommand;
-        _packetTransport.OnReceive += HandleCommand;
     }
 
     public override void _ExitTree()
@@ -94,8 +87,7 @@ public partial class NetworkCommandServer : Node
         var counted = _sent.GetValueOrDefault(idx);
         _sent[idx] = (counted.Bytes + data.Length, counted.Packets + 1);
 
-        if (_useRaw) _packetTransport.Send(idx, data, targetPeer, mode, channel);
-        else _rpcTransport.Send(idx, data, targetPeer, mode, channel);
+        _rpcTransport.Send(idx, data, targetPeer, mode, channel);
     }
 
     /// <summary>
@@ -110,11 +102,6 @@ public partial class NetworkCommandServer : Node
     public void ResetSentCounts() => _sent.Clear();
 
     private readonly Dictionary<int, (long Bytes, long Packets)> _sent = new();
-
-    /// <summary>True if <paramref name="packet"/> is a command packet. Always true when commands go over RPC.</summary>
-    public bool IsCommandPacket(ReadOnlySpan<byte> packet) => !_useRaw || PacketCommandTransport.IsCommandPacket(PacketPrefix, packet);
-
-    public byte[] GetCommandPacketPrefix() => PacketPrefix;
 
     internal void HandleCommand(int sender, int idx, byte[] data)
     {
@@ -160,57 +147,15 @@ public partial class NetworkCommandServer : Node
     }
 }
 
-internal abstract partial class CommandTransport : Node
+/// <summary>Commands go over RPCs, one method per transfer mode. Raw packets were the other option and are #96.</summary>
+internal partial class RpcCommandTransport : Node
 {
     /// <summary>(sender, command id, data)</summary>
     public event Action<int, int, byte[]>? OnReceive;
 
-    protected void Receive(int sender, int idx, byte[] data) => OnReceive?.Invoke(sender, idx, data);
+    private void Receive(int sender, int idx, byte[] data) => OnReceive?.Invoke(sender, idx, data);
 
-    public abstract void Send(int idx, byte[] data, int targetPeer, MultiplayerPeer.TransferModeEnum mode, int channel);
-}
-
-internal partial class PacketCommandTransport : CommandTransport
-{
-    private readonly byte[] _prefix;
-
-    public PacketCommandTransport() : this(NetworkCommandServer.PacketPrefix) { }
-
-    public PacketCommandTransport(byte[] prefix)
-    {
-        _prefix = prefix;
-    }
-
-    public override void _Ready()
-    {
-        if (Multiplayer is SceneMultiplayer sceneMultiplayer)
-            sceneMultiplayer.PeerPacket += HandlePacket;
-    }
-
-    public override void Send(int idx, byte[] data, int targetPeer, MultiplayerPeer.TransferModeEnum mode, int channel)
-    {
-        var buffer = new ByteWriter(_prefix.Length + 1 + data.Length);
-        buffer.PutData(_prefix);
-        buffer.PutU8((byte)idx);
-        buffer.PutData(data);
-        (Multiplayer as SceneMultiplayer)?.SendBytes(buffer.ToArray(), targetPeer, mode, channel);
-    }
-
-    public static bool IsCommandPacket(ReadOnlySpan<byte> prefix, ReadOnlySpan<byte> packet)
-        => packet.Length >= prefix.Length && packet.Slice(0, prefix.Length).SequenceEqual(prefix);
-
-    private void HandlePacket(long peer, byte[] packet)
-    {
-        if (packet.Length <= _prefix.Length || !IsCommandPacket(_prefix, packet)) return;
-        var idx = packet[_prefix.Length];
-        var data = packet.AsSpan(_prefix.Length + 1).ToArray();
-        Receive((int)peer, idx, data);
-    }
-}
-
-internal partial class RpcCommandTransport : CommandTransport
-{
-    public override void Send(int idx, byte[] data, int targetPeer, MultiplayerPeer.TransferModeEnum mode, int channel)
+    public void Send(int idx, byte[] data, int targetPeer, MultiplayerPeer.TransferModeEnum mode, int channel)
     {
         switch (mode)
         {

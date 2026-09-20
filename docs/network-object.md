@@ -255,7 +255,7 @@ displayed positions, so the ray hits what the shooter sees.
 - velocity for a character body, linear and angular velocity for a rigid body;
 - every `[Synced]` property of the root and its descendants, down to a nested `NetworkObject`.
 
-Nothing else. State goes out 30 times a second (`NetworkObjectServer.SnapshotRate`), every other tick with the tick on the physics step (the default);
+Nothing else. State goes out every `cracknet/time/state_interval_ticks` physics steps - 2 by default, so 30 times a second at 60 Hz physics;
 an unchanged object only once a second. Every object that changed is packed into as few packets per peer as fit
 **Max Sync Packet Size** (1200 bytes by default, under the MTU of any real route).
 

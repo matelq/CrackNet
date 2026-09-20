@@ -40,14 +40,36 @@ Marks its subtree as belonging to `Context`: nodes below it use that context's s
 
 ### CrackNetSettings
 
-Every `cracknet/*` project setting, read once into one mutable object. Upstream reads `ProjectSettings` in field initializers of each server (see `network-time.gd:370`), which ties the servers to `project.godot` and makes runtime toggles ad hoc. Servers take their values from `Instance` instead; assign a different instance before the autoloads are created to configure them.
+CrackNet's configuration, read once into one mutable object. Eight of these are `cracknet/*` project settings, because they are read before any game code runs or belong to the editor playtest. The rest are tuning numbers with no project setting behind them: a game that needs a different one assigns `Instance` before the autoloads enter the tree, from an autoload of its own ordered above CrackNet's. Each one says here what breaks if it is wrong, which is why it is not offered in the editor.
 
 | | Member | Summary |
 |---|---|---|
+| property | `AutoTileWindows` | Arrange the windows of the running instances side by side, so several peers are visible at once. |
+| property | `AutoconnectEnabled` | The first instance hosts and the rest join it on start, with no menu. |
+| property | `AutoconnectHost` | Address the autoconnecting instances connect to. |
+| property | `AutoconnectPort` | Port autoconnect hosts and joins on. |
+| property | `CrackNetLogLevel` | Lowest level the addon's own loggers print. |
+| property | `EventsEnabled` | Emit the `NetworkEvents` signals at all. |
 | property | `Instance` | The settings the autoloads use. Replace before they enter the tree; mutating it later only affects re-reads. |
-| property | `SimulatedProfile` | A named NetworkSimulator profile, or "Custom" for the latency, loss, jitter and burst settings. |
-| property | `SyncPanicThreshold` | Same `cracknet/time/recalibrate_threshold` key as `RecalibrateThreshold`, but with the fallback upstream uses in the time synchronizer (`network-time-synchronizer.gd:105`). The two differ only when the setting is absent. |
-| method | `Load` | Reads every setting from `ProjectSettings`, falling back to the defaults the plugin registers. |
+| property | `MaxSyncPacketSize` | Bytes a state packet may reach before it is split. 1200 stays under the path MTU with room for IP, UDP and transport headers. |
+| property | `MaxTicksPerFrame` | Ticks a single frame may run before the clock gives up catching up. A frame that hung for 300 ms owes nine ticks; without a ceiling, running them makes the frame longer still, which owes more ticks. 8 ends that spiral by dropping the rest of the debt. |
+| property | `MaxTimeStretch` | Fastest the clock may run while catching up, as a multiple of real time. |
+| property | `RecalibrateThreshold` | Seconds of clock error after which the local clock is snapped to the remote one instead of eased towards it. A laptop back from sleep is minutes out, and easing that over `SyncAdjustSteps` would play minutes of wrong time first; past this the error is not drift and is taken in one step. |
+| property | `SimulatedBurstIntervalSeconds` | Seconds between simulated outages. Zero means none. Read only by the "Custom" profile. |
+| property | `SimulatedBurstLossMs` | Length of a simulated outage, in milliseconds. Read only by the "Custom" profile. |
+| property | `SimulatedJitterMs` | Random variation added to the simulated latency, in milliseconds. Read only by the "Custom" profile. |
+| property | `SimulatedLatencyMs` | One-way delay the simulator adds, in milliseconds. Read only by the "Custom" profile. |
+| property | `SimulatedPacketLossChance` | Share of packets the simulator drops, 0 to 1. Read only by the "Custom" profile. |
+| property | `SimulatedProfile` | A named NetworkSimulator profile, or "Custom" for `SimulatedLatencyMs` and the rest. |
+| property | `StallThreshold` | Seconds a frame may take before it counts as a stall and its time is discarded rather than ticked through. Five seconds on a breakpoint is one frame to the engine, and without this the game would simulate those five seconds on resume. |
+| property | `StateIntervalTicks` | Physics ticks between two state snapshots: 2 sends 30 times a second at Godot's default 60 Hz physics. The tick is the physics step, so this is the one knob over how often state goes on the wire. Every peer must agree on it; a differing physics rate numbers the ticks differently and is caught by the tickrate handshake. |
+| property | `SyncAdjustSteps` | Ticks over which a measured offset is applied: an 80 ms error is taken 10 ms at a time, so what the clock draws does not jump. One clock per peer, not one per object. |
+| property | `SyncInterval` | Seconds between clock sync exchanges: four measurements a second of how far this peer's clock is from the host's. |
+| property | `SyncSamples` | Round trips averaged into one clock offset estimate, weighted by log(RTT); the round trip and its jitter are the middle and half-spread of the window. Wider is steadier and slower to react. |
+| property | `TickrateMismatchAction` | What a peer does when another peer reports a different tickrate. The handshake warns unasked. |
+| property | `TileBorderless` | Give the tiled windows no title bar, so more of each one is game. |
+| property | `TileScreen` | Index of the screen the tiler lays the windows out on. |
+| method | `Load` | Reads the eight project settings, falling back to the defaults the plugin registers. |
 
 ### IAttachmentChanged
 
@@ -98,8 +120,6 @@ Transmits commands over the network: a single id byte plus raw binary data, eith
 |---|---|---|
 | property | `Context` | The stack this server belongs to; resolved when it enters the tree. |
 | property | `SentCounts` | Payload bytes and packets sent per command id since the last `ResetSentCounts`. Transport framing is not included, so this says what CrackNet asked for rather than what went on the wire. It exists because a total cannot answer the question that matters when something grows: which command grew. |
-| field | `PacketPrefix` | Prefix of raw command packets: NUL, n, f. |
-| method | `IsCommandPacket(System.ReadOnlySpan{System.Byte})` | True if `packet` is a command packet. Always true when commands go over RPC. |
 | method | `RegisterCommand(System.Action{System.Int32,System.Byte[]},Godot.MultiplayerPeer.TransferModeEnum,System.Int32)` | Register a command at the next available id. |
 | method | `RegisterCommandAt(System.Int32,System.Action{System.Int32,System.Byte[]},Godot.MultiplayerPeer.TransferModeEnum,System.Int32)` | Register a command at a specific id. Registering the same id twice is an error. |
 
@@ -179,8 +199,7 @@ One replicated object. While its root is this peer's multiplayer authority it se
 | field | `_anchorOffset` | How the item sits on the anchor: identity when hung here, whatever the authority sends otherwise. |
 | method | `Answered(System.Int32)` | The host answered `requestId`: events held for it go wherever authority now is. |
 | method | `AutoProperties(Godot.Node)` | What is sent for a root of this type before its `[Synced]` properties. |
-| method | `CrossFade(System.Double)` | Lets the object slide from where it was drawn to where the new authority's playback puts it, over `SmoothingTime`, instead of being put there in one frame. The step goes into an offset that fades by the same share every frame, so a second handover landing while the first is still fading adds to it rather than restarting it: at sixteen strikes 0.12 s apart a fade that restarted never converged and the body trailed for the whole exchange. Called after playback has placed the body. |
-| method | `CrossFadeFromHere` | Where this peer was drawing the object when the new authority's first sample turned out to be unusable as a continuation: the tick it carried over is later than that sample, or the two are too far apart. Playback then starts clean at that sample and the object slides there from here, instead of being put there. |
+| method | `CrossingTo` | The new authority's first sample cannot be reached from the one this peer carried over - it is later than that sample, or the two are further apart than `MaxSmoothingDistance` - so the body is about to be put there in one frame. The drawing catches up with it instead of jumping with it, which it otherwise refuses to do at this distance because a step that big is normally a relocation and meant to be seen. |
 | method | `Deliver(System.Int32,CrackNet.NetworkObject.EventKind,Godot.Variant,System.Int32)` | Raises an event here if this peer is the authority, and passes it on otherwise. While this peer's own request is unanswered its authority may be about to be taken back, so the event waits for the host's answer. |
 | method | `DescribeSynced` | The inspector's list. In the editor a script without `[Tool]` is a placeholder, so its `[Synced]` properties are read from the compiled type the script path points at. |
 | method | `Despawn` | Ends this authoritative object's timeline. It is hidden and stops processing here immediately; remote peers hide it when their playback reaches the flagged final sample, and the root is freed after the playback grace period so a `MultiplayerSpawner` cannot remove it from observers early. |
@@ -227,9 +246,8 @@ Sends the state of every `NetworkObject` this peer is authority for, once per ti
 | property | `MaxPlaybackDepthTicks` | The deepest a playback buffer grows to absorb jitter, in ticks; also what a despawn waits out. |
 | property | `PlaybackDelayTicks` | The least number of ticks behind the newest sample remote objects are shown, before jitter adds to it: two send intervals and a margin, so one lost packet does not empty the buffer: with one interval and a half-tick margin, 30 Hz snapshots left the loss test drawing twice the jumps. |
 | property | `RestHeartbeatTicks` | An object whose state has not changed is sent again only this often, in ticks. |
-| property | `StateIntervalTicks` | State goes out every this many ticks: 2 with the tick on the physics step (the default, 60 Hz), 1 on a 30 Hz tick of its own, 30 snapshots a second either way. |
+| property | `StateIntervalTicks` | Physics steps between two snapshots, from `cracknet/time/state_interval_ticks`: 2 at Godot's default 60 Hz physics is 30 snapshots a second. |
 | field | `ReorderWaitIntervals` | How long a sample waits for the one before it at most, in state intervals: packets swap places by a few milliseconds. |
-| field | `SnapshotRate` | Snapshots a second, whatever the tickrate. |
 | method | `ApartBy(CrackNet.NetworkObject,CrackNet.NetworkObject.Sample,Godot.Variant[],CrackNet.NetworkObject.Attachment)` | How far apart two samples put the body in this peer's world; null when an anchor is not here, or the root is not a physics body, and then the state is not carried: a body's motion is the line to draw, other state (a synced position of the game's own, say) is the new authority's to say from its first sample on. |
 | method | `ErasePeer(System.Int32)` | Forgets a peer's clock. On the host, also takes back every object the peer simulated or held and tells everyone: otherwise a crate carried out of the session stays with nobody for good. |
 | method | `GetDisplayTick(System.Int32)` | The display tick for objects of `peer`, or null before anything arrived from it. |
@@ -264,7 +282,7 @@ The shared tick clock: runs ticks at a fixed rate and keeps them in step with th
 | property | `RemoteRtt` | Estimated roundtrip time to the server. Always 0 on the server. |
 | property | `Tick` | Current network time in ticks, continuously synced with the server. |
 | property | `TickFactor` | 0.0 right after a tick, 1.0 right before the next. |
-| property | `Tickrate` | Ticks per second. Equals the physics tickrate when SyncToPhysics is on, and setting it then sets the physics tickrate: a guest adjusting to the host's rate has no other rate to change. |
+| property | `Tickrate` | Ticks per second: the physics tickrate, since the tick is the physics step. A guest adjusting to the host's rate has no other rate to change, so setting it sets the physics one. |
 | property | `Ticktime` | Duration of a single tick, in seconds. |
 | property | `Time` | Current network time in seconds, continuously synced with the server. |
 | method | `Start` | Start NetworkTime: synchronize with the host, then emit ticks. On clients, ticks start after the initial sync. Returns Ok, AlreadyInUse if already running, or Unavailable without a multiplayer peer. |
@@ -306,6 +324,14 @@ The newest state tick received from a peer and the tick currently displayed for 
 | | Member | Summary |
 |---|---|---|
 | method | `#ctor(System.Double,System.Double,System.Double)` | The newest state tick received from a peer and the tick currently displayed for that peer. |
+
+### RpcCommandTransport
+
+Commands go over RPCs, one method per transfer mode. Raw packets were the other option and are #96.
+
+| | Member | Summary |
+|---|---|---|
+| event | `OnReceive` | (sender, command id, data) |
 
 ### SceneAttribute
 
@@ -471,7 +497,7 @@ Reference clock: raw wall time plus an adjustable offset.
 
 ### TickClock
 
-The arithmetic of the NetworkTime tick loop without any side effects: clock stretching towards a reference time, stall detection, and how many ticks to run this frame. Port of _loop / _get_ticks_in_loop in network-time.gd.
+The arithmetic of the NetworkTime tick loop without any side effects: clock stretching towards a reference time, stall detection, and how many ticks to run this frame. Driven from the physics step, one tick per step.
 
 | | Member | Summary |
 |---|---|---|
