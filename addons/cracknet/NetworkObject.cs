@@ -727,6 +727,12 @@ public partial class NetworkObject : Node
         var changed = authority != AuthorityPeer || owner != ClaimedBy;
         if (authority != AuthorityPeer)
         {
+            // Samples are held for a peer that is not the authority here yet, for the case its state arrives before
+            // the host's word. Once that peer's turn is over they are the opening of nothing, and holding them for
+            // the rest of the second is how a crate that changed hands again 40 ticks later was replayed from the
+            // first sample of an earlier turn and drawn back in the stack it had already fallen out of (#93)
+            var losing = AuthorityPeer;
+            EarlySamples.RemoveAll(sample => sample.Sender == losing);
             SetAuthority(Root!, authority);
             _smoothing?.Opened();
             if (IsAuthority && !Shown) SetShown(true);
