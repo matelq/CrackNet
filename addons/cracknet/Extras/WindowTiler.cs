@@ -25,7 +25,7 @@ public partial class WindowTiler : Node
     private const long StaleSeconds = 3;
 
     private readonly bool _isEnabled = CrackNetSettings.Instance.AutoTileWindows;
-    private readonly bool _isBorderless = CrackNetSettings.Instance.Borderless;
+    private readonly bool _isBorderless = CrackNetSettings.Instance.TileBorderless;
     private readonly int _tileScreen = CrackNetSettings.Instance.TileScreen;
 
     // Hash the game name so the lock file names are always valid. Not string.GetHashCode: .NET randomises it per

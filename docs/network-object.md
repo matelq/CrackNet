@@ -262,7 +262,7 @@ displayed positions, so the ray hits what the shooter sees.
 - velocity for a character body, linear and angular velocity for a rigid body;
 - every `[Synced]` property of the root and its descendants, down to a nested `NetworkObject`.
 
-Nothing else. State goes out 30 times a second (`NetworkObjectServer.SnapshotRate`), every other tick with the tick on the physics step (the default);
+Nothing else. State goes out every `cracknet/time/state_interval_ticks` physics steps - 2 by default, so 30 times a second at 60 Hz physics;
 an unchanged object only once a second. Every object that changed is packed into as few packets per peer as fit
 **Max Sync Packet Size** (1200 bytes by default, under the MTU of any real route).
 
@@ -283,9 +283,12 @@ A remote object is shown from its authority's samples, a little in the past:
   quickly. A late sample never rewrites what was already shown.
 - **Objects start at their first sample.** A spawned object is hidden until playback reaches its first sample. A
   projectile starts at the muzzle, not hanging there or appearing down range.
-- **One time per screen.** Everything a peer shows of the others is shown at one moment, the deepest of its
-  links, so a crate from one player and the platform from the host are places at the same time. A player on a
-  bad link costs the others its depth; a link gone quiet for longer than a heartbeat does not hold anyone back.
+- **One clock per peer, not one per screen.** Each peer's objects are shown at that peer's own depth, so a screen
+  holds as many moments as it has peers and nobody pays for anyone else's link. Two objects from different peers
+  that touch - a player and the platform under it - are therefore places at two moments, which is what
+  "Standing on a moving body" above is not first class about. Shown at one time instead, every player on the screen was drawn
+  at the depth of the worst live link: a 25 ms player went from 117 ms behind to 695 ms behind with a single 300 ms
+  player present. That is the trade, and it was taken this way.
 
 `NetworkObjectServer.Instance.Diagnostics.GetPlaybackStatus(peer)` reports, averaged over a second, how old that peer's
 state is on arrival and how long it waits in the buffer, in ticks and in milliseconds (`TotalMs`, `NetworkMs`, `PlaybackMs`). `Object.Diagnostics` has the sequences, the display tick and
@@ -298,6 +301,15 @@ state it heard, which is already a ping old, and the others switch from one auth
 **Authority Change Smoothing** group on `NetworkObject` hides that jump. The body moves at once, so physics stays
 right; what is drawn stays where it was on screen and catches up over **Smoothing Time**. A jump further than **Max
 Smoothing Distance** is drawn at once, and so is anything after `Snap()`: those are moves, not lag.
+
+One case moves the body itself rather than the drawing. Normally what a peer was showing of the old authority becomes
+the first sample of the new authority's track and playback runs from there, which needs the two to be in order on one
+timeline. When they are not - the tick carried over is later than the new authority's first sample, or the two are
+further apart than **Max Smoothing Distance** - the body used to be put on that sample in one frame. It now slides
+there over **Smoothing Time** instead, and a second handover arriving mid-slide adds to the remaining distance rather
+than restarting it. Two players shooting one crate faster than a round trip on links ten times apart drew teleports
+of 2.0-2.4 m before and 0.06-0.16 m after. The cost is that while it slides, the body is deliberately off the line
+between the samples that were received.
 
 It moves one node, **Visual**, so everything drawn has to sit under it and nothing physical may:
 

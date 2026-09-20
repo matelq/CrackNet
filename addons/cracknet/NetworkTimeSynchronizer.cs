@@ -45,7 +45,7 @@ public partial class NetworkTimeSynchronizer : Node
             SyncInterval = CrackNetSettings.Instance.SyncInterval,
             SyncSamples = CrackNetSettings.Instance.SyncSamples,
             AdjustSteps = CrackNetSettings.Instance.SyncAdjustSteps,
-            PanicThreshold = CrackNetSettings.Instance.SyncPanicThreshold,
+            PanicThreshold = CrackNetSettings.Instance.RecalibrateThreshold,
         };
         _sync.OnPanic += offset => OnPanic?.Invoke(offset);
     }

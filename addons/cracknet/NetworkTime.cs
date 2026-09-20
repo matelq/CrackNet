@@ -22,14 +22,10 @@ public partial class NetworkTime : Node
 
     private readonly TickClock _clock = new()
     {
-        Tickrate = CrackNetSettings.Instance.Tickrate,
-        SyncToPhysics = CrackNetSettings.Instance.SyncToPhysics,
         MaxTicksPerFrame = CrackNetSettings.Instance.MaxTicksPerFrame,
         StallThreshold = CrackNetSettings.Instance.StallThreshold,
         ClockStretchMax = CrackNetSettings.Instance.MaxTimeStretch,
     };
-
-    private readonly bool _suppressOfflinePeerWarning = CrackNetSettings.Instance.SuppressOfflinePeerWarning;
 
     private State _state = State.Inactive;
     private bool _initialSyncDone;
@@ -51,20 +47,18 @@ public partial class NetworkTime : Node
     }
 
     /// <summary>
-    /// Ticks per second. Equals the physics tickrate when SyncToPhysics is on, and setting it then sets the physics
-    /// tickrate: a guest adjusting to the host's rate has no other rate to change.
+    /// Ticks per second: the physics tickrate, since the tick is the physics step. A guest adjusting to the host's
+    /// rate has no other rate to change, so setting it sets the physics one.
     /// </summary>
     public int Tickrate
     {
-        get => SyncToPhysics ? Engine.PhysicsTicksPerSecond : _clock.Tickrate;
+        get => Engine.PhysicsTicksPerSecond;
         internal set
         {
             _clock.Tickrate = value;
-            if (SyncToPhysics) Engine.PhysicsTicksPerSecond = value;
+            Engine.PhysicsTicksPerSecond = value;
         }
     }
-
-    private bool SyncToPhysics => _clock.SyncToPhysics;
 
     /// <summary>Current network time in seconds, continuously synced with the server.</summary>
     public double Time => (double)Tick / Tickrate;
@@ -79,7 +73,7 @@ public partial class NetworkTime : Node
     public double Ticktime => 1.0 / Tickrate;
 
     /// <summary>0.0 right after a tick, 1.0 right before the next.</summary>
-    public double TickFactor => SyncToPhysics ? Engine.GetPhysicsInterpolationFraction() : _clock.TickFactor;
+    public double TickFactor => Engine.GetPhysicsInterpolationFraction();
 
 
     /// <summary>
@@ -100,12 +94,10 @@ public partial class NetworkTime : Node
             return Error.Unavailable;
         }
 
-        if (Multiplayer.MultiplayerPeer is OfflineMultiplayerPeer && !_suppressOfflinePeerWarning)
-            Logger.Warning("Starting time loop with an offline peer! " +
-                "If this is intended, suppress this warning in the project settings, " +
-                "under cracknet/Time/Suppress Offline Peer Warning.");
+        if (Multiplayer.MultiplayerPeer is OfflineMultiplayerPeer)
+            Logger.Warning("Starting time loop with an offline peer!");
 
-        if (SyncToPhysics) _clock.Tickrate = Engine.PhysicsTicksPerSecond;
+        _clock.Tickrate = Engine.PhysicsTicksPerSecond;
 
         _clock.Tick = 0;
         _initialSyncDone = false;
@@ -184,16 +176,9 @@ public partial class NetworkTime : Node
         if (Instance == this) Instance = null!;
     }
 
-    public override void _Process(double delta)
-    {
-        if (_state != State.Active) return;
-
-        if (!SyncToPhysics) Loop();
-    }
-
     public override void _PhysicsProcess(double delta)
     {
-        if (_state == State.Active && SyncToPhysics) Loop();
+        if (_state == State.Active) Loop();
     }
 
     public override void _Notification(int what)

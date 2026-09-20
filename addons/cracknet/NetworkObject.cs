@@ -173,6 +173,15 @@ public partial class NetworkObject : Node
     /// sample has come.
     /// </summary>
     internal int? CarriedTick { get; set; }
+
+    /// <summary>
+    /// The new authority's first sample cannot be reached from the one this peer carried over - it is later than
+    /// that sample, or the two are further apart than <see cref="MaxSmoothingDistance"/> - so the body is about to be
+    /// put there in one frame. The drawing catches up with it instead of jumping with it, which it otherwise refuses
+    /// to do at this distance because a step that big is normally a relocation and meant to be seen.
+    /// </summary>
+    internal void CrossingTo() => _smoothing?.Crossing();
+
     internal bool SnapPending { get; set; }
 
     /// <summary>State from a peer that is not the authority here yet, kept for when the host's word arrives.</summary>

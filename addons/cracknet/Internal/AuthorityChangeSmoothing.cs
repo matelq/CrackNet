@@ -65,6 +65,20 @@ internal sealed class AuthorityChangeSmoothing
     public void Snapped() => _snapped = true;
 
     /// <summary>
+    /// The body is about to be put on a new authority's first sample that playback could not reach from where this
+    /// peer was drawing it. That step is a handover however far it is, so the distance above which a step is taken
+    /// for a relocation does not apply to it. Two frames, not one: the body is placed by the server's process and
+    /// measured by this peer's, and their order in a frame is not fixed.
+    /// </summary>
+    public void Crossing()
+    {
+        _crossingFrames = 2;
+        _window = WindowSeconds;
+    }
+
+    private int _crossingFrames;
+
+    /// <summary>
     /// The body was just put where it belongs (on its anchor): the anchor's motion is not a jump to measure, so the
     /// next frame's motion is judged from here, while what is still being smoothed goes on fading. Called instead of
     /// <see cref="Process"/> while the object hangs on something.
@@ -102,17 +116,19 @@ internal sealed class AuthorityChangeSmoothing
             _ => Vector3.Zero,
         };
 
+        var unexplainedThisFrame = false;
         if (_lastBody is { } last && _window > 0)
         {
             // What the body's own speed does not explain this frame; averaged, so a bounce is not taken for a jump
             var unexplained = body.Origin - (last.Origin + (_lastVelocity + velocity) / 2 * (float)delta);
-            if (_snapped || unexplained.Length() > _object.MaxSmoothingDistance)
+            if (_snapped || (_crossingFrames == 0 && unexplained.Length() > _object.MaxSmoothingDistance))
             {
                 _offset = Vector3.Zero;
                 _rotationOffset = Quaternion.Identity;
             }
             else if (unexplained.Length() > Noise)
             {
+                unexplainedThisFrame = true;
                 _offset -= unexplained;
                 // Drawn turned as before (offset' * body = offset * last). Rotation has no speed of its own here: a
                 // handover turn is the whole step, and a steady spin is small per frame next to it
@@ -121,6 +137,8 @@ internal sealed class AuthorityChangeSmoothing
                                   .Normalized();
             }
         }
+        if (_crossingFrames > 0 && unexplainedThisFrame) _crossingFrames = 0;
+        else if (_crossingFrames > 0) _crossingFrames--;
         _snapped = false;
         _following = false;
         _lastBody = body;
