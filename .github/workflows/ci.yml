@@ -25,14 +25,13 @@ jobs:
         run: dotnet test CrackNet.slnx
 
   godot:
-    name: Godot tests (${{ matrix.engine }})
+    # Jolt only (#84). The addon names no engine (#81), but a second matrix leg is a poor way to hold that claim:
+    # it doubles every run, and what it caught was the suite's own unsteadiness rather than an engine difference.
+    # `sh tools/install-extensions.sh rapier --enable-rapier` still runs the suite on Rapier locally when a change
+    # is suspected of leaning on one engine.
+    name: Godot tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        # The addon names no engine (#81): Jolt is what the project uses, Rapier keeps that claim tested
-        engine: [jolt, rapier]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-dotnet@v5
@@ -52,13 +51,6 @@ jobs:
             unzip -q godot.zip -d godot
           fi
           echo "GODOT=$PWD/godot/Godot_v${GODOT_VERSION}_mono_linux_x86_64/Godot_v${GODOT_VERSION}_mono_linux.x86_64" >> "$GITHUB_ENV"
-      - name: Install Rapier and switch to it
-        if: matrix.engine == 'rapier'
-        # Jolt is built into Godot and is what project.godot asks for (#81), so the plain job needs no step at all.
-        # This one fetches the pinned extension and points project.godot at it.
-        run: |
-          sh tools/install-extensions.sh rapier --enable-rapier
-          grep -n physics_engine project.godot
       - name: Import resources
         # --import exits with a segfault after a successful import on 4.7.2, so its exit code says nothing
         run: $GODOT --headless --path . --import || true
