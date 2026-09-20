@@ -17,7 +17,7 @@ and its owners. No host migration.
 
 | Model | Why not here |
 |---|---|
-| Lockstep | Needs bit-exact determinism (Rapier and floats do not give it) and adds input delay. |
+| Lockstep | Needs bit-exact determinism (neither the engine nor floats give it) and adds input delay. |
 | Rollback (netfox) | Needs determinism or state correction, resimulates the physics space N ticks per frame (netfox-net#62), and still has to guess remote players. Contact between players never agreed (#44, #50, #51, #64). |
 | Snapshot interpolation + prediction (Source, Overwatch) | Two timelines: my predicted player against everyone else in the past. Pushing each other and sharing objects is exactly where it is weakest. Server authority buys cheat safety we do not need. |
 | Tribes / partial state | Built for bandwidth-starved huge worlds; objects can reach states the sender never had. |
@@ -158,7 +158,7 @@ Goal: a crate needs no code and a player needs only its own movement. Paid for i
   - `Auto` resolves `CharacterBody3D` and plain `Node3D` to `Personal`; `RigidBody3D` and `VehicleBody3D`
     to `Shared`; `AnimatableBody`, `StaticBody`, `Area` and non-spatial `Node`/`Control` to `World`. A grenade (a
     rigid body that stays its thrower's) is the common case that picks `Personal` by hand.
-- **Built-in behaviour for physics roots:** freeze where not authoritative (with the Rapier re-set and the Jolt wake), contact
+- **Built-in behaviour for physics roots:** freeze where not authoritative (with the transform re-set and the Jolt wake), contact
   monitoring and `Spread` on contact for rigid bodies, `Spread` on slide collisions for character bodies, return to the
   host at rest.
 - **`Knock(Vector3)`** built in: an impulse on a rigid body's authority, a `Knocked` event on a character's. The
@@ -416,7 +416,8 @@ Two decisions here are made but not built, and both matter enough to keep in sig
   Known limits, deferred: ragdoll bones under Visual would be moved by hand; IK aimed at the world stretches a limb
   for the smoothing time.
 - Already in: a character does not take what it stands on; a group touched by any character does not go back to the
-  host; `normalized_max_corrective_velocity` is 2 in the playground project for whoever runs it on Rapier.
+  host. (`normalized_max_corrective_velocity` was set to 2 in the playground project for Rapier; with Rapier gone
+  (#84) the setting does nothing and is #82's to remove.)
 - **Copies are frozen static, not kinematic.** Rapier gives a kinematic body the velocity of its last move; a copy
   that snapped by 0.3 m launched a character standing on it 13 m up, and in a playtest 140 m. Riding a moving copy
   therefore no longer carries a player along until the base-relative position above is in.

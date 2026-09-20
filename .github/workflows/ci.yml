@@ -25,10 +25,9 @@ jobs:
         run: dotnet test CrackNet.slnx
 
   godot:
-    # Jolt only (#84). The addon names no engine (#81), but a second matrix leg is a poor way to hold that claim:
-    # it doubles every run, and what it caught was the suite's own unsteadiness rather than an engine difference.
-    # `sh tools/install-extensions.sh rapier --enable-rapier` still runs the suite on Rapier locally when a change
-    # is suspected of leaning on one engine.
+    # Jolt, and only Jolt (#84). The addon names no engine (#81), but a second matrix leg was a poor way to hold
+    # that claim: it doubled every run, and what it caught was the suite's own unsteadiness rather than an engine
+    # difference. Running on another engine is an option nobody has asked for yet - #68 owns it.
     name: Godot tests
     runs-on: ubuntu-latest
     timeout-minutes: 20

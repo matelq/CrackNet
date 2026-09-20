@@ -87,20 +87,17 @@ dotnet build CrackNet.csproj
 godot --path . res://examples/playground/playground.tscn
 ```
 
-Two optional native extensions live behind `tools/install-extensions.sh` (it needs `sh`, `curl` and `python`; on
-Windows, Git Bash has the first two). Neither is in the repository; the script pins their versions, and the editor has
-to be restarted afterwards, because extensions load at startup.
+Physics needs nothing installed: the project runs on **Jolt**, which is built into Godot. One optional native
+extension lives behind `tools/install-extensions.sh` (it needs `sh`, `curl` and `python`; on Windows, Git Bash has the
+first two). It is not in the repository; the script pins its version, and the editor has to be restarted afterwards,
+because extensions load at startup.
 
 ```
-sh tools/install-extensions.sh steam                     # GodotSteam, for the Steam sample below
-sh tools/install-extensions.sh rapier --enable-rapier    # Rapier instead of Jolt, for the whole project
+sh tools/install-extensions.sh steam    # GodotSteam, for the Steam sample below
 ```
 
-The library names no engine and CI runs the whole suite on both. If you do pick Rapier, it is pinned to **v0.35.1** on
-purpose: from v0.35.2 the extension panics whenever it is called from a thread other than the main one
-([appsinacup/godot-rapier-physics#614](https://github.com/appsinacup/godot-rapier-physics/issues/614)), and a C#
-project always has one - the .NET finalizer releases Godot objects on its own thread - leaving the physics world
-broken. Stay on v0.35.1 until that issue is resolved.
+The addon itself names no engine - it asks Godot for contacts and shape queries and nothing more. Running it on
+another one is [#68](https://github.com/matelq/CrackNet/issues/68); what the suite is run against is Jolt.
 
 **On one machine:** press Host in one window and Join (`127.0.0.1`) in the others, or turn on autoconnect - see
 [Testing on a real network](docs/real-networks.md). **Over LAN or with an open port:** Host, and the others Join the
