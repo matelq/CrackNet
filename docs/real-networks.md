@@ -14,12 +14,13 @@ transport resends reliable ones. Latency is each way.
 |---|---|---|---|---|---|
 | `clear` | 0 | 0 | 0 | none | Checks that the code runs at all. |
 | `casual` | 25 ms | 20 ms | 1% | 50 ms every 10 s | A good home connection. |
-| `realistic` | 60 ms | 50 ms | 3% | 100 ms every 10 s | The floor to playtest above. |
-| `bad` | 150 ms | 100 ms | 5% | 200 ms every 5 s | Default. A friend across the continent on Wi-Fi. |
+| `realistic` | 60 ms | 50 ms | 3% | 100 ms every 10 s | Default. The floor to playtest above. |
+| `bad` | 150 ms | 100 ms | 5% | 200 ms every 5 s | A friend across the continent on Wi-Fi. |
 | `hostile` | 250 ms | 150 ms | 15% | 300 ms every 3 s | For checks: fails when the code is wrong. |
 
-Pick one under **Project Settings > CrackNet > Autoconnect > Simulated Profile**. Leave it empty to use the custom fields
-next to it (latency, packet loss chance, jitter, burst length and interval).
+Pick one under **Project Settings > CrackNet > Autoconnect > Simulated Profile**. The numbers behind a profile -
+latency, packet loss chance, jitter, burst length and interval - are `CrackNetSettings` properties: set them in code
+along with `SimulatedProfile = "Custom"` for conditions no named profile has.
 
 ## Playtesting in the editor
 
@@ -29,8 +30,14 @@ next to it (latency, packet loss chance, jitter, burst length and interval).
 4. Run `examples/playground/playground.tscn`. The first instance becomes the host, the others join, and each player gets
    a colour by joining order.
 
-Autoconnect lands in `project.godot`. Do not commit it, and while it is on run headless checks with
-`CRACKNET_NO_AUTOCONNECT=1`, or they connect to your editor instances.
+Autoconnect lands in `project.godot`. Do not commit it - `python tools/check-settings.py` fails on a `project.godot`
+that carries one of these - and while it is on run headless checks with `CRACKNET_NO_AUTOCONNECT=1`, or they connect
+to your editor instances.
+
+There are eight `cracknet/*` project settings, and they are the ones read before any game code runs or used by the
+editor playtest. Every other knob is a `CrackNetSettings` property with no setting behind it, documented there and in
+`docs/api.md`: assign a `CrackNetSettings` to `CrackNetSettings.Instance` before the autoloads enter the tree, from an
+autoload of your own ordered above CrackNet's.
 
 Playground controls: WASD to move, Space to jump, F to grab and throw a crate, E to push a player in front of you, left
 mouse or Enter to shoot. A crate is tinted with the colour of the peer simulating it right now.

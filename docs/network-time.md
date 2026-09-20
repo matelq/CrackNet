@@ -55,18 +55,18 @@ Playback of remote objects runs in `_Process`, every frame, so displayed motion 
 | `ClockStretchFactor` | How much the local clock is being stretched to converge on the host's. Around 1 when settled. |
 
 `TicksToSeconds`, `SecondsToTicks`, `SecondsBetween` and `TicksBetween` convert between the two, using the negotiated
-tickrate rather than the one in your project settings - which matters, because a peer with a different tickrate
-setting adopts the host's.
+tickrate rather than your own - which matters, because a peer whose physics rate differs adopts the host's.
 
 ## Settings
 
-Under **Project Settings > CrackNet > Time**:
+The tick is the physics step, so the tickrate is `physics/common/physics_ticks_per_second` - Godot's own setting, 60 by
+default. CrackNet adds one number next to it, under **Project Settings > CrackNet > Time**:
 
-- **Tickrate** - ticks per second. The host's wins: a client with a different value adopts it and, depending on
-  **Tickrate mismatch action**, warns or errors. 30 is a reasonable default; higher costs bandwidth and CPU in
-  proportion.
-- **Sync to physics** - drives the tick loop from `_PhysicsProcess` at Godot's physics rate instead of from
-  `_Process`.
-- **Max ticks per frame** - the ceiling on catching up after a stall, so a hitch does not turn into a freeze.
-- **Stall threshold** - a frame longer than this is treated as the game having been paused rather than as time to
-  catch up on.
+- **State interval ticks** - physics steps between two snapshots. 2 at 60 Hz physics sends state 30 times a second.
+  Every peer must agree on it, and on the physics rate: the tickrate handshake warns when a peer reports another one.
+
+Everything else about the clock - the ceiling on catching up after a hitch, what counts as a pause rather than time to
+catch up on, how often the clock is measured against the host's and how gently the error is taken - is a number in
+`CrackNetSettings` with no project setting behind it. Each says in its own documentation what goes wrong if it is
+changed. A game that has to change one assigns a `CrackNetSettings` to `CrackNetSettings.Instance` from an autoload
+ordered above CrackNet's, before the autoloads enter the tree.

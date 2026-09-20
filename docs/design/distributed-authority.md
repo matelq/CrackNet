@@ -10,7 +10,7 @@ pushing each other, joint QTEs), physics and projectiles, fast and slow. Listen-
 concern: clients are trusted. **3D only** (decided): 2D roots are refused rather than kept as an untested copy of every
 physics rule.
 
-Tick on the physics step (60 Hz), a state snapshot every other tick (30 Hz). The host leaving ends the session; a late joiner gets a full snapshot of the world
+Tick on the physics step (60 Hz by Godot's default), a state snapshot every other tick (30 Hz). The host leaving ends the session; a late joiner gets a full snapshot of the world
 and its owners. No host migration.
 
 ## Why not the other models
@@ -119,7 +119,7 @@ one `ENetConnection` in `ENetMultiplayerPeer.CreateMesh`. Its `MultiplayerPeerEx
 once on each sending link—delay and jitter to all packets, steady and burst loss only to unreliable packets—so a
 guest-to-guest packet is no longer relayed or charged twice.
 
-**Bandwidth.** State goes out 30 times a second (`SnapshotRate`), whatever the tickrate: every other tick with the tick on the physics step (`sync_to_physics`, on by default, 60 Hz), every tick on a 30 Hz tick of its own. With the tick on the physics step every snapshot carries a fresh step; without it network and physics stay apart, and now and then a tick has no new step to send. Measured against 15 Hz: traffic x1.8 (1.0 Mbit/s against 0.56 to one guest for 50 moving crates), and the playback buffer had to grow to two send intervals to ride out a lost packet, so what is shown is about as fresh as before. Kept for the finer samples; quantization and deltas are what pay for it. Its flakes on the way were Rapier's (#67): on v0.35.4, 7 of 18 full runs failed; on v0.35.1, 6 of 6 clean. Values are written compactly (a type byte, floats). An object
+**Bandwidth.** The tick is the physics step, and state goes out every `state_interval_ticks` of them: 2 at Godot's default 60 Hz physics, so 30 snapshots a second, each carrying a fresh step. Driving the tick from `_Process` instead was the other option and is gone (#82): network and physics then stay apart, and now and then a tick has no new step to send. Measured against 15 Hz: traffic x1.8 (1.0 Mbit/s against 0.56 to one guest for 50 moving crates), and the playback buffer had to grow to two send intervals to ride out a lost packet, so what is shown is about as fresh as before. Kept for the finer samples; quantization and deltas are what pay for it. Its flakes on the way were Rapier's (#67): on v0.35.4, 7 of 18 full runs failed; on v0.35.1, 6 of 6 clean. Values are written compactly (a type byte, floats). An object
 whose state has not changed is sent only as a heartbeat once a second; a receiver that sees a sample after such a gap
 holds the resting value until just before it, so the object starts moving when its authority did. Measured by
 `BandwidthTests`: 50 moving and 150 resting objects cost about 136 kbit/s of state payload per peer (was 1.8 Mbit/s).

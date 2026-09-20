@@ -33,16 +33,6 @@ public class TickClockTests
     }
 
     [Fact]
-    public void Advance_ShouldReturnZeroWhenNoDebt()
-    {
-        var (clock, time) = Make();
-        time.Now = 0.1;
-        Assert.Equal(1, clock.Advance(0.1));
-        clock.CompleteTick();
-        Assert.Equal(0, clock.Advance(0.1));
-    }
-
-    [Fact]
     public void Advance_ShouldCapTicksPerFrame()
     {
         var (clock, time) = Make();
@@ -83,15 +73,14 @@ public class TickClockTests
         var (clock, time) = Make();
         time.Now = 5.0;
         var ticks = clock.Advance(referenceTime: 12.0);
-        Assert.Equal(0, ticks);
+        Assert.Equal(1, ticks); // the step's own tick, not the seven seconds the pause owes
         Assert.Equal(120, clock.Tick);
     }
 
     [Fact]
-    public void Advance_SyncToPhysics_ShouldRunOneTickPerCallUntilAhead()
+    public void Advance_ShouldRunOneTickPerCallUntilAhead()
     {
         var (clock, time) = Make();
-        clock.SyncToPhysics = true;
         time.Now = 0.001;
         Assert.Equal(1, clock.Advance(0.001));
         clock.CompleteTick();

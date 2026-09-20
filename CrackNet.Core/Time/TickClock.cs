@@ -4,7 +4,7 @@ namespace CrackNet.Core.Time;
 
 /// <summary>
 /// The arithmetic of the NetworkTime tick loop without any side effects: clock stretching towards a reference time,
-/// stall detection, and how many ticks to run this frame. Port of _loop / _get_ticks_in_loop in network-time.gd.
+/// stall detection, and how many ticks to run this frame. Driven from the physics step, one tick per step.
 /// </summary>
 public sealed class TickClock
 {
@@ -18,7 +18,6 @@ public sealed class TickClock
     public int MaxTicksPerFrame { get; set; } = 8;
     public double StallThreshold { get; set; } = 1.0;
     public double ClockStretchMax { get; set; } = 1.25;
-    public bool SyncToPhysics { get; set; }
 
     public int Tick { get; set; }
     public double StretchFactor { get; private set; } = 1.0;
@@ -95,14 +94,11 @@ public sealed class TickClock
     {
         var debt = _lastProcessTime - _nextTickTime;
 
-        if (SyncToPhysics)
-        {
-            if (debt > Ticktime) return Math.Min(1 + (int)(debt / Ticktime), MaxTicksPerFrame);
-            if (debt < -Ticktime) return 0;
-            return 1;
-        }
-
-        return Math.Clamp((int)Math.Ceiling(debt / Ticktime), 0, MaxTicksPerFrame);
+        // The tick is the physics step, so a frame normally runs exactly one; a frame that hung runs the debt it owes,
+        // up to the ceiling, and a frame that came early runs none
+        if (debt > Ticktime) return Math.Min(1 + (int)(debt / Ticktime), MaxTicksPerFrame);
+        if (debt < -Ticktime) return 0;
+        return 1;
     }
 
     private static double InverseLerp(double from, double to, double value) => (value - from) / (to - from);

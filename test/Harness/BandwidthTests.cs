@@ -71,7 +71,8 @@ public partial class BandwidthTests : HarnessSuite
 
         Expect.True(perSecond < BudgetBytesPerSecond, $"{perSecond:F0} bytes/s over a budget of {BudgetBytesPerSecond}");
         // The snapshot rate is a rate, not a tick count: the tickrate follows the physics by default
-        Expect.True(Math.Abs(sends / seconds - NetworkObjectServer.SnapshotRate) < 2,
-            $"a moving crate went out {sends / seconds:F1} times a second, not {NetworkObjectServer.SnapshotRate}");
+        var expected = (double)Client.Context.NetworkTime.Tickrate / Client.Context.NetworkObjectServer.StateIntervalTicks;
+        Expect.True(Math.Abs(sends / seconds - expected) < 2,
+            $"a moving crate went out {sends / seconds:F1} times a second, not {expected}");
     }
 }

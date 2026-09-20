@@ -22,7 +22,6 @@ public partial class NetworkSimulator : Node
     public bool Enabled { get; private set; }
     public string Hostname { get; private set; } = "127.0.0.1";
     public int ServerPort { get; private set; } = 9999;
-    public bool UseCompression { get; private set; }
     public int LatencyMs { get; private set; }
     public double PacketLossPercent { get; private set; }
 
@@ -128,9 +127,6 @@ public partial class NetworkSimulator : Node
             return;
         }
 
-        if (UseCompression && raw is ENetMultiplayerPeer enet)
-            enet.Host.Compress(ENetConnection.CompressionMode.RangeCoder);
-
         Peer = Conditions == Profile.Clear ? raw : new SimulatedMultiplayerPeer(raw, Conditions);
         Multiplayer.MultiplayerPeer = Peer;
         if (hosted)
@@ -184,7 +180,6 @@ public partial class NetworkSimulator : Node
         Enabled = CrackNetSettings.Instance.AutoconnectEnabled;
         Hostname = CrackNetSettings.Instance.AutoconnectHost;
         ServerPort = CrackNetSettings.Instance.AutoconnectPort;
-        UseCompression = CrackNetSettings.Instance.UseCompression;
         var settings = CrackNetSettings.Instance;
         Conditions = Profile.Named(settings.SimulatedProfile)
                      ?? new Profile(settings.SimulatedLatencyMs, settings.SimulatedPacketLossChance * 100.0,
